@@ -261,31 +261,6 @@ const getKindrawUserDisplayName = (session: KindrawSession["user"]) =>
 const getUserInitial = (label: string) =>
   label.trim().charAt(0).toUpperCase() || "K";
 
-const formatCollaboratorSummary = (appState: UIAppState) => {
-  const names = Array.from(
-    new Set(
-      Array.from(appState.collaborators.values())
-        .filter((collaborator) => !collaborator.isCurrentUser)
-        .map((collaborator) => collaborator.username?.trim() || "")
-        .filter(Boolean),
-    ),
-  );
-
-  if (!names.length) {
-    return null;
-  }
-
-  if (names.length === 1) {
-    return names[0];
-  }
-
-  if (names.length === 2) {
-    return `${names[0]} e ${names[1]}`;
-  }
-
-  return `${names[0]}, ${names[1]} +${names.length - 2}`;
-};
-
 const initializeScene = async (opts: {
   collabAPI: CollabAPI | null;
   excalidrawAPI: ExcalidrawImperativeAPI;
@@ -1543,22 +1518,21 @@ const ExcalidrawWrapper = () => {
             : undefined
         }
         theme={editorTheme}
-        renderTopRightUI={(isMobile, appState) => {
+        renderTopRightUI={(isMobile) => {
           if (isMobile || !collabAPI || isCollabDisabled) {
             return null;
           }
 
           const isDrawingRoute = kindrawRoute.kind === "drawing";
           const shouldShowRealtimeAction = isDrawingRoute || isCollaborating;
-          const activeShareLink = kindrawCurrentItem?.shareLinks[0] || null;
-          const collaboratorSummary = formatCollaboratorSummary(appState);
 
           return (
             <div className="excalidraw-ui-top-right kindraw-top-right-actions">
               {collabError.message && <CollabError collabError={collabError} />}
               {kindrawSession ? (
                 <button
-                  className="kindraw-top-right-actions__button"
+                  aria-label={getKindrawUserDisplayName(kindrawSession.user)}
+                  className="kindraw-top-right-actions__avatar-button"
                   onClick={() =>
                     setAppState({
                       openSidebar: { name: "kindraw" },
@@ -1567,6 +1541,7 @@ const ExcalidrawWrapper = () => {
                       openDialog: null,
                     })
                   }
+                  title={getKindrawUserDisplayName(kindrawSession.user)}
                   type="button"
                 >
                   <span className="kindraw-top-right-actions__avatar">
@@ -1583,7 +1558,6 @@ const ExcalidrawWrapper = () => {
                       </span>
                     )}
                   </span>
-                  <span>{getKindrawUserDisplayName(kindrawSession.user)}</span>
                 </button>
               ) : (
                 <button
@@ -1594,17 +1568,6 @@ const ExcalidrawWrapper = () => {
                   {t("kindraw.actions.signInWithGitHub")}
                 </button>
               )}
-              {collaboratorSummary ? (
-                <div
-                  className="kindraw-top-right-actions__presence"
-                  title={t("kindraw.presence.activeWith", {
-                    names: collaboratorSummary,
-                  })}
-                >
-                  {usersIcon}
-                  <span>{collaboratorSummary}</span>
-                </div>
-              ) : null}
               {isDrawingRoute && kindrawCurrentItem ? (
                 <button
                   className="kindraw-top-right-actions__button"
@@ -1612,11 +1575,7 @@ const ExcalidrawWrapper = () => {
                   type="button"
                 >
                   {LinkIcon}
-                  <span>
-                    {activeShareLink
-                      ? t("kindraw.actions.copyPublicLink")
-                      : t("kindraw.actions.createPublicLink")}
-                  </span>
+                  <span>{t("kindraw.actions.publicLink")}</span>
                 </button>
               ) : null}
               {shouldShowRealtimeAction ? (
@@ -1632,8 +1591,8 @@ const ExcalidrawWrapper = () => {
                   {usersIcon}
                   <span>
                     {isCollaborating
-                      ? t("kindraw.actions.manageRealtime")
-                      : t("kindraw.actions.startRealtime")}
+                      ? t("kindraw.actions.manageCollaboration")
+                      : t("kindraw.actions.startCollaboration")}
                   </span>
                 </button>
               ) : null}
