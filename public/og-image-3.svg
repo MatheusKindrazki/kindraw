@@ -1,0 +1,66 @@
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="1200"
+  height="675"
+  viewBox="0 0 1200 675"
+  fill="none"
+>
+  <rect width="1200" height="675" rx="48" fill="#FBF9FF" />
+  <circle cx="1058" cy="102" r="154" fill="#E5DEFF" />
+  <circle cx="111" cy="583" r="145" fill="#E9FFF2" />
+  <rect
+    x="122"
+    y="150"
+    width="164"
+    height="176"
+    rx="42"
+    fill="#6965DB"
+    opacity="0.16"
+  />
+  <rect
+    x="188"
+    y="98"
+    width="212"
+    height="230"
+    rx="52"
+    fill="white"
+    stroke="#191726"
+    stroke-width="22"
+  />
+  <path
+    d="M241 168V280M241 224L333 160M241 224L333 288"
+    stroke="#191726"
+    stroke-width="24"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+  <text
+    x="122"
+    y="430"
+    fill="#191726"
+    font-size="116"
+    font-family="Helvetica, Arial, sans-serif"
+    font-weight="700"
+    letter-spacing="-4"
+  >
+    Kindraw
+  </text>
+  <text
+    x="122"
+    y="500"
+    fill="#4B5563"
+    font-size="36"
+    font-family="Helvetica, Arial, sans-serif"
+  >
+    Draw, organize, and share many diagrams for free.
+  </text>
+  <text
+    x="122"
+    y="548"
+    fill="#4B5563"
+    font-size="36"
+    font-family="Helvetica, Arial, sans-serif"
+  >
+    GitHub login, folders, public links, and realtime collaboration.
+  </text>
+</svg>
