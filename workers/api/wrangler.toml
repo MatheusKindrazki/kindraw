@@ -1,0 +1,18 @@
+name = "kindraw-api"
+main = "src/index.ts"
+compatibility_date = "2025-11-01"
+
+[observability]
+enabled = true
+
+[[d1_databases]]
+binding = "KINDRAW_DB"
+database_name = "kindraw-db"
+database_id = "fbaecde8-8e18-4638-ad8f-2ea756225a61"
+
+[[r2_buckets]]
+binding = "KINDRAW_BLOBS"
+bucket_name = "kindraw-blobs"
+
+[vars]
+KINDRAW_APP_ORIGIN = "https://kindraw-web.pages.dev"

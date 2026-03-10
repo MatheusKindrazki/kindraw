@@ -1,0 +1,143 @@
+export type KindrawItemKind = "drawing" | "doc";
+
+export type KindrawUser = {
+  id: string;
+  githubLogin: string;
+  name: string;
+  avatarUrl: string | null;
+};
+
+export type KindrawSession = {
+  user: KindrawUser;
+};
+
+export type KindrawFolder = {
+  id: string;
+  name: string;
+  parentId: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type KindrawShareLink = {
+  id: string;
+  token: string;
+  createdAt: string;
+  revokedAt: string | null;
+};
+
+export type KindrawItem = {
+  id: string;
+  kind: KindrawItemKind;
+  title: string;
+  folderId: string | null;
+  ownerId: string;
+  updatedAt: string;
+  createdAt: string;
+  shareLinks: KindrawShareLink[];
+};
+
+export type KindrawTreeResponse = {
+  folders: KindrawFolder[];
+  items: KindrawItem[];
+};
+
+export type KindrawItemResponse = {
+  item: KindrawItem;
+  content: string;
+};
+
+export type KindrawPublicItemResponse = {
+  item: Pick<KindrawItem, "id" | "kind" | "title" | "updatedAt">;
+  content: string;
+};
+
+export type SessionRecord = {
+  id: string;
+  userId: string;
+  expiresAt: string;
+  createdAt: string;
+  lastSeenAt: string;
+};
+
+export type FolderRecord = Omit<KindrawFolder, "parentId"> & {
+  ownerId: string;
+  parentId: string | null;
+};
+
+export type ItemRecord = Omit<KindrawItem, "shareLinks" | "folderId"> & {
+  folderId: string | null;
+  contentBlobKey: string;
+};
+
+export type ShareLinkRecord = KindrawShareLink & {
+  itemId: string;
+  createdByUserId: string;
+};
+
+export type CreateFolderInput = {
+  name: string;
+  parentId: string | null;
+};
+
+export type CreateItemInput = {
+  kind: KindrawItemKind;
+  title: string;
+  folderId: string | null;
+  content: string;
+};
+
+export type PatchFolderInput = {
+  name?: string;
+  parentId?: string | null;
+};
+
+export type PatchItemMetaInput = {
+  title?: string;
+  folderId?: string | null;
+};
+
+export interface D1PreparedStatement {
+  bind(...values: unknown[]): D1PreparedStatement;
+  first<T = Record<string, unknown>>(): Promise<T | null>;
+  all<T = Record<string, unknown>>(): Promise<{ results: T[] }>;
+  run(): Promise<unknown>;
+}
+
+export interface D1Database {
+  prepare(query: string): D1PreparedStatement;
+  batch(statements: D1PreparedStatement[]): Promise<unknown[]>;
+}
+
+export interface R2ObjectBody {
+  text(): Promise<string>;
+}
+
+export interface R2PutOptions {
+  httpMetadata?: {
+    contentType?: string;
+  };
+}
+
+export interface R2Bucket {
+  get(key: string): Promise<R2ObjectBody | null>;
+  put(
+    key: string,
+    value: string | ArrayBuffer | ArrayBufferView,
+    options?: R2PutOptions,
+  ): Promise<void>;
+  delete(key: string): Promise<void>;
+}
+
+export type Env = {
+  KINDRAW_DB: D1Database;
+  KINDRAW_BLOBS: R2Bucket;
+  GITHUB_CLIENT_ID: string;
+  GITHUB_CLIENT_SECRET: string;
+  KINDRAW_APP_ORIGIN?: string;
+};
+
+export type AuthContext = {
+  session: SessionRecord;
+  user: KindrawUser;
+};
