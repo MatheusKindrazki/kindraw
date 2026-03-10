@@ -1,4 +1,5 @@
 import { loginIcon, usersIcon } from "@excalidraw/excalidraw/components/icons";
+import { useI18n } from "@excalidraw/excalidraw/i18n";
 import { POINTER_EVENTS } from "@excalidraw/common";
 import { WelcomeScreen } from "@excalidraw/excalidraw/index";
 import React from "react";
@@ -24,37 +25,38 @@ export const AppWelcomeScreen: React.FC<AppWelcomeScreenProps> = React.memo(
     onGithubLogin,
     routeKind,
   }) => {
+    const { t } = useI18n();
     const headingContent =
       routeKind === "drawing" && currentItemTitle ? (
         <>
-          Editando {currentItemTitle}
+          {t("kindraw.welcome.editingTitle", { title: currentItemTitle })}
           <br />
-          Realtime no topo. Workspace e links publicos na lateral.
+          {t("kindraw.welcome.editingSubtitle")}
         </>
       ) : kindrawSession ? (
         <>
-          Canvas e workspace no mesmo fluxo.
+          {t("kindraw.welcome.workspaceTitle")}
           <br />
-          Use a lateral para criar drawings e organizar subpastas.
+          {t("kindraw.welcome.workspaceSubtitle")}
         </>
       ) : (
         <>
-          Excalidraw com workspace do Kindraw.
+          {t("kindraw.welcome.guestTitle")}
           <br />
-          Salve drawings e compartilhe links publicos.
+          {t("kindraw.welcome.guestSubtitle")}
         </>
       );
 
     return (
       <WelcomeScreen>
         <WelcomeScreen.Hints.MenuHint>
-          Workspace e arquivos
+          {t("kindraw.welcome.menuHint")}
         </WelcomeScreen.Hints.MenuHint>
         <WelcomeScreen.Hints.ToolbarHint>
-          Ferramentas do canvas
+          {t("kindraw.welcome.toolbarHint")}
         </WelcomeScreen.Hints.ToolbarHint>
         <WelcomeScreen.Hints.HelpHint>
-          Ajuda e atalhos
+          {t("kindraw.welcome.helpHint")}
         </WelcomeScreen.Hints.HelpHint>
         <WelcomeScreen.Center>
           <WelcomeScreen.Center.Logo>
@@ -72,7 +74,7 @@ export const AppWelcomeScreen: React.FC<AppWelcomeScreenProps> = React.memo(
                 onSelect={onGithubLogin}
                 shortcut={null}
               >
-                Entrar com GitHub
+                {t("kindraw.actions.signInWithGitHub")}
               </WelcomeScreen.Center.MenuItem>
             ) : null}
 
@@ -82,7 +84,7 @@ export const AppWelcomeScreen: React.FC<AppWelcomeScreenProps> = React.memo(
                 onSelect={onCollabDialogOpen}
                 shortcut={null}
               >
-                Abrir realtime
+                {t("kindraw.actions.startRealtime")}
               </WelcomeScreen.Center.MenuItem>
             ) : null}
 

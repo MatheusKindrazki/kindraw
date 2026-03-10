@@ -1,3 +1,5 @@
+import { useI18n } from "@excalidraw/excalidraw/i18n";
+
 import { buildPublicShareUrl } from "./api";
 
 import type { KindrawShareLink } from "./types";
@@ -27,16 +29,15 @@ export const ShareLinksPanel = ({
   onRevokeShareLink,
   busy,
 }: ShareLinksPanelProps) => {
+  const { t } = useI18n();
   const activeShareLink = shareLinks[0] || null;
 
   return (
     <section className="kindraw-share-links">
       <div className="kindraw-share-links__header">
         <div>
-          <h3>Link publico</h3>
-          <p>
-            Somente leitura. Para colaboracao ao vivo, use o botao realtime.
-          </p>
+          <h3>{t("kindraw.sharePanel.title")}</h3>
+          <p>{t("kindraw.sharePanel.description")}</p>
         </div>
         {!activeShareLink ? (
           <button
@@ -45,7 +46,7 @@ export const ShareLinksPanel = ({
             onClick={() => void onCreateShareLink()}
             type="button"
           >
-            Gerar link
+            {t("kindraw.actions.generateLink")}
           </button>
         ) : null}
       </div>
@@ -70,7 +71,7 @@ export const ShareLinksPanel = ({
                 }
                 type="button"
               >
-                Copiar
+                {t("kindraw.actions.copy")}
               </button>
               <button
                 className="kindraw-link-button kindraw-link-button--danger"
@@ -78,14 +79,14 @@ export const ShareLinksPanel = ({
                 onClick={() => void onRevokeShareLink(activeShareLink.id)}
                 type="button"
               >
-                Revogar
+                {t("kindraw.actions.revoke")}
               </button>
             </div>
           </li>
         </ul>
       ) : (
         <p className="kindraw-share-links__empty">
-          Nenhum link publico ativo. Gere um link read-only para compartilhar.
+          {t("kindraw.sharePanel.empty")}
         </p>
       )}
     </section>

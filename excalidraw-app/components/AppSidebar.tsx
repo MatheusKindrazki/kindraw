@@ -23,6 +23,7 @@ import {
   palette,
   usersIcon,
 } from "@excalidraw/excalidraw/components/icons";
+import { useI18n } from "@excalidraw/excalidraw/i18n";
 import { useUIAppState } from "@excalidraw/excalidraw/context/ui-appState";
 import { useSetAtom } from "@excalidraw/excalidraw/editor-jotai";
 
@@ -67,7 +68,6 @@ type AppSidebarProps = {
   ) => Promise<void> | void;
   onCreateShareLink: () => Promise<void> | void;
   onLogout: () => Promise<void> | void;
-  onOpenRealtimeCollab?: () => void;
   onRevokeShareLink: (shareLinkId: string) => Promise<void> | void;
   route: KindrawRoute;
   session: KindrawSession | null | undefined;
@@ -79,32 +79,42 @@ type ComposerMode = "drawing" | "folder";
 const getComposerDefaults = (
   mode: ComposerMode,
   currentFolderName: string | null,
+  translate: ReturnType<typeof useI18n>["t"],
 ) => {
   if (mode === "folder") {
     return {
       label: currentFolderName
-        ? `Nova pasta em ${currentFolderName}`
-        : "Nova pasta na raiz",
+        ? translate("kindraw.sidebar.newFolderInFolderLabel", {
+            name: currentFolderName,
+          })
+        : translate("kindraw.sidebar.newFolderInRootLabel"),
       helper: currentFolderName
-        ? "A nova pasta sera criada dentro da pasta selecionada."
-        : "A nova pasta sera criada na raiz do workspace.",
-      submitLabel: "Criar pasta",
-      value: "Nova pasta",
+        ? translate("kindraw.sidebar.newFolderInFolderHelper")
+        : translate("kindraw.sidebar.newFolderInRootHelper"),
+      submitLabel: translate("kindraw.sidebar.createFolderSubmit"),
+      value: translate("kindraw.sidebar.newFolderDefault"),
     };
   }
 
   return {
     label: currentFolderName
-      ? `Novo drawing em ${currentFolderName}`
-      : "Novo drawing na raiz",
-    helper: "O drawing sera criado no contexto atual e aberto no canvas.",
-    submitLabel: "Criar drawing",
-    value: "Novo drawing",
+      ? translate("kindraw.sidebar.newDrawingInFolderLabel", {
+          name: currentFolderName,
+        })
+      : translate("kindraw.sidebar.newDrawingInRootLabel"),
+    helper: translate("kindraw.sidebar.newDrawingHelper"),
+    submitLabel: translate("kindraw.sidebar.createDrawingSubmit"),
+    value: translate("kindraw.sidebar.newDrawingDefault"),
   };
 };
 
-const getItemKindLabel = (kind: KindrawItemKind) =>
-  kind === "drawing" ? "Drawing" : "Doc";
+const getItemKindLabel = (
+  kind: KindrawItemKind,
+  translate: ReturnType<typeof useI18n>["t"],
+) =>
+  kind === "drawing"
+    ? translate("kindraw.sidebar.drawingKind")
+    : translate("kindraw.sidebar.docKind");
 
 const getInitials = (name: string) => {
   const tokens = name.trim().split(/\s+/).filter(Boolean);
@@ -115,6 +125,7 @@ const getInitials = (name: string) => {
 };
 
 const EditorActions = () => {
+  const { t } = useI18n();
   const actionManager = useExcalidrawActionManager();
   const setAppState = useExcalidrawSetAppState();
   const setActiveConfirmDialog = useSetAtom(activeConfirmDialogAtom);
@@ -124,7 +135,7 @@ const EditorActions = () => {
       <div className="kindraw-app-sidebar__section-head">
         <div className="kindraw-app-sidebar__section-title">
           <span className="kindraw-app-sidebar__section-icon">{palette}</span>
-          <h3>Editor</h3>
+          <h3>{t("kindraw.sidebar.editor")}</h3>
         </div>
       </div>
 
@@ -136,7 +147,7 @@ const EditorActions = () => {
             type="button"
           >
             <span className="kindraw-app-sidebar__tool-icon">{LoadIcon}</span>
-            <span>Importar</span>
+            <span>{t("kindraw.actions.importFile")}</span>
           </button>
         ) : null}
 
@@ -148,7 +159,7 @@ const EditorActions = () => {
           <span className="kindraw-app-sidebar__tool-icon">
             {ExportImageIcon}
           </span>
-          <span>Exportar</span>
+          <span>{t("kindraw.actions.exportImage")}</span>
         </button>
 
         <button
@@ -159,7 +170,7 @@ const EditorActions = () => {
           type="button"
         >
           <span className="kindraw-app-sidebar__tool-icon">{palette}</span>
-          <span>Comandos</span>
+          <span>{t("kindraw.actions.commands")}</span>
         </button>
 
         <button
@@ -168,7 +179,7 @@ const EditorActions = () => {
           type="button"
         >
           <span className="kindraw-app-sidebar__tool-icon">{usersIcon}</span>
-          <span>Atalhos</span>
+          <span>{t("kindraw.actions.shortcuts")}</span>
         </button>
       </div>
 
@@ -177,7 +188,7 @@ const EditorActions = () => {
         onClick={() => setActiveConfirmDialog("clearCanvas")}
         type="button"
       >
-        Limpar canvas
+        {t("kindraw.actions.clearCanvas")}
       </button>
     </section>
   );
@@ -240,12 +251,12 @@ export const AppSidebar = ({
   onCreateItem,
   onCreateShareLink,
   onLogout,
-  onOpenRealtimeCollab,
   onRevokeShareLink,
   route,
   session,
   tree,
 }: AppSidebarProps) => {
+  const { t } = useI18n();
   const { openSidebar } = useUIAppState();
   const editorInterface = useEditorInterface();
   const setAppState = useExcalidrawSetAppState();
@@ -307,7 +318,7 @@ export const AppSidebar = ({
   }, [currentFolderId]);
 
   const openComposer = (mode: ComposerMode) => {
-    const defaults = getComposerDefaults(mode, currentFolder?.name || null);
+    const defaults = getComposerDefaults(mode, currentFolder?.name || null, t);
     setComposerMode(mode);
     setComposerValue(defaults.value);
   };
@@ -331,7 +342,7 @@ export const AppSidebar = ({
 
         {typeof session === "undefined" ? (
           <div className="kindraw-app-sidebar__panel">
-            <p>Carregando workspace...</p>
+            <p>{t("kindraw.sidebar.loadingWorkspace")}</p>
           </div>
         ) : !session ? (
           <div className="kindraw-app-sidebar__panel">
@@ -340,12 +351,11 @@ export const AppSidebar = ({
                 {LibraryIcon}
               </div>
               <div className="kindraw-app-sidebar__overview-copy">
-                <span className="kindraw-app-sidebar__eyebrow">Workspace</span>
-                <h2>Entre para salvar seus drawings</h2>
-                <p>
-                  Use sua conta GitHub para organizar pastas e compartilhar
-                  links publicos sem sair do canvas.
-                </p>
+                <span className="kindraw-app-sidebar__eyebrow">
+                  {t("kindraw.sidebar.workspace")}
+                </span>
+                <h2>{t("kindraw.sidebar.guestTitle")}</h2>
+                <p>{t("kindraw.sidebar.guestDescription")}</p>
               </div>
             </section>
             <button
@@ -353,12 +363,12 @@ export const AppSidebar = ({
               onClick={openGithubLogin}
               type="button"
             >
-              Entrar com GitHub
+              {t("kindraw.actions.signInWithGitHub")}
             </button>
           </div>
         ) : !tree ? (
           <div className="kindraw-app-sidebar__panel">
-            <p>Carregando arvore do workspace...</p>
+            <p>{t("kindraw.sidebar.loadingWorkspaceTree")}</p>
           </div>
         ) : (
           (() => {
@@ -372,7 +382,11 @@ export const AppSidebar = ({
                 return a.title.localeCompare(b.title);
               });
             const composerConfig = composerMode
-              ? getComposerDefaults(composerMode, currentFolder?.name || null)
+              ? getComposerDefaults(
+                  composerMode,
+                  currentFolder?.name || null,
+                  t,
+                )
               : null;
 
             return (
@@ -400,7 +414,7 @@ export const AppSidebar = ({
                     onClick={() => void onLogout()}
                     type="button"
                   >
-                    Sair
+                    {t("kindraw.actions.signOut")}
                   </button>
                 </header>
 
@@ -410,13 +424,18 @@ export const AppSidebar = ({
                   </div>
                   <div className="kindraw-app-sidebar__overview-copy">
                     <span className="kindraw-app-sidebar__eyebrow">
-                      {currentFolder ? "Pasta atual" : "Raiz do workspace"}
+                      {currentFolder
+                        ? t("kindraw.sidebar.currentFolder")
+                        : t("kindraw.sidebar.workspaceRoot")}
                     </span>
-                    <h2>{currentFolder?.name || "Workspace do Kindraw"}</h2>
+                    <h2>
+                      {currentFolder?.name ||
+                        t("kindraw.sidebar.workspaceTitle")}
+                    </h2>
                     <p>
                       {currentFolder
-                        ? "Crie subpastas e mantenha seus drawings organizados dentro do contexto atual."
-                        : "Navegue pelas pastas e mantenha seus drawings no mesmo fluxo do canvas."}
+                        ? t("kindraw.sidebar.currentFolderDescription")
+                        : t("kindraw.sidebar.workspaceDescription")}
                     </p>
                   </div>
                 </section>
@@ -430,7 +449,7 @@ export const AppSidebar = ({
                         </span>
                         <div>
                           <span className="kindraw-app-sidebar__eyebrow">
-                            Arquivo aberto
+                            {t("kindraw.sidebar.openFile")}
                           </span>
                           <h3>{currentItem.title}</h3>
                         </div>
@@ -446,8 +465,7 @@ export const AppSidebar = ({
                       ) : null}
                     </div>
                     <p className="kindraw-app-sidebar__helper">
-                      Realtime continua separado do link publico e usa o room do
-                      Excalidraw.
+                      {t("kindraw.sidebar.openFileDescription")}
                     </p>
                     <button
                       className="kindraw-app-sidebar__back-button"
@@ -458,18 +476,13 @@ export const AppSidebar = ({
                     >
                       {chevronLeftIcon}
                       <span>
-                        Voltar para {currentFolder?.name || "raiz do workspace"}
+                        {t("kindraw.actions.backToWorkspace", {
+                          name:
+                            currentFolder?.name ||
+                            t("kindraw.sidebar.workspaceRoot").toLowerCase(),
+                        })}
                       </span>
                     </button>
-                    {onOpenRealtimeCollab ? (
-                      <button
-                        className="kindraw-app-sidebar__button kindraw-app-sidebar__button--secondary"
-                        onClick={onOpenRealtimeCollab}
-                        type="button"
-                      >
-                        Abrir colaboracao realtime
-                      </button>
-                    ) : null}
                     <ShareLinksPanel
                       busy={isMutating || drawingSaveState === "saving"}
                       onCreateShareLink={onCreateShareLink}
@@ -489,7 +502,7 @@ export const AppSidebar = ({
                     onClick={() => navigateKindraw("/")}
                     type="button"
                   >
-                    Raiz
+                    {t("kindraw.sidebar.root")}
                   </button>
                   {folderTrail.map((folder) => (
                     <div
@@ -522,7 +535,7 @@ export const AppSidebar = ({
                       <span className="kindraw-app-sidebar__section-icon">
                         {LibraryIcon}
                       </span>
-                      <h3>Pastas</h3>
+                      <h3>{t("kindraw.sidebar.folders")}</h3>
                     </div>
                     <div className="kindraw-app-sidebar__section-meta">
                       <span className="kindraw-app-sidebar__section-count">
@@ -531,8 +544,10 @@ export const AppSidebar = ({
                       <button
                         aria-label={
                           currentFolder
-                            ? `Criar subpasta em ${currentFolder.name}`
-                            : "Criar pasta"
+                            ? t("kindraw.sidebar.createSubfolderAria", {
+                                name: currentFolder.name,
+                              })
+                            : t("kindraw.sidebar.createFolderAria")
                         }
                         className="kindraw-app-sidebar__section-action"
                         disabled={isMutating}
@@ -588,7 +603,7 @@ export const AppSidebar = ({
                           onClick={closeComposer}
                           type="button"
                         >
-                          Cancelar
+                          {t("buttons.cancel")}
                         </button>
                       </div>
                     </form>
@@ -608,7 +623,7 @@ export const AppSidebar = ({
                         {LibraryIcon}
                       </span>
                       <span className="kindraw-app-sidebar__tree-label">
-                        Biblioteca
+                        {t("kindraw.sidebar.library")}
                       </span>
                     </span>
                   </button>
@@ -626,7 +641,7 @@ export const AppSidebar = ({
                       <span className="kindraw-app-sidebar__section-icon">
                         {file}
                       </span>
-                      <h3>Arquivos</h3>
+                      <h3>{t("kindraw.sidebar.files")}</h3>
                     </div>
                     <div className="kindraw-app-sidebar__section-meta">
                       <span className="kindraw-app-sidebar__section-count">
@@ -635,8 +650,10 @@ export const AppSidebar = ({
                       <button
                         aria-label={
                           currentFolder
-                            ? `Criar drawing em ${currentFolder.name}`
-                            : "Criar drawing"
+                            ? t("kindraw.sidebar.createDrawingInFolderAria", {
+                                name: currentFolder.name,
+                              })
+                            : t("kindraw.sidebar.createDrawingAria")
                         }
                         className="kindraw-app-sidebar__section-action"
                         disabled={isMutating}
@@ -692,7 +709,7 @@ export const AppSidebar = ({
                           onClick={closeComposer}
                           type="button"
                         >
-                          Cancelar
+                          {t("buttons.cancel")}
                         </button>
                       </div>
                     </form>
@@ -722,14 +739,14 @@ export const AppSidebar = ({
                                 {item.title}
                               </span>
                             </span>
-                            <small>{getItemKindLabel(item.kind)}</small>
+                            <small>{getItemKindLabel(item.kind, t)}</small>
                           </button>
                         </li>
                       ))}
                     </ul>
                   ) : (
                     <p className="kindraw-app-sidebar__empty">
-                      Nenhum arquivo salvo nesta pasta.
+                      {t("kindraw.sidebar.noFilesInFolder")}
                     </p>
                   )}
                 </section>
