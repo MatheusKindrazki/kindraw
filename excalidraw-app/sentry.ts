@@ -3,9 +3,9 @@ import * as Sentry from "@sentry/browser";
 import callsites from "callsites";
 
 const SentryEnvHostnameMap: { [key: string]: string } = {
-  "excalidraw.com": "production",
-  "staging.excalidraw.com": "staging",
-  "vercel.app": "staging",
+  "kindraw.dev": "production",
+  "kindraw-web.pages.dev": "staging",
+  "pages.dev": "staging",
 };
 
 const SENTRY_DISABLED = import.meta.env.VITE_APP_DISABLE_SENTRY === "true";

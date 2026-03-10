@@ -26,7 +26,7 @@ function HomepageHeader() {
 
 export default function Home() {
   return (
-    <Layout description="For Excalidraw contributors or those integrating the Excalidraw editor">
+    <Layout description="For Kindraw contributors and teams integrating the editor package">
       <HomepageHeader />
       <main>
         <HomepageFeatures />

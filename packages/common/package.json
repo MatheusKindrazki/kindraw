@@ -22,7 +22,7 @@
   "files": [
     "dist/*"
   ],
-  "description": "Excalidraw common functions, constants, etc.",
+  "description": "Kindraw common functions, constants, and shared utilities.",
   "publishConfig": {
     "access": "public"
   },
@@ -50,8 +50,8 @@
       "last 1 safari version"
     ]
   },
-  "bugs": "https://github.com/excalidraw/excalidraw/issues",
-  "repository": "https://github.com/excalidraw/excalidraw",
+  "bugs": "https://github.com/MatheusKindrazki/kindraw/issues",
+  "repository": "https://github.com/MatheusKindrazki/kindraw",
   "scripts": {
     "gen:types": "rimraf types && tsc",
     "build:esm": "rimraf dist && node ../../scripts/buildBase.js && yarn gen:types"

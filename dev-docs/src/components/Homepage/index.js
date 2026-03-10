@@ -5,19 +5,19 @@ import styles from "./styles.module.css";
 
 const FeatureList = [
   {
-    title: "Learn how Excalidraw works",
+    title: "Understand the Kindraw architecture",
     Svg: require("@site/static/img/undraw_innovative.svg").default,
     description: (
-      <>Want to contribute to Excalidraw but got lost in the codebase?</>
+      <>Want to contribute to Kindraw without getting lost in the fork?</>
     ),
   },
   {
-    title: "Integrate Excalidraw",
+    title: "Embed the editor package",
     Svg: require("@site/static/img/undraw_blank_canvas.svg").default,
     description: (
       <>
-        Want to build your own app powered by Excalidraw but don't know where to
-        start?
+        Need the editor package inside your own product and want the shortest
+        path to integration?
       </>
     ),
   },

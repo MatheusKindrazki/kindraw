@@ -6,7 +6,7 @@
       "headers": [
         {
           "key": "Access-Control-Allow-Origin",
-          "value": "https://excalidraw.com"
+          "value": "https://kindraw.dev"
         },
         {
           "key": "X-Content-Type-Options",
@@ -31,7 +31,7 @@
         },
         {
           "key": "Access-Control-Allow-Origin",
-          "value": "https://excalidraw.com"
+          "value": "https://kindraw.dev"
         }
       ]
     },
@@ -49,22 +49,7 @@
       ]
     }
   ],
-  "redirects": [
-    {
-      "source": "/webex/:match*",
-      "destination": "https://for-webex.excalidraw.com"
-    },
-    {
-      "source": "/:path*",
-      "has": [
-        {
-          "type": "host",
-          "value": "vscode.excalidraw.com"
-        }
-      ],
-      "destination": "https://marketplace.visualstudio.com/items?itemName=pomdtr.excalidraw-editor"
-    }
-  ],
+  "redirects": [],
   "rewrites": [
     {
       "source": "/draw/:path*",

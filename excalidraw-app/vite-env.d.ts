@@ -11,7 +11,7 @@ interface ImportMetaEnv {
   // collaboration WebSocket server (https: string
   VITE_APP_WS_SERVER_URL: string;
 
-  // set this only if using the collaboration workflow we use on excalidraw.com
+  // set this only if using the collaboration workflow deployed for Kindraw
   VITE_APP_PORTAL_URL: string;
   VITE_APP_AI_BACKEND: string;
 
@@ -31,10 +31,6 @@ interface ImportMetaEnv {
 
   // Enable PWA in dev server
   VITE_APP_ENABLE_PWA: string;
-
-  VITE_APP_PLUS_LP: string;
-
-  VITE_APP_PLUS_APP: string;
 
   VITE_APP_GIT_SHA: string;
   VITE_APP_KINDRAW_API_BASE_URL: string;

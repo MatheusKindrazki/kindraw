@@ -8,16 +8,15 @@ process.env.IS_PREACT = "false";
 
 /** @type {import('@docusaurus/types').Config} */
 const config = {
-  title: "Excalidraw developer docs",
-  tagline:
-    "For Excalidraw contributors or those integrating the Excalidraw editor",
-  url: "https://docs.excalidraw.com",
+  title: "Kindraw developer docs",
+  tagline: "For Kindraw contributors and teams embedding the editor package",
+  url: "https://kindraw.dev",
   baseUrl: "/",
   onBrokenLinks: "throw",
   onBrokenMarkdownLinks: "warn",
   favicon: "img/favicon.png",
-  organizationName: "Excalidraw", // Usually your GitHub org/user name.
-  projectName: "excalidraw", // Usually your repo name.
+  organizationName: "MatheusKindrazki",
+  projectName: "kindraw",
 
   // Even if you don't use internalization, you can use this field to set useful
   // metadata like html lang. For example, if your site is Chinese, you may want
@@ -36,7 +35,7 @@ const config = {
           sidebarPath: require.resolve("./sidebars.js"),
           // Please change this to your repo.
           editUrl:
-            "https://github.com/excalidraw/excalidraw/tree/master/dev-docs/",
+            "https://github.com/MatheusKindrazki/kindraw/tree/master/dev-docs/",
           showLastUpdateAuthor: true,
           showLastUpdateTime: true,
         },
@@ -54,9 +53,9 @@ const config = {
         respectPrefersColorScheme: true,
       },
       navbar: {
-        title: "Excalidraw",
+        title: "Kindraw",
         logo: {
-          alt: "Excalidraw Logo",
+          alt: "Kindraw Logo",
           src: "img/logo.svg",
         },
         items: [
@@ -66,12 +65,12 @@ const config = {
             label: "Docs",
           },
           {
-            to: "https://plus.excalidraw.com/blog",
-            label: "Blog",
+            to: "https://kindraw.dev",
+            label: "Website",
             position: "left",
           },
           {
-            to: "https://github.com/excalidraw/excalidraw",
+            to: "https://github.com/MatheusKindrazki/kindraw",
             label: "GitHub",
             position: "right",
           },
@@ -90,19 +89,15 @@ const config = {
             ],
           },
           {
-            title: "Community",
+            title: "Project",
             items: [
               {
-                label: "Discord",
-                href: "https://discord.gg/UexuTaE",
+                label: "Website",
+                href: "https://kindraw.dev",
               },
               {
-                label: "Twitter",
-                href: "https://twitter.com/excalidraw",
-              },
-              {
-                label: "Linkedin",
-                href: "https://www.linkedin.com/company/excalidraw",
+                label: "API",
+                href: "https://api.kindraw.dev",
               },
             ],
           },
@@ -110,17 +105,13 @@ const config = {
             title: "More",
             items: [
               {
-                label: "Blog",
-                to: "https://plus.excalidraw.com/blog",
-              },
-              {
                 label: "GitHub",
-                to: "https://github.com/excalidraw/excalidraw",
+                to: "https://github.com/MatheusKindrazki/kindraw",
               },
             ],
           },
         ],
-        copyright: `Copyright © 2023 Excalidraw community. Built with Docusaurus ❤️`,
+        copyright: `Copyright © 2026 Kindraw. Built with Docusaurus.`,
       },
       prism: {
         theme: require("prism-react-renderer/themes/dracula"),
@@ -133,11 +124,6 @@ const config = {
       },
       tableOfContents: {
         maxHeadingLevel: 4,
-      },
-      algolia: {
-        appId: "8FEAOD28DI",
-        apiKey: "4b07cca33ff2d2919bc95ff98f148e9e",
-        indexName: "excalidraw",
       },
     }),
   themes: ["@docusaurus/theme-live-codeblock"],

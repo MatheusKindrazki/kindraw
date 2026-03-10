@@ -25,7 +25,7 @@
       "runAtStart": false
     },
     "start": {
-      "name": "Start Excalidraw",
+      "name": "Start Kindraw",
       "command": "yarn start",
       "runAtStart": true,
       "preview": {
