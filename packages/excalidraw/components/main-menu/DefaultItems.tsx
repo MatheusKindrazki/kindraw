@@ -39,7 +39,7 @@ import DropdownMenuItemCheckbox from "../dropdownMenu/DropdownMenuItemCheckbox";
 import DropdownMenuItemContentRadio from "../dropdownMenu/DropdownMenuItemContentRadio";
 import DropdownMenuItemLink from "../dropdownMenu/DropdownMenuItemLink";
 import DropdownMenuSub from "../dropdownMenu/DropdownMenuSub";
-import { GithubIcon, DiscordIcon, XBrandIcon, settingsIcon } from "../icons";
+import { GithubIcon, LinkIcon, settingsIcon } from "../icons";
 import {
   boltIcon,
   DeviceDesktopIcon,
@@ -360,24 +360,17 @@ export const Socials = () => {
     <>
       <DropdownMenuItemLink
         icon={GithubIcon}
-        href="https://github.com/excalidraw/excalidraw"
+        href="https://github.com/MatheusKindrazki/kindraw"
         aria-label="GitHub"
       >
         GitHub
       </DropdownMenuItemLink>
       <DropdownMenuItemLink
-        icon={XBrandIcon}
-        href="https://x.com/excalidraw"
-        aria-label="X"
+        icon={LinkIcon}
+        href="https://kindraw.dev"
+        aria-label={t("helpDialog.homepage")}
       >
-        {t("labels.followUs")}
-      </DropdownMenuItemLink>
-      <DropdownMenuItemLink
-        icon={DiscordIcon}
-        href="https://discord.gg/UexuTaE"
-        aria-label="Discord"
-      >
-        {t("labels.discordChat")}
+        {t("helpDialog.homepage")}
       </DropdownMenuItemLink>
     </>
   );

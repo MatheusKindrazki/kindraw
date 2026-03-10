@@ -52,6 +52,7 @@ import type {
  * boundaries
  **/
 const ALLOWED_LIBRARY_URLS = [
+  "kindraw.dev",
   "excalidraw.com",
   // when installing from github PRs
   "raw.githubusercontent.com/excalidraw/excalidraw-libraries",
@@ -679,7 +680,7 @@ export const useHandleLibrary = (
     excalidrawAPI: ExcalidrawImperativeAPI | null;
     /**
      * Return `true` if the library install url should be allowed.
-     * If not supplied, only the excalidraw.com base domain is allowed.
+     * If not supplied, only the default trusted hostnames are allowed.
      */
     validateLibraryUrl?: (libraryUrl: string) => boolean;
   } & (

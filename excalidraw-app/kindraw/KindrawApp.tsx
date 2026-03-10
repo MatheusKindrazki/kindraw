@@ -622,7 +622,7 @@ export const KindrawApp = () => {
       <div className="kindraw-login-shell">
         <div className="kindraw-login-card">
           <span className="kindraw-eyebrow">Kindraw v1</span>
-          <h1>Seu Excalidraw com conta, pastas e docs</h1>
+          <h1>Your Kindraw workspace with account, folders and docs</h1>
           <p>
             Entre com GitHub para organizar drawings e arquivos Markdown no seu
             workspace.
@@ -636,7 +636,7 @@ export const KindrawApp = () => {
               Entrar com GitHub
             </button>
             <a className="kindraw-link-button" href="/">
-              Abrir Excalidraw publico
+              Open public Kindraw
             </a>
           </div>
           {errorMessage ? (
