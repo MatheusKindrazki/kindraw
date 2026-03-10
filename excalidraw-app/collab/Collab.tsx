@@ -99,11 +99,21 @@ export const collabAPIAtom = atom<CollabAPI | null>(null);
 export const isCollaboratingAtom = atom(false);
 export const isOfflineAtom = atom(false);
 
+export type CollabUserProfile = {
+  userId: string | null;
+  username: string;
+  avatarUrl: string | null;
+  githubLogin: string | null;
+};
+
 interface CollabState {
   errorMessage: string | null;
   /** errors related to saving */
   dialogNotifiedErrors: Record<string, boolean>;
   username: string;
+  userId: string | null;
+  avatarUrl: string | null;
+  githubLogin: string | null;
   activeRoomLink: string | null;
 }
 
@@ -121,6 +131,8 @@ export interface CollabAPI {
   fetchImageFilesFromFirebase: CollabInstance["fetchImageFilesFromFirebase"];
   setUsername: CollabInstance["setUsername"];
   getUsername: CollabInstance["getUsername"];
+  setUserProfile: CollabInstance["setUserProfile"];
+  getUserProfile: CollabInstance["getUserProfile"];
   getActiveRoomLink: CollabInstance["getActiveRoomLink"];
   setCollabError: CollabInstance["setErrorDialog"];
 }
@@ -146,6 +158,9 @@ class Collab extends PureComponent<CollabProps, CollabState> {
       errorMessage: null,
       dialogNotifiedErrors: {},
       username: importUsernameFromLocalStorage() || "",
+      userId: null,
+      avatarUrl: null,
+      githubLogin: null,
       activeRoomLink: null,
     };
     this.portal = new Portal(this);
@@ -236,6 +251,8 @@ class Collab extends PureComponent<CollabProps, CollabState> {
       stopCollaboration: this.stopCollaboration,
       setUsername: this.setUsername,
       getUsername: this.getUsername,
+      setUserProfile: this.setUserProfile,
+      getUserProfile: this.getUserProfile,
       getActiveRoomLink: this.getActiveRoomLink,
       setCollabError: this.setErrorDialog,
     };
@@ -466,6 +483,35 @@ class Collab extends PureComponent<CollabProps, CollabState> {
     }
   };
 
+  private getCurrentCollaboratorIdentity = (): Partial<Collaborator> => ({
+    username: this.state.username || undefined,
+    id: this.state.userId || undefined,
+    avatarUrl: this.state.avatarUrl || undefined,
+  });
+
+  private syncCurrentCollaborator = () => {
+    if (!this.portal.socket?.id) {
+      return;
+    }
+
+    this.updateCollaborator(
+      this.portal.socket.id as SocketId,
+      this.getCurrentCollaboratorIdentity(),
+    );
+  };
+
+  broadcastPresence = () => {
+    this.syncCurrentCollaborator();
+
+    if (!this.isCollaborating()) {
+      return;
+    }
+
+    void this.portal.broadcastIdleChange(
+      document.hidden ? UserIdleState.AWAY : UserIdleState.ACTIVE,
+    );
+  };
+
   private fallbackInitializationHandler: null | (() => any) = null;
 
   startCollaboration = async (
@@ -608,8 +654,14 @@ class Collab extends PureComponent<CollabProps, CollabState> {
             );
             break;
           case WS_SUBTYPES.MOUSE_LOCATION: {
-            const { pointer, button, username, selectedElementIds } =
-              decryptedData.payload;
+            const {
+              pointer,
+              button,
+              username,
+              avatarUrl,
+              userId,
+              selectedElementIds,
+            } = decryptedData.payload;
 
             const socketId: SocketUpdateDataSource["MOUSE_LOCATION"]["payload"]["socketId"] =
               decryptedData.payload.socketId ||
@@ -621,13 +673,22 @@ class Collab extends PureComponent<CollabProps, CollabState> {
               button,
               selectedElementIds,
               username,
+              avatarUrl: avatarUrl || undefined,
+              id: userId || undefined,
             });
 
             break;
           }
 
           case WS_SUBTYPES.USER_VISIBLE_SCENE_BOUNDS: {
-            const { sceneBounds, socketId } = decryptedData.payload;
+            const { sceneBounds, socketId, username, avatarUrl, userId } =
+              decryptedData.payload;
+
+            this.updateCollaborator(socketId, {
+              username,
+              avatarUrl: avatarUrl || undefined,
+              id: userId || undefined,
+            });
 
             const appState = this.excalidrawAPI.getAppState();
 
@@ -661,10 +722,13 @@ class Collab extends PureComponent<CollabProps, CollabState> {
           }
 
           case WS_SUBTYPES.IDLE_STATUS: {
-            const { userState, socketId, username } = decryptedData.payload;
+            const { userState, socketId, username, avatarUrl, userId } =
+              decryptedData.payload;
             this.updateCollaborator(socketId, {
               userState,
               username,
+              avatarUrl: avatarUrl || undefined,
+              id: userId || undefined,
             });
             break;
           }
@@ -749,6 +813,7 @@ class Collab extends PureComponent<CollabProps, CollabState> {
     } else {
       this.portal.socketInitialized = true;
     }
+    this.broadcastPresence();
     return null;
   };
 
@@ -870,10 +935,12 @@ class Collab extends PureComponent<CollabProps, CollabState> {
     const collaborators: InstanceType<typeof Collab>["collaborators"] =
       new Map();
     for (const socketId of sockets) {
+      const isCurrentUser = socketId === this.portal.socket?.id;
       collaborators.set(
         socketId,
         Object.assign({}, this.collaborators.get(socketId), {
-          isCurrentUser: socketId === this.portal.socket?.id,
+          ...(isCurrentUser ? this.getCurrentCollaboratorIdentity() : {}),
+          isCurrentUser,
         }),
       );
     }
@@ -986,11 +1053,54 @@ class Collab extends PureComponent<CollabProps, CollabState> {
   );
 
   setUsername = (username: string) => {
-    this.setState({ username });
-    saveUsernameToLocalStorage(username);
+    const nextUsername = username.trim();
+    this.setState({ username: nextUsername }, this.broadcastPresence);
+    saveUsernameToLocalStorage(nextUsername);
   };
 
   getUsername = () => this.state.username;
+
+  setUserProfile = (profile: CollabUserProfile | null) => {
+    if (!profile) {
+      this.setState(
+        {
+          username: "",
+          userId: null,
+          avatarUrl: null,
+          githubLogin: null,
+        },
+        this.broadcastPresence,
+      );
+      saveUsernameToLocalStorage("");
+      return;
+    }
+
+    const nextUsername = profile.username.trim();
+    this.setState(
+      {
+        username: nextUsername,
+        userId: profile.userId,
+        avatarUrl: profile.avatarUrl,
+        githubLogin: profile.githubLogin,
+      },
+      this.broadcastPresence,
+    );
+    saveUsernameToLocalStorage(nextUsername);
+  };
+
+  getUserProfile = (): CollabUserProfile | null => {
+    const { userId, username, avatarUrl, githubLogin } = this.state;
+    if (!username && !userId && !avatarUrl && !githubLogin) {
+      return null;
+    }
+
+    return {
+      userId,
+      username,
+      avatarUrl,
+      githubLogin,
+    };
+  };
 
   setActiveRoomLink = (activeRoomLink: string | null) => {
     this.setState({ activeRoomLink });

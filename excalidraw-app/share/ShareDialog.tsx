@@ -57,6 +57,10 @@ const ActiveRoomDialog = ({
   const timerRef = useRef<number>(0);
   const ref = useRef<HTMLInputElement>(null);
   const { onCopy, copyStatus } = useCopyStatus();
+  const userProfile = collabAPI.getUserProfile();
+  const isGithubIdentity = Boolean(
+    userProfile?.userId || userProfile?.githubLogin || userProfile?.avatarUrl,
+  );
 
   const copyRoomLink = async () => {
     try {
@@ -83,17 +87,35 @@ const ActiveRoomDialog = ({
       <h3 className="ShareDialog__active__header">
         {t("labels.liveCollaboration").replace(/\./g, "")}
       </h3>
-      <TextField
-        defaultValue={collabAPI.getUsername()}
-        placeholder="Your name"
-        label="Your name"
-        onChange={collabAPI.setUsername}
-        onKeyDown={(event) => event.key === KEYS.ENTER && handleClose()}
-      />
+      {isGithubIdentity && userProfile ? (
+        <div className="ShareDialog__identity">
+          <div className="ShareDialog__identity__avatar">
+            {userProfile.avatarUrl ? (
+              <img alt={userProfile.username} src={userProfile.avatarUrl} />
+            ) : (
+              <span>{userProfile.username.trim().charAt(0).toUpperCase()}</span>
+            )}
+          </div>
+          <div className="ShareDialog__identity__copy">
+            <strong>{userProfile.username}</strong>
+            {userProfile.githubLogin ? (
+              <span>@{userProfile.githubLogin}</span>
+            ) : null}
+          </div>
+        </div>
+      ) : (
+        <TextField
+          defaultValue={collabAPI.getUsername()}
+          placeholder={t("labels.yourName")}
+          label={t("labels.yourName")}
+          onChange={collabAPI.setUsername}
+          onKeyDown={(event) => event.key === KEYS.ENTER && handleClose()}
+        />
+      )}
       <div className="ShareDialog__active__linkRow">
         <TextField
           ref={ref}
-          label="Link"
+          label={t("labels.link.label")}
           readonly
           fullWidth
           value={activeRoomLink}
@@ -150,6 +172,7 @@ const PublicLinkDialog = ({
   onCreateShareLink,
   onRevokeShareLink,
 }: ShareDialogProps["publicShare"]) => {
+  const { t } = useI18n();
   const { onCopy, copyStatus } = useCopyStatus();
   const [copiedLinkId, setCopiedLinkId] = useState<string | null>(null);
 
@@ -162,9 +185,11 @@ const PublicLinkDialog = ({
   if (!currentItem) {
     return (
       <>
-        <div className="ShareDialog__picker__header">Link publico</div>
+        <div className="ShareDialog__picker__header">
+          {t("kindraw.shareDialog.publicLinkTitle")}
+        </div>
         <div className="ShareDialog__picker__description">
-          Abra um drawing salvo do Kindraw para compartilhar pela nossa API.
+          {t("kindraw.shareDialog.publicLinkEmptyDescription")}
         </div>
       </>
     );
@@ -172,17 +197,20 @@ const PublicLinkDialog = ({
 
   return (
     <>
-      <div className="ShareDialog__picker__header">Link publico</div>
+      <div className="ShareDialog__picker__header">
+        {t("kindraw.shareDialog.publicLinkTitle")}
+      </div>
       <div className="ShareDialog__picker__description">
-        Compartilhe <strong>{currentItem.title}</strong> com um link read-only
-        gerado pela API do Kindraw.
+        {t("kindraw.shareDialog.publicLinkDescription", {
+          title: currentItem.title,
+        })}
       </div>
 
       {!currentItem.shareLinks[0] ? (
         <div className="ShareDialog__picker__button">
           <FilledButton
             size="large"
-            label="Gerar link publico"
+            label={t("kindraw.actions.createPublicLink")}
             icon={LinkIcon}
             onClick={() => onCreateShareLink()}
             disabled={busy}
@@ -197,11 +225,16 @@ const PublicLinkDialog = ({
             const publicUrl = buildPublicShareUrl(shareLink.token);
             return (
               <div className="ShareDialog__public__row" key={shareLink.id}>
-                <TextField readonly fullWidth label="Link" value={publicUrl} />
+                <TextField
+                  readonly
+                  fullWidth
+                  label={t("labels.link.label")}
+                  value={publicUrl}
+                />
                 <div className="ShareDialog__public__actions">
                   <FilledButton
                     size="large"
-                    label="Copiar"
+                    label={t("kindraw.actions.copy")}
                     icon={copyIcon}
                     status={
                       copiedLinkId === shareLink.id ? copyStatus : undefined
@@ -214,7 +247,7 @@ const PublicLinkDialog = ({
                     size="large"
                     variant="outlined"
                     color="danger"
-                    label="Revogar"
+                    label={t("kindraw.actions.revoke")}
                     onClick={() => onRevokeShareLink(shareLink.id)}
                     disabled={busy}
                   />
@@ -225,7 +258,7 @@ const PublicLinkDialog = ({
         </div>
       ) : (
         <div className="ShareDialog__picker__description">
-          Nenhum link ativo ainda.
+          {t("kindraw.shareDialog.noActivePublicLink")}
         </div>
       )}
     </>

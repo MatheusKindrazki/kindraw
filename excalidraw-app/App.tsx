@@ -263,6 +263,37 @@ const copyToClipboard = async (value: string) => {
   }
 };
 
+const getKindrawUserDisplayName = (session: KindrawSession["user"]) =>
+  session.name.trim() || session.githubLogin;
+
+const getUserInitial = (label: string) =>
+  label.trim().charAt(0).toUpperCase() || "K";
+
+const formatCollaboratorSummary = (appState: UIAppState) => {
+  const names = Array.from(
+    new Set(
+      Array.from(appState.collaborators.values())
+        .filter((collaborator) => !collaborator.isCurrentUser)
+        .map((collaborator) => collaborator.username?.trim() || "")
+        .filter(Boolean),
+    ),
+  );
+
+  if (!names.length) {
+    return null;
+  }
+
+  if (names.length === 1) {
+    return names[0];
+  }
+
+  if (names.length === 2) {
+    return `${names[0]} e ${names[1]}`;
+  }
+
+  return `${names[0]}, ${names[1]} +${names.length - 2}`;
+};
+
 const initializeScene = async (opts: {
   collabAPI: CollabAPI | null;
   excalidrawAPI: ExcalidrawImperativeAPI;
@@ -523,7 +554,7 @@ const ExcalidrawWrapper = () => {
       });
     } catch (error) {
       setErrorMessage(
-        getErrorMessage(error, "Falha ao atualizar o workspace."),
+        getErrorMessage(error, t("kindraw.status.workspaceRefreshFailed")),
       );
     }
   }, [kindrawSession]);
@@ -545,7 +576,9 @@ const ExcalidrawWrapper = () => {
         setKindrawTree(nextTree);
       });
     } catch (error) {
-      setErrorMessage(getErrorMessage(error, "Falha ao carregar o Kindraw."));
+      setErrorMessage(
+        getErrorMessage(error, t("kindraw.status.workspaceLoadFailed")),
+      );
       setKindrawSession(null);
     }
   }, []);
@@ -553,6 +586,19 @@ const ExcalidrawWrapper = () => {
   useEffect(() => {
     void loadKindrawSession();
   }, [loadKindrawSession]);
+
+  useEffect(() => {
+    if (!collabAPI || !kindrawSession?.user) {
+      return;
+    }
+
+    collabAPI.setUserProfile({
+      userId: kindrawSession.user.id,
+      username: getKindrawUserDisplayName(kindrawSession.user),
+      avatarUrl: kindrawSession.user.avatarUrl,
+      githubLogin: kindrawSession.user.githubLogin,
+    });
+  }, [collabAPI, kindrawSession]);
 
   useEffect(() => {
     if (kindrawRoute.kind === "drawing" || kindrawRoute.kind === "doc") {
@@ -686,12 +732,13 @@ const ExcalidrawWrapper = () => {
   const handleKindrawLogout = useCallback(async () => {
     await runKindrawMutation(async () => {
       await logoutKindraw();
+      collabAPI?.setUserProfile(null);
       setKindrawSession(null);
       setKindrawTree(null);
       setKindrawCurrentItem(null);
       navigateKindraw("/", { replace: true });
     });
-  }, [runKindrawMutation]);
+  }, [collabAPI, runKindrawMutation]);
 
   const createKindrawShareLinkInternal = useCallback(async () => {
     if (!kindrawCurrentItem) {
@@ -717,13 +764,47 @@ const ExcalidrawWrapper = () => {
       const publicUrl = buildPublicShareUrl(shareLink.token);
       const copied = await copyToClipboard(publicUrl);
       const message = copied
-        ? "Link publico criado e copiado."
-        : "Link publico criado.";
+        ? t("kindraw.status.publicLinkCreatedCopied")
+        : t("kindraw.status.publicLinkCreated");
 
       setKindrawDrawingStatus(message);
       excalidrawAPI?.setToast({ message });
     });
   }, [createKindrawShareLinkInternal, excalidrawAPI, runKindrawMutation]);
+
+  const handleKindrawPrimaryShareAction = useCallback(async () => {
+    if (!kindrawCurrentItem) {
+      return;
+    }
+
+    await runKindrawMutation(async () => {
+      const activeShareLink = kindrawCurrentItem.shareLinks[0] || null;
+      const shareLink =
+        activeShareLink || (await createKindrawShareLinkInternal());
+
+      if (!shareLink) {
+        return;
+      }
+
+      const publicUrl = buildPublicShareUrl(shareLink.token);
+      const copied = await copyToClipboard(publicUrl);
+      const message = activeShareLink
+        ? copied
+          ? t("kindraw.status.publicLinkCopied")
+          : t("kindraw.status.publicLinkReady")
+        : copied
+        ? t("kindraw.status.publicLinkCreatedCopied")
+        : t("kindraw.status.publicLinkCreated");
+
+      setKindrawDrawingStatus(message);
+      excalidrawAPI?.setToast({ message });
+    });
+  }, [
+    createKindrawShareLinkInternal,
+    excalidrawAPI,
+    kindrawCurrentItem,
+    runKindrawMutation,
+  ]);
 
   const handleKindrawRevokeShareLink = useCallback(
     async (shareLinkId: string) => {
@@ -889,7 +970,9 @@ const ExcalidrawWrapper = () => {
               });
             }
           });
-          collabAPI?.setUsername(username || "");
+          if (!kindrawSession) {
+            collabAPI?.setUsername(username || "");
+          }
         }
 
         if (isBrowserStorageStateNewer(STORAGE_KEYS.VERSION_FILES)) {
@@ -956,7 +1039,14 @@ const ExcalidrawWrapper = () => {
         false,
       );
     };
-  }, [isCollabDisabled, collabAPI, excalidrawAPI, setLangCode, loadImages]);
+  }, [
+    isCollabDisabled,
+    collabAPI,
+    excalidrawAPI,
+    kindrawSession,
+    setLangCode,
+    loadImages,
+  ]);
 
   useEffect(() => {
     if (kindrawRoute.kind !== "drawing") {
@@ -997,8 +1087,8 @@ const ExcalidrawWrapper = () => {
           setKindrawDrawingSaveState("idle");
           setKindrawDrawingStatus(
             draft && isDraftNewer(draft.updatedAt, response.item.updatedAt)
-              ? "Rascunho local restaurado."
-              : "Drawing sincronizado.",
+              ? t("kindraw.status.draftRestored")
+              : t("kindraw.status.drawingSynced"),
           );
         });
 
@@ -1023,7 +1113,9 @@ const ExcalidrawWrapper = () => {
         }, 0);
       } catch (error) {
         if (!cancelled) {
-          setErrorMessage(getErrorMessage(error, "Falha ao carregar drawing."));
+          setErrorMessage(
+            getErrorMessage(error, t("kindraw.status.drawingLoadFailed")),
+          );
         }
       }
     };
@@ -1045,7 +1137,7 @@ const ExcalidrawWrapper = () => {
       const timestamp = new Date().toISOString();
 
       setKindrawDrawingSaveState("saving");
-      setKindrawDrawingStatus("Salvando drawing...");
+      setKindrawDrawingStatus(t("kindraw.status.drawingSaving"));
 
       await setKindrawDraft(itemId, {
         content,
@@ -1056,7 +1148,7 @@ const ExcalidrawWrapper = () => {
         await updateItemContent(itemId, content);
         kindrawLastSavedContentRef.current = content;
         setKindrawDrawingSaveState("idle");
-        setKindrawDrawingStatus("Drawing salvo.");
+        setKindrawDrawingStatus(t("kindraw.status.drawingSaved"));
         if (currentItem) {
           setKindrawCurrentItem({
             ...currentItem,
@@ -1067,7 +1159,7 @@ const ExcalidrawWrapper = () => {
       } catch (error) {
         setKindrawDrawingSaveState("error");
         setKindrawDrawingStatus(
-          getErrorMessage(error, "Falha ao salvar drawing."),
+          getErrorMessage(error, t("kindraw.status.drawingSaveFailed")),
         );
       }
     },
@@ -1193,10 +1285,28 @@ const ExcalidrawWrapper = () => {
 
   const localStorageQuotaExceeded = useAtomValue(localStorageQuotaExceededAtom);
 
+  const handleStartRealtimeCollab = useCallback(() => {
+    if (!collabAPI) {
+      return;
+    }
+
+    trackEvent("share", "room creation", `ui (${getFrame()})`);
+    void collabAPI.startCollaboration(null);
+  }, [collabAPI]);
+
   const onCollabDialogOpen = useCallback(
     () => setShareDialogState({ isOpen: true, type: "collaborationOnly" }),
     [setShareDialogState],
   );
+
+  const handleRealtimeAction = useCallback(() => {
+    if (isCollaborating) {
+      onCollabDialogOpen();
+      return;
+    }
+
+    handleStartRealtimeCollab();
+  }, [handleStartRealtimeCollab, isCollaborating, onCollabDialogOpen]);
 
   // ---------------------------------------------------------------------------
   // onExport — intercepts file save to wait for pending image loads
@@ -1361,13 +1471,15 @@ const ExcalidrawWrapper = () => {
             : undefined
         }
         theme={editorTheme}
-        renderTopRightUI={(isMobile) => {
+        renderTopRightUI={(isMobile, appState) => {
           if (isMobile || !collabAPI || isCollabDisabled) {
             return null;
           }
 
           const isDrawingRoute = kindrawRoute.kind === "drawing";
           const shouldShowRealtimeAction = isDrawingRoute || isCollaborating;
+          const activeShareLink = kindrawCurrentItem?.shareLinks[0] || null;
+          const collaboratorSummary = formatCollaboratorSummary(appState);
 
           return (
             <div className="excalidraw-ui-top-right kindraw-top-right-actions">
@@ -1385,7 +1497,21 @@ const ExcalidrawWrapper = () => {
                   }
                   type="button"
                 >
-                  @{kindrawSession.user.githubLogin}
+                  <span className="kindraw-top-right-actions__avatar">
+                    {kindrawSession.user.avatarUrl ? (
+                      <img
+                        alt={kindrawSession.user.name}
+                        src={kindrawSession.user.avatarUrl}
+                      />
+                    ) : (
+                      <span>
+                        {getUserInitial(
+                          getKindrawUserDisplayName(kindrawSession.user),
+                        )}
+                      </span>
+                    )}
+                  </span>
+                  <span>{getKindrawUserDisplayName(kindrawSession.user)}</span>
                 </button>
               ) : (
                 <button
@@ -1393,22 +1519,32 @@ const ExcalidrawWrapper = () => {
                   onClick={openGithubLogin}
                   type="button"
                 >
-                  Entrar com GitHub
+                  {t("kindraw.actions.signInWithGitHub")}
                 </button>
               )}
+              {collaboratorSummary ? (
+                <div
+                  className="kindraw-top-right-actions__presence"
+                  title={t("kindraw.presence.activeWith", {
+                    names: collaboratorSummary,
+                  })}
+                >
+                  {usersIcon}
+                  <span>{collaboratorSummary}</span>
+                </div>
+              ) : null}
               {isDrawingRoute && kindrawCurrentItem ? (
                 <button
                   className="kindraw-top-right-actions__button"
-                  onClick={() =>
-                    setShareDialogState({
-                      isOpen: true,
-                      type: "publicLink",
-                    })
-                  }
+                  onClick={() => void handleKindrawPrimaryShareAction()}
                   type="button"
                 >
                   {LinkIcon}
-                  <span>Link publico</span>
+                  <span>
+                    {activeShareLink
+                      ? t("kindraw.actions.copyPublicLink")
+                      : t("kindraw.actions.createPublicLink")}
+                  </span>
                 </button>
               ) : null}
               {shouldShowRealtimeAction ? (
@@ -1418,12 +1554,14 @@ const ExcalidrawWrapper = () => {
                       ? " kindraw-top-right-actions__button--active"
                       : ""
                   }`}
-                  onClick={onCollabDialogOpen}
+                  onClick={handleRealtimeAction}
                   type="button"
                 >
                   {usersIcon}
                   <span>
-                    {isCollaborating ? "Realtime ativo" : "Abrir realtime"}
+                    {isCollaborating
+                      ? t("kindraw.actions.manageRealtime")
+                      : t("kindraw.actions.startRealtime")}
                   </span>
                 </button>
               ) : null}
@@ -1442,7 +1580,7 @@ const ExcalidrawWrapper = () => {
           currentItemTitle={kindrawCurrentItem?.title || null}
           kindrawSession={kindrawSession}
           onGithubLogin={openGithubLogin}
-          onCollabDialogOpen={onCollabDialogOpen}
+          onCollabDialogOpen={handleRealtimeAction}
           isCollabEnabled={!isCollabDisabled}
           routeKind={kindrawRoute.kind}
         />
@@ -1502,9 +1640,6 @@ const ExcalidrawWrapper = () => {
           onCreateItem={handleKindrawCreateItem}
           onCreateShareLink={handleKindrawCreateShareLink}
           onLogout={handleKindrawLogout}
-          onOpenRealtimeCollab={
-            kindrawRoute.kind === "drawing" ? onCollabDialogOpen : undefined
-          }
           onRevokeShareLink={handleKindrawRevokeShareLink}
           route={kindrawRoute}
           session={kindrawSession}
@@ -1532,10 +1667,7 @@ const ExcalidrawWrapper = () => {
               ],
               icon: usersIcon,
               perform: () => {
-                setShareDialogState({
-                  isOpen: true,
-                  type: "collaborationOnly",
-                });
+                handleRealtimeAction();
               },
             },
             {
@@ -1561,7 +1693,7 @@ const ExcalidrawWrapper = () => {
               },
             },
             {
-              label: "Link publico",
+              label: t("kindraw.commandPalette.publicLink"),
               category: DEFAULT_CATEGORIES.app,
               predicate: () =>
                 kindrawRoute.kind === "drawing" && !!kindrawCurrentItem,
@@ -1571,15 +1703,15 @@ const ExcalidrawWrapper = () => {
                 "readonly",
                 "publish",
                 "url",
-                "publico",
+                "public",
                 "share",
               ],
               perform: async () => {
-                setShareDialogState({ isOpen: true, type: "publicLink" });
+                await handleKindrawPrimaryShareAction();
               },
             },
             {
-              label: "GitHub",
+              label: t("kindraw.commandPalette.github"),
               icon: GithubIcon,
               category: DEFAULT_CATEGORIES.links,
               predicate: true,

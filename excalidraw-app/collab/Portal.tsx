@@ -52,9 +52,11 @@ class Portal {
         this.collab.getSceneElementsIncludingDeleted(),
         /* syncAll */ true,
       );
+      this.collab.broadcastPresence();
     });
     this.socket.on("room-user-change", (clients: SocketId[]) => {
       this.collab.setCollaborators(clients);
+      this.collab.broadcastPresence();
     });
 
     return socket;
@@ -184,12 +186,15 @@ class Portal {
 
   broadcastIdleChange = (userState: UserIdleState) => {
     if (this.socket?.id) {
+      const userProfile = this.collab.getUserProfile();
       const data: SocketUpdateDataSource["IDLE_STATUS"] = {
         type: WS_SUBTYPES.IDLE_STATUS,
         payload: {
           socketId: this.socket.id as SocketId,
           userState,
           username: this.collab.state.username,
+          avatarUrl: userProfile?.avatarUrl || undefined,
+          userId: userProfile?.userId || undefined,
         },
       };
       return this._broadcastSocketData(
@@ -204,6 +209,7 @@ class Portal {
     button: SocketUpdateDataSource["MOUSE_LOCATION"]["payload"]["button"];
   }) => {
     if (this.socket?.id) {
+      const userProfile = this.collab.getUserProfile();
       const data: SocketUpdateDataSource["MOUSE_LOCATION"] = {
         type: WS_SUBTYPES.MOUSE_LOCATION,
         payload: {
@@ -213,6 +219,8 @@ class Portal {
           selectedElementIds:
             this.collab.excalidrawAPI.getAppState().selectedElementIds,
           username: this.collab.state.username,
+          avatarUrl: userProfile?.avatarUrl || undefined,
+          userId: userProfile?.userId || undefined,
         },
       };
 
@@ -230,11 +238,14 @@ class Portal {
     roomId: string,
   ) => {
     if (this.socket?.id) {
+      const userProfile = this.collab.getUserProfile();
       const data: SocketUpdateDataSource["USER_VISIBLE_SCENE_BOUNDS"] = {
         type: WS_SUBTYPES.USER_VISIBLE_SCENE_BOUNDS,
         payload: {
           socketId: this.socket.id as SocketId,
           username: this.collab.state.username,
+          avatarUrl: userProfile?.avatarUrl || undefined,
+          userId: userProfile?.userId || undefined,
           sceneBounds: payload.sceneBounds,
         },
       };

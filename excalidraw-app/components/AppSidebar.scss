@@ -84,6 +84,9 @@
   }
 
   .kindraw-top-right-actions {
+    display: inline-flex;
+    align-items: center;
+    flex-wrap: wrap;
     gap: 0.5rem;
   }
 
@@ -110,6 +113,52 @@
   .kindraw-top-right-actions__button svg {
     width: 1rem;
     height: 1rem;
+  }
+
+  .kindraw-top-right-actions__avatar {
+    width: 1.7rem;
+    height: 1.7rem;
+    border-radius: 999px;
+    overflow: hidden;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--kindraw-sidebar-accent-soft);
+    color: var(--color-primary-darker);
+    font-size: 0.78rem;
+    font-weight: 700;
+    flex: 0 0 auto;
+  }
+
+  .kindraw-top-right-actions__avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .kindraw-top-right-actions__presence {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    padding: 0.5rem 0.8rem;
+    border-radius: 999px;
+    border: 1px solid var(--kindraw-sidebar-border);
+    background: color-mix(in srgb, var(--color-surface-low) 86%, white);
+    color: var(--kindraw-sidebar-muted);
+    font-size: 0.84rem;
+    max-width: min(16rem, 24vw);
+  }
+
+  .kindraw-top-right-actions__presence svg {
+    width: 0.95rem;
+    height: 0.95rem;
+    flex: 0 0 auto;
+  }
+
+  .kindraw-top-right-actions__presence span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .kindraw-top-right-actions__button--active {
