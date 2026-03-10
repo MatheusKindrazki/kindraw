@@ -15,4 +15,8 @@ binding = "KINDRAW_BLOBS"
 bucket_name = "kindraw-blobs"
 
 [vars]
-KINDRAW_APP_ORIGIN = "https://kindraw-web.pages.dev"
+KINDRAW_APP_ORIGIN = "https://kindraw.dev"
+
+[[routes]]
+pattern = "api.kindraw.dev"
+custom_domain = true
