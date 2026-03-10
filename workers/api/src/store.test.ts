@@ -28,6 +28,8 @@ type ItemRow = {
   kind: "drawing" | "doc";
   title: string;
   content_blob_key: string;
+  collaboration_room_key: string | null;
+  collaboration_enabled_at: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -295,7 +297,7 @@ class FakeStatement implements D1PreparedStatement {
 
     if (
       query ===
-      "INSERT INTO items (id, owner_id, folder_id, kind, title, content_blob_key, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+      "INSERT INTO items ( id, owner_id, folder_id, kind, title, content_blob_key, collaboration_room_key, collaboration_enabled_at, created_at, updated_at ) VALUES (?, ?, ?, ?, ?, ?, NULL, NULL, ?, ?)"
     ) {
       const [
         id,
@@ -323,6 +325,8 @@ class FakeStatement implements D1PreparedStatement {
         kind,
         title,
         content_blob_key: blobKey,
+        collaboration_room_key: null,
+        collaboration_enabled_at: null,
         created_at: createdAt,
         updated_at: updatedAt,
       });
@@ -364,6 +368,40 @@ class FakeStatement implements D1PreparedStatement {
       );
       if (item) {
         item.updated_at = updatedAt;
+      }
+      return {};
+    }
+
+    if (
+      query ===
+      "UPDATE items SET collaboration_room_key = ?, collaboration_enabled_at = ? WHERE id = ? AND owner_id = ?"
+    ) {
+      const [roomKey, enabledAt, itemId, ownerId] = this.values as [
+        string,
+        string,
+        string,
+        string,
+      ];
+      const item = this.state.items.find(
+        (entry) => entry.id === itemId && entry.owner_id === ownerId,
+      );
+      if (item) {
+        item.collaboration_room_key = roomKey;
+        item.collaboration_enabled_at = enabledAt;
+      }
+      return {};
+    }
+
+    if (
+      query ===
+      "UPDATE items SET collaboration_enabled_at = NULL WHERE id = ? AND owner_id = ?"
+    ) {
+      const [itemId, ownerId] = this.values as [string, string];
+      const item = this.state.items.find(
+        (entry) => entry.id === itemId && entry.owner_id === ownerId,
+      );
+      if (item) {
+        item.collaboration_enabled_at = null;
       }
       return {};
     }
@@ -581,6 +619,8 @@ describe("KindrawStore", () => {
           kind: "doc",
           title: "Notes",
           content_blob_key: "users/user-1/items/item-1/current.md",
+          collaboration_room_key: null,
+          collaboration_enabled_at: null,
           created_at: "2026-03-09T10:00:00.000Z",
           updated_at: "2026-03-09T10:00:00.000Z",
         },
@@ -609,6 +649,8 @@ describe("KindrawStore", () => {
           kind: "doc",
           title: "Spec",
           content_blob_key: "users/user-1/items/item-1/current.md",
+          collaboration_room_key: null,
+          collaboration_enabled_at: null,
           created_at: "2026-03-09T10:00:00.000Z",
           updated_at: "2026-03-09T10:00:00.000Z",
         },
@@ -652,6 +694,79 @@ describe("KindrawStore", () => {
     uuidSpy.mockRestore();
   });
 
+  it("ativa colaboracao realtime fixa no drawing e expoe a sala no getItem", async () => {
+    const generateKeySpy = vi
+      .spyOn(crypto.subtle, "generateKey")
+      .mockResolvedValue({} as CryptoKey);
+    const exportKeySpy = vi
+      .spyOn(crypto.subtle, "exportKey")
+      .mockResolvedValue({
+        k: "abcdefghijklmnopqrstuv",
+      } as JsonWebKey);
+    const { store, state, blobs } = createStore({
+      items: [
+        {
+          id: "item-1",
+          owner_id: "user-1",
+          folder_id: null,
+          kind: "drawing",
+          title: "Board",
+          content_blob_key: "users/user-1/items/item-1/current.excalidraw",
+          collaboration_room_key: null,
+          collaboration_enabled_at: null,
+          created_at: "2026-03-09T10:00:00.000Z",
+          updated_at: "2026-03-09T10:00:00.000Z",
+        },
+      ],
+    });
+    await blobs.put(
+      "users/user-1/items/item-1/current.excalidraw",
+      '{"type":"excalidraw"}',
+    );
+
+    const room = await store.enableItemCollaboration("user-1", "item-1");
+    expect(room).toEqual({
+      roomId: "item-1",
+      roomKey: "abcdefghijklmnopqrstuv",
+      enabledAt: "2026-03-09T12:00:00.000Z",
+    });
+
+    const item = await store.getItem("user-1", "item-1");
+    expect(item.collaborationRoom).toEqual(room);
+    expect(state.items[0]?.collaboration_enabled_at).toBe(
+      "2026-03-09T12:00:00.000Z",
+    );
+
+    exportKeySpy.mockRestore();
+    generateKeySpy.mockRestore();
+  });
+
+  it("desativa colaboracao sem perder a room key do drawing", async () => {
+    const { store, state } = createStore({
+      items: [
+        {
+          id: "item-1",
+          owner_id: "user-1",
+          folder_id: null,
+          kind: "drawing",
+          title: "Board",
+          content_blob_key: "users/user-1/items/item-1/current.excalidraw",
+          collaboration_room_key: "abcdefghijklmnopqrstuv",
+          collaboration_enabled_at: "2026-03-09T11:00:00.000Z",
+          created_at: "2026-03-09T10:00:00.000Z",
+          updated_at: "2026-03-09T10:00:00.000Z",
+        },
+      ],
+    });
+
+    await store.disableItemCollaboration("user-1", "item-1");
+
+    expect(state.items[0]?.collaboration_enabled_at).toBeNull();
+    expect(state.items[0]?.collaboration_room_key).toBe(
+      "abcdefghijklmnopqrstuv",
+    );
+  });
+
   it("reutiliza o link ativo e limpa duplicados antigos", async () => {
     const { store, state } = createStore({
       items: [
@@ -662,6 +777,8 @@ describe("KindrawStore", () => {
           kind: "drawing",
           title: "Mapa",
           content_blob_key: "users/user-1/items/item-1/current.excalidraw",
+          collaboration_room_key: null,
+          collaboration_enabled_at: null,
           created_at: "2026-03-09T10:00:00.000Z",
           updated_at: "2026-03-09T10:00:00.000Z",
         },

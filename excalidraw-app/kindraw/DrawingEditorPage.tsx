@@ -69,6 +69,7 @@ export const DrawingEditorPage = ({
         setItemResponse({
           item: response.item,
           content: restoredContent,
+          collaborationRoom: response.collaborationRoom,
         });
         setTitle(response.item.title);
         setInitialContent(restoredContent);
@@ -111,6 +112,7 @@ export const DrawingEditorPage = ({
                   updatedAt: timestamp,
                 },
                 content,
+                collaborationRoom: current.collaborationRoom,
               }
             : current,
         );

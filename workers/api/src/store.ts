@@ -4,6 +4,7 @@ import type {
   CreateItemInput,
   D1Database,
   FolderRecord,
+  KindrawCollaborationRoom,
   ItemRecord,
   KindrawItem,
   KindrawItemResponse,
@@ -51,6 +52,8 @@ type ItemRow = {
   kind: KindrawItem["kind"];
   title: string;
   content_blob_key: string;
+  collaboration_room_key: string | null;
+  collaboration_enabled_at: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -108,6 +111,8 @@ const toItem = (row: ItemRow, shareLinks: KindrawShareLink[]): KindrawItem => ({
   updatedAt: row.updated_at,
   createdAt: row.created_at,
   shareLinks,
+  collaborationRoomId: row.collaboration_enabled_at ? row.id : null,
+  collaborationEnabledAt: row.collaboration_enabled_at,
 });
 
 const toItemRecord = (row: ItemRow): ItemRecord => ({
@@ -119,9 +124,30 @@ const toItemRecord = (row: ItemRow): ItemRecord => ({
   updatedAt: row.updated_at,
   createdAt: row.created_at,
   contentBlobKey: row.content_blob_key,
+  collaborationRoomKey: row.collaboration_room_key,
+  collaborationRoomId: row.collaboration_enabled_at ? row.id : null,
+  collaborationEnabledAt: row.collaboration_enabled_at,
 });
 
 const isoNow = () => new Date().toISOString();
+
+const createCollaborationRoomKey = async () => {
+  const key = await crypto.subtle.generateKey(
+    {
+      name: "AES-GCM",
+      length: 128,
+    },
+    true,
+    ["encrypt", "decrypt"],
+  );
+  const exported = (await crypto.subtle.exportKey("jwk", key)) as {
+    k?: string;
+  };
+  if (!exported.k) {
+    throw new HttpError(500, "Failed to generate collaboration room key.");
+  }
+  return exported.k;
+};
 
 const blobContentType = (kind: KindrawItem["kind"]) =>
   kind === "drawing"
@@ -493,8 +519,19 @@ export class KindrawStore {
 
     await this.db
       .prepare(
-        `INSERT INTO items (id, owner_id, folder_id, kind, title, content_blob_key, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO items (
+           id,
+           owner_id,
+           folder_id,
+           kind,
+           title,
+           content_blob_key,
+           collaboration_room_key,
+           collaboration_enabled_at,
+           created_at,
+           updated_at
+         )
+         VALUES (?, ?, ?, ?, ?, ?, NULL, NULL, ?, ?)`,
       )
       .bind(
         itemId,
@@ -525,12 +562,22 @@ export class KindrawStore {
           kind: item.kind,
           title: item.title,
           content_blob_key: item.contentBlobKey,
+          collaboration_room_key: item.collaborationRoomKey,
+          collaboration_enabled_at: item.collaborationEnabledAt,
           created_at: item.createdAt,
           updated_at: item.updatedAt,
         },
         shareLinks,
       ),
       content,
+      collaborationRoom:
+        item.collaborationEnabledAt && item.collaborationRoomKey
+          ? {
+              roomId: item.id,
+              roomKey: item.collaborationRoomKey,
+              enabledAt: item.collaborationEnabledAt,
+            }
+          : null,
     };
   }
 
@@ -589,6 +636,57 @@ export class KindrawStore {
         .bind(itemId, ownerId)
         .run(),
     ]);
+  }
+
+  async enableItemCollaboration(
+    ownerId: string,
+    itemId: string,
+  ): Promise<KindrawCollaborationRoom> {
+    const item = await this.requireItem(ownerId, itemId);
+    if (item.kind !== "drawing") {
+      throw new HttpError(
+        400,
+        "Realtime collaboration is only available for drawings.",
+      );
+    }
+
+    const roomKey =
+      item.collaborationRoomKey || (await createCollaborationRoomKey());
+    const enabledAt = item.collaborationEnabledAt || isoNow();
+
+    await this.db
+      .prepare(
+        `UPDATE items
+           SET collaboration_room_key = ?, collaboration_enabled_at = ?
+         WHERE id = ? AND owner_id = ?`,
+      )
+      .bind(roomKey, enabledAt, itemId, ownerId)
+      .run();
+
+    return {
+      roomId: item.id,
+      roomKey,
+      enabledAt,
+    };
+  }
+
+  async disableItemCollaboration(ownerId: string, itemId: string) {
+    const item = await this.requireItem(ownerId, itemId);
+    if (item.kind !== "drawing") {
+      throw new HttpError(
+        400,
+        "Realtime collaboration is only available for drawings.",
+      );
+    }
+
+    await this.db
+      .prepare(
+        `UPDATE items
+           SET collaboration_enabled_at = NULL
+         WHERE id = ? AND owner_id = ?`,
+      )
+      .bind(itemId, ownerId)
+      .run();
   }
 
   async createShareLink(ownerId: string, itemId: string) {

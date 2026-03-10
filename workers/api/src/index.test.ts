@@ -18,6 +18,8 @@ const { mockStore } = vi.hoisted(() => ({
     patchItemMeta: vi.fn(),
     putItemContent: vi.fn(),
     deleteItem: vi.fn(),
+    enableItemCollaboration: vi.fn(),
+    disableItemCollaboration: vi.fn(),
     createShareLink: vi.fn(),
     revokeShareLink: vi.fn(),
     getPublicItem: vi.fn(),
@@ -272,5 +274,52 @@ describe("routeRequest", () => {
     expect(response.headers.get("Set-Cookie")).toContain("SameSite=None");
 
     fetchMock.mockRestore();
+  });
+
+  it("enables item collaboration for an authenticated drawing owner", async () => {
+    mockStore.resolveSession.mockResolvedValue({
+      session: {
+        id: "s-1",
+        userId: "u-1",
+        expiresAt: new Date(Date.now() + 60_000).toISOString(),
+        createdAt: new Date().toISOString(),
+        lastSeenAt: new Date().toISOString(),
+      },
+      user: {
+        id: "u-1",
+        githubLogin: "matheus",
+        name: "Matheus",
+        avatarUrl: null,
+      },
+    });
+    mockStore.enableItemCollaboration.mockResolvedValue({
+      roomId: "item-1",
+      roomKey: "abcdefghijklmnopqrstuv",
+      enabledAt: "2026-03-10T12:00:00.000Z",
+    });
+
+    const response = await worker.fetch(
+      new Request("http://localhost:8787/api/items/item-1/collaboration-room", {
+        method: "POST",
+        headers: {
+          Cookie: "kindraw_session=s-1",
+          Origin: "http://localhost:3001",
+        },
+      }),
+      env,
+    );
+
+    expect(response.status).toBe(201);
+    expect(await response.json()).toEqual({
+      collaborationRoom: {
+        roomId: "item-1",
+        roomKey: "abcdefghijklmnopqrstuv",
+        enabledAt: "2026-03-10T12:00:00.000Z",
+      },
+    });
+    expect(mockStore.enableItemCollaboration).toHaveBeenCalledWith(
+      "u-1",
+      "item-1",
+    );
   });
 });

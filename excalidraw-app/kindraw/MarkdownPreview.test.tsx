@@ -13,6 +13,8 @@ const createItem = (overrides: Partial<KindrawItem> = {}): KindrawItem => ({
   updatedAt: "2026-03-09T00:00:00.000Z",
   createdAt: "2026-03-09T00:00:00.000Z",
   shareLinks: [],
+  collaborationRoomId: null,
+  collaborationEnabledAt: null,
   ...overrides,
 });
 

@@ -166,8 +166,11 @@ export const getCollaborationLink = (data: {
   roomId: string;
   roomKey: string;
 }) => {
-  return `${window.location.origin}${window.location.pathname}#room=${data.roomId},${data.roomKey}`;
+  return `${window.location.origin}${window.location.pathname}${window.location.search}#room=${data.roomId},${data.roomKey}`;
 };
+
+export const getCollaborationBasePath = () =>
+  `${window.location.pathname}${window.location.search}`;
 
 /**
  * Decodes shareLink data using the legacy buffer format.

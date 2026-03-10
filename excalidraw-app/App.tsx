@@ -142,6 +142,8 @@ import { AppSidebar } from "./components/AppSidebar";
 import {
   createFolder,
   createItem,
+  disableCollaborationRoom,
+  enableCollaborationRoom,
   createShareLink,
   buildPublicShareUrl,
   getItem,
@@ -170,6 +172,7 @@ import { getErrorMessage, isDraftNewer } from "./kindraw/utils";
 import type { CollabAPI } from "./collab/Collab";
 import type {
   KindrawItem,
+  KindrawCollaborationRoom,
   KindrawItemKind,
   KindrawSession,
   KindrawTreeResponse,
@@ -520,6 +523,8 @@ const ExcalidrawWrapper = () => {
   const [kindrawBusy, setKindrawBusy] = useState(false);
   const [kindrawCurrentItem, setKindrawCurrentItem] =
     useState<KindrawItem | null>(null);
+  const [kindrawCurrentCollaborationRoom, setKindrawCurrentCollaborationRoom] =
+    useState<KindrawCollaborationRoom | null>(null);
   const [kindrawDrawingStatus, setKindrawDrawingStatus] = useState<
     string | null
   >(null);
@@ -528,6 +533,7 @@ const ExcalidrawWrapper = () => {
   >("idle");
   const kindrawApplyingSceneRef = useRef(false);
   const kindrawAutoCreateRootRef = useRef(false);
+  const kindrawAutoJoinCollabRoomRef = useRef<string | null>(null);
   const kindrawLastSavedContentRef = useRef<string | null>(null);
   const kindrawSaveTimeoutRef = useRef<number | null>(null);
 
@@ -672,6 +678,8 @@ const ExcalidrawWrapper = () => {
                       updatedAt: timestamp,
                       createdAt: timestamp,
                       shareLinks: [],
+                      collaborationRoomId: null,
+                      collaborationEnabledAt: null,
                     },
                     ...current.items,
                   ],
@@ -725,6 +733,7 @@ const ExcalidrawWrapper = () => {
       setKindrawSession(null);
       setKindrawTree(null);
       setKindrawCurrentItem(null);
+      setKindrawCurrentCollaborationRoom(null);
       navigateKindraw("/", { replace: true });
     });
   }, [collabAPI, runKindrawMutation]);
@@ -1045,6 +1054,8 @@ const ExcalidrawWrapper = () => {
       }
       setKindrawDrawingSaveState("idle");
       setKindrawDrawingStatus(null);
+      setKindrawCurrentCollaborationRoom(null);
+      kindrawAutoJoinCollabRoomRef.current = null;
       kindrawLastSavedContentRef.current = null;
       return;
     }
@@ -1073,6 +1084,7 @@ const ExcalidrawWrapper = () => {
         kindrawLastSavedContentRef.current = response.content;
         startTransition(() => {
           setKindrawCurrentItem(response.item);
+          setKindrawCurrentCollaborationRoom(response.collaborationRoom);
           setKindrawDrawingSaveState("idle");
           setKindrawDrawingStatus(
             draft && isDraftNewer(draft.updatedAt, response.item.updatedAt)
@@ -1116,6 +1128,75 @@ const ExcalidrawWrapper = () => {
       kindrawApplyingSceneRef.current = false;
     };
   }, [excalidrawAPI, kindrawRoute, kindrawSession]);
+
+  useEffect(() => {
+    if (
+      !collabAPI ||
+      !kindrawSession ||
+      kindrawBusy ||
+      kindrawRoute.kind !== "drawing" ||
+      !kindrawCurrentCollaborationRoom ||
+      collabAPI.isCollaborating()
+    ) {
+      if (kindrawRoute.kind !== "drawing" || !kindrawCurrentCollaborationRoom) {
+        kindrawAutoJoinCollabRoomRef.current = null;
+      }
+      return;
+    }
+
+    const currentRoomLink = getCollaborationLinkData(window.location.href);
+    if (
+      currentRoomLink?.roomId === kindrawCurrentCollaborationRoom.roomId &&
+      currentRoomLink.roomKey === kindrawCurrentCollaborationRoom.roomKey
+    ) {
+      return;
+    }
+
+    if (
+      kindrawAutoJoinCollabRoomRef.current ===
+      kindrawCurrentCollaborationRoom.roomId
+    ) {
+      return;
+    }
+
+    kindrawAutoJoinCollabRoomRef.current =
+      kindrawCurrentCollaborationRoom.roomId;
+    void collabAPI.startCollaboration(kindrawCurrentCollaborationRoom);
+  }, [
+    collabAPI,
+    kindrawBusy,
+    kindrawCurrentCollaborationRoom,
+    kindrawRoute,
+    kindrawSession,
+  ]);
+
+  useEffect(() => {
+    if (!collabAPI || !isCollaborating) {
+      return;
+    }
+
+    const currentRoomLink = getCollaborationLinkData(window.location.href);
+    if (!currentRoomLink) {
+      return;
+    }
+
+    if (kindrawRoute.kind !== "drawing") {
+      collabAPI.stopCollaboration(false);
+      return;
+    }
+
+    if (
+      kindrawCurrentCollaborationRoom &&
+      currentRoomLink.roomId !== kindrawCurrentCollaborationRoom.roomId
+    ) {
+      collabAPI.stopCollaboration(false);
+    }
+  }, [
+    collabAPI,
+    isCollaborating,
+    kindrawCurrentCollaborationRoom,
+    kindrawRoute,
+  ]);
 
   const persistKindrawDrawing = useCallback(
     async (
@@ -1274,14 +1355,80 @@ const ExcalidrawWrapper = () => {
 
   const localStorageQuotaExceeded = useAtomValue(localStorageQuotaExceededAtom);
 
-  const handleStartRealtimeCollab = useCallback(() => {
+  const handleStartRealtimeCollab = useCallback(async () => {
     if (!collabAPI) {
       return;
     }
 
     trackEvent("share", "room creation", `ui (${getFrame()})`);
-    void collabAPI.startCollaboration(null);
-  }, [collabAPI]);
+
+    if (kindrawRoute.kind === "drawing" && kindrawSession) {
+      await runKindrawMutation(async () => {
+        const response = await enableCollaborationRoom(kindrawRoute.itemId);
+        setKindrawCurrentCollaborationRoom(response.collaborationRoom);
+        setKindrawCurrentItem((current) =>
+          current && current.id === kindrawRoute.itemId
+            ? {
+                ...current,
+                collaborationRoomId: response.collaborationRoom.roomId,
+                collaborationEnabledAt: response.collaborationRoom.enabledAt,
+              }
+            : current,
+        );
+        await refreshKindrawTree();
+        await collabAPI.startCollaboration(response.collaborationRoom, {
+          bootstrapFromCurrentScene: true,
+        });
+      });
+      return;
+    }
+
+    await collabAPI.startCollaboration(null);
+  }, [
+    collabAPI,
+    kindrawRoute,
+    kindrawSession,
+    refreshKindrawTree,
+    runKindrawMutation,
+  ]);
+
+  const handleStopRealtimeCollab = useCallback(async () => {
+    if (!collabAPI) {
+      return;
+    }
+
+    if (
+      kindrawRoute.kind === "drawing" &&
+      kindrawSession &&
+      kindrawCurrentCollaborationRoom
+    ) {
+      await runKindrawMutation(async () => {
+        await disableCollaborationRoom(kindrawRoute.itemId);
+        setKindrawCurrentCollaborationRoom(null);
+        setKindrawCurrentItem((current) =>
+          current && current.id === kindrawRoute.itemId
+            ? {
+                ...current,
+                collaborationRoomId: null,
+                collaborationEnabledAt: null,
+              }
+            : current,
+        );
+        await refreshKindrawTree();
+        collabAPI.stopCollaboration(false);
+      });
+      return;
+    }
+
+    collabAPI.stopCollaboration();
+  }, [
+    collabAPI,
+    kindrawCurrentCollaborationRoom,
+    kindrawRoute,
+    kindrawSession,
+    refreshKindrawTree,
+    runKindrawMutation,
+  ]);
 
   const onCollabDialogOpen = useCallback(
     () => setShareDialogState({ isOpen: true, type: "collaborationOnly" }),
@@ -1531,6 +1678,11 @@ const ExcalidrawWrapper = () => {
 
         <ShareDialog
           collabAPI={collabAPI}
+          collaboration={{
+            busy: kindrawBusy,
+            onStartCollaboration: handleStartRealtimeCollab,
+            onStopCollaboration: handleStopRealtimeCollab,
+          }}
           publicShare={{
             busy: kindrawBusy || kindrawDrawingSaveState === "saving",
             currentItem: kindrawCurrentItem,

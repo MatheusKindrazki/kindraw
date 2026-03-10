@@ -526,6 +526,33 @@ export const routeRequest = async (request: Request, env: Env) => {
     }
   }
 
+  if (
+    pathname.startsWith("/api/items/") &&
+    pathname.endsWith("/collaboration-room")
+  ) {
+    const itemId = pathname
+      .replace("/api/items/", "")
+      .replace("/collaboration-room", "");
+    const { auth, store } = await requireAuth(request, env);
+
+    if (request.method === "POST") {
+      return json(
+        {
+          collaborationRoom: await store.enableItemCollaboration(
+            auth.user.id,
+            itemId,
+          ),
+        },
+        { status: 201 },
+      );
+    }
+
+    if (request.method === "DELETE") {
+      await store.disableItemCollaboration(auth.user.id, itemId);
+      return new Response(null, { status: 204 });
+    }
+  }
+
   if (pathname.startsWith("/api/items/")) {
     const itemId = pathname.replace("/api/items/", "");
     const { auth, store } = await requireAuth(request, env);

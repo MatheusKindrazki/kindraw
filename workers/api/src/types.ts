@@ -26,6 +26,12 @@ export type KindrawShareLink = {
   revokedAt: string | null;
 };
 
+export type KindrawCollaborationRoom = {
+  roomId: string;
+  roomKey: string;
+  enabledAt: string;
+};
+
 export type KindrawItem = {
   id: string;
   kind: KindrawItemKind;
@@ -35,6 +41,8 @@ export type KindrawItem = {
   updatedAt: string;
   createdAt: string;
   shareLinks: KindrawShareLink[];
+  collaborationRoomId: string | null;
+  collaborationEnabledAt: string | null;
 };
 
 export type KindrawTreeResponse = {
@@ -45,6 +53,7 @@ export type KindrawTreeResponse = {
 export type KindrawItemResponse = {
   item: KindrawItem;
   content: string;
+  collaborationRoom: KindrawCollaborationRoom | null;
 };
 
 export type KindrawPublicItemResponse = {
@@ -68,6 +77,7 @@ export type FolderRecord = Omit<KindrawFolder, "parentId"> & {
 export type ItemRecord = Omit<KindrawItem, "shareLinks" | "folderId"> & {
   folderId: string | null;
   contentBlobKey: string;
+  collaborationRoomKey: string | null;
 };
 
 export type ShareLinkRecord = KindrawShareLink & {

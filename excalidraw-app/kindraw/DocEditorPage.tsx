@@ -77,6 +77,7 @@ export const DocEditorPage = ({
         setItemResponse({
           item: response.item,
           content: restoredContent,
+          collaborationRoom: response.collaborationRoom,
         });
         setTitle(response.item.title);
         setMarkdown(restoredContent);
@@ -118,6 +119,7 @@ export const DocEditorPage = ({
                   updatedAt: timestamp,
                 },
                 content,
+                collaborationRoom: current.collaborationRoom,
               }
             : current,
         );

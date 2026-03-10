@@ -64,6 +64,7 @@ import {
 } from "../app_constants";
 import {
   generateCollaborationLinkData,
+  getCollaborationBasePath,
   getCollaborationLink,
   getSyncableElements,
 } from "../data";
@@ -136,6 +137,11 @@ export interface CollabAPI {
   getActiveRoomLink: CollabInstance["getActiveRoomLink"];
   setCollabError: CollabInstance["setErrorDialog"];
 }
+
+type CollaborationLinkData = {
+  roomId: string;
+  roomKey: string;
+};
 
 interface CollabProps {
   excalidrawAPI: ExcalidrawImperativeAPI;
@@ -392,13 +398,14 @@ class Collab extends PureComponent<CollabProps, CollabState> {
 
     if (!keepRemoteState) {
       LocalData.fileStorage.reset();
+      window.history.replaceState({}, APP_NAME, getCollaborationBasePath());
       this.destroySocketClient();
     } else if (window.confirm(t("alerts.collabStopOverridePrompt"))) {
       // hack to ensure that we prefer we disregard any new browser state
       // that could have been saved in other tabs while we were collaborating
       resetBrowserStateVersions();
 
-      window.history.pushState({}, APP_NAME, window.location.origin);
+      window.history.pushState({}, APP_NAME, getCollaborationBasePath());
       this.destroySocketClient();
 
       LocalData.fileStorage.reset();
@@ -515,7 +522,10 @@ class Collab extends PureComponent<CollabProps, CollabState> {
   private fallbackInitializationHandler: null | (() => any) = null;
 
   startCollaboration = async (
-    existingRoomLinkData: null | { roomId: string; roomKey: string },
+    existingRoomLinkData: CollaborationLinkData | null,
+    opts?: {
+      bootstrapFromCurrentScene?: boolean;
+    },
   ) => {
     if (!this.state.username) {
       import("@excalidraw/random-username").then(({ getRandomUsername }) => {
@@ -533,6 +543,10 @@ class Collab extends PureComponent<CollabProps, CollabState> {
 
     if (existingRoomLinkData) {
       ({ roomId, roomKey } = existingRoomLinkData);
+      const nextRoomLink = getCollaborationLink({ roomId, roomKey });
+      if (window.location.href !== nextRoomLink) {
+        window.history.replaceState({}, APP_NAME, nextRoomLink);
+      }
     } else {
       ({ roomId, roomKey } = await generateCollaborationLinkData());
       window.history.pushState(
@@ -581,7 +595,7 @@ class Collab extends PureComponent<CollabProps, CollabState> {
       return null;
     }
 
-    if (existingRoomLinkData) {
+    if (existingRoomLinkData && !opts?.bootstrapFromCurrentScene) {
       // when joining existing room, don't merge it with current scene data
       this.excalidrawAPI.resetScene();
     } else {

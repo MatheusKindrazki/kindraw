@@ -1,4 +1,5 @@
 import type {
+  KindrawCollaborationRoom,
   KindrawItemKind,
   KindrawItemResponse,
   KindrawPublicItemResponse,
@@ -131,6 +132,18 @@ export const createShareLink = (itemId: string) =>
     };
   }>(`/api/items/${itemId}/share-links`, {
     method: "POST",
+  });
+
+export const enableCollaborationRoom = (itemId: string) =>
+  requestJson<{
+    collaborationRoom: KindrawCollaborationRoom;
+  }>(`/api/items/${itemId}/collaboration-room`, {
+    method: "POST",
+  });
+
+export const disableCollaborationRoom = (itemId: string) =>
+  requestJson<void>(`/api/items/${itemId}/collaboration-room`, {
+    method: "DELETE",
   });
 
 export const revokeShareLink = (shareLinkId: string) =>

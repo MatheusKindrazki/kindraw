@@ -34,6 +34,11 @@ export const shareDialogStateAtom = atom<
 export type ShareDialogProps = {
   collabAPI: CollabAPI | null;
   handleClose: () => void;
+  collaboration: {
+    busy?: boolean;
+    onStartCollaboration: () => Promise<void> | void;
+    onStopCollaboration: () => Promise<void> | void;
+  };
   publicShare: {
     busy?: boolean;
     currentItem: KindrawItem | null;
@@ -47,10 +52,14 @@ const ActiveRoomDialog = ({
   collabAPI,
   activeRoomLink,
   handleClose,
+  onStopCollaboration,
+  busy,
 }: {
   collabAPI: CollabAPI;
   activeRoomLink: string;
   handleClose: () => void;
+  onStopCollaboration: () => Promise<void> | void;
+  busy?: boolean;
 }) => {
   const { t } = useI18n();
   const [, setJustCopied] = useState(false);
@@ -153,13 +162,14 @@ const ActiveRoomDialog = ({
           color="danger"
           label={t("roomDialog.button_stopSession")}
           icon={playerStopFilledIcon}
-          onClick={() => {
+          onClick={async () => {
             trackEvent("share", "room closed");
-            collabAPI.stopCollaboration();
+            await onStopCollaboration();
             if (!collabAPI.isCollaborating()) {
               handleClose();
             }
           }}
+          disabled={busy}
         />
       </div>
     </>
@@ -268,7 +278,7 @@ const PublicLinkDialog = ({
 const ShareDialogPicker = (props: ShareDialogProps) => {
   const { t } = useI18n();
 
-  const { collabAPI } = props;
+  const { collabAPI, collaboration } = props;
 
   const startCollabJSX = collabAPI ? (
     <>
@@ -286,10 +296,11 @@ const ShareDialogPicker = (props: ShareDialogProps) => {
           size="large"
           label={t("roomDialog.button_startSession")}
           icon={playerPlayIcon}
-          onClick={() => {
+          onClick={async () => {
             trackEvent("share", "room creation", `ui (${getFrame()})`);
-            collabAPI.startCollaboration(null);
+            await collaboration.onStartCollaboration();
           }}
+          disabled={collaboration.busy}
         />
       </div>
     </>
@@ -311,6 +322,8 @@ const ShareDialogInner = (props: ShareDialogProps) => {
             collabAPI={props.collabAPI}
             activeRoomLink={activeRoomLink}
             handleClose={props.handleClose}
+            onStopCollaboration={props.collaboration.onStopCollaboration}
+            busy={props.collaboration.busy}
           />
         ) : (
           <ShareDialogPicker {...props} />
@@ -322,6 +335,7 @@ const ShareDialogInner = (props: ShareDialogProps) => {
 
 export const ShareDialog = (props: {
   collabAPI: CollabAPI | null;
+  collaboration: ShareDialogProps["collaboration"];
   publicShare: ShareDialogProps["publicShare"];
 }) => {
   const [shareDialogState, setShareDialogState] = useAtom(shareDialogStateAtom);
@@ -342,6 +356,7 @@ export const ShareDialog = (props: {
     <ShareDialogInner
       handleClose={() => setShareDialogState({ isOpen: false })}
       collabAPI={props.collabAPI}
+      collaboration={props.collaboration}
       publicShare={props.publicShare}
       type={shareDialogState.type}
     />
