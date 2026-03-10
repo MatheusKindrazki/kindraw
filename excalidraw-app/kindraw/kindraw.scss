@@ -1,0 +1,504 @@
+.kindraw-shell,
+.kindraw-login-shell,
+.kindraw-loading-shell,
+.kindraw-share-shell {
+  min-height: 100vh;
+  background: radial-gradient(
+      circle at top left,
+      rgba(255, 207, 138, 0.28),
+      transparent 28%
+    ),
+    radial-gradient(
+      circle at top right,
+      rgba(96, 158, 255, 0.18),
+      transparent 26%
+    ),
+    linear-gradient(180deg, #fff8ef 0%, #f7f4ee 100%);
+  color: #1f2937;
+}
+
+.kindraw-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 20px 28px;
+  border-bottom: 1px solid rgba(31, 41, 55, 0.08);
+  backdrop-filter: blur(18px);
+  background: rgba(255, 251, 244, 0.82);
+}
+
+.kindraw-topbar__brand {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.kindraw-topbar__brand a {
+  font-size: 1.35rem;
+  font-weight: 700;
+  color: inherit;
+  text-decoration: none;
+}
+
+.kindraw-topbar__brand span,
+.kindraw-topbar__user span,
+.kindraw-eyebrow,
+.kindraw-item-card__meta,
+.kindraw-folder-card__meta,
+.kindraw-share-links__header p,
+.kindraw-error-copy {
+  color: #5b6574;
+  font-size: 0.92rem;
+}
+
+.kindraw-topbar__session,
+.kindraw-topbar__user,
+.kindraw-toolbar,
+.kindraw-inline-actions,
+.kindraw-action-grid,
+.kindraw-share-links__header,
+.kindraw-share-links__actions,
+.kindraw-editor-header,
+.kindraw-editor-header__leading,
+.kindraw-editor-header__status,
+.kindraw-item-card__header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.kindraw-topbar__user img,
+.kindraw-avatar-fallback {
+  width: 40px;
+  height: 40px;
+  border-radius: 999px;
+  background: #f4b75d;
+  object-fit: cover;
+}
+
+.kindraw-avatar-fallback {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+}
+
+.kindraw-shell__body {
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr);
+  min-height: calc(100vh - 81px);
+}
+
+.kindraw-sidebar {
+  padding: 24px 18px 28px 24px;
+  border-right: 1px solid rgba(31, 41, 55, 0.08);
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.kindraw-sidebar__section + .kindraw-sidebar__section {
+  margin-top: 20px;
+}
+
+.kindraw-sidebar__header,
+.kindraw-section__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.kindraw-sidebar h2,
+.kindraw-section h2,
+.kindraw-share-links h3 {
+  margin: 0;
+  font-size: 0.94rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.kindraw-main {
+  min-width: 0;
+  padding: 28px;
+}
+
+.kindraw-workspace,
+.kindraw-editor-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  min-height: 100%;
+}
+
+.kindraw-workspace__header h1,
+.kindraw-login-card h1,
+.kindraw-share-shell__header h1 {
+  margin: 6px 0 8px;
+  font-size: clamp(2rem, 4vw, 3rem);
+  line-height: 1;
+}
+
+.kindraw-section,
+.kindraw-share-links,
+.kindraw-doc-layout__editor,
+.kindraw-doc-layout__preview,
+.kindraw-share-shell__content,
+.kindraw-login-card,
+.kindraw-empty-state {
+  border: 1px solid rgba(31, 41, 55, 0.08);
+  border-radius: 24px;
+  background: rgba(255, 255, 255, 0.86);
+  box-shadow: 0 16px 40px rgba(31, 41, 55, 0.08);
+}
+
+.kindraw-section,
+.kindraw-share-links,
+.kindraw-share-shell__content,
+.kindraw-empty-state {
+  padding: 20px;
+}
+
+.kindraw-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+}
+
+.kindraw-folder-card,
+.kindraw-item-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 18px;
+  border-radius: 20px;
+  background: linear-gradient(180deg, rgba(255, 251, 244, 0.95), #ffffff);
+  border: 1px solid rgba(31, 41, 55, 0.06);
+}
+
+.kindraw-folder-card__title,
+.kindraw-item-card__title,
+.kindraw-tree__button,
+.kindraw-link-button,
+.kindraw-button {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+}
+
+.kindraw-folder-card__title,
+.kindraw-item-card__title {
+  padding: 0;
+  text-align: left;
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: #132032;
+}
+
+.kindraw-tree {
+  list-style: none;
+  padding: 0 0 0 14px;
+  margin: 8px 0 0;
+}
+
+.kindraw-tree__button {
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: 12px;
+  text-align: left;
+  color: #253243;
+}
+
+.kindraw-tree__button:hover,
+.kindraw-folder-card__title:hover,
+.kindraw-item-card__title:hover,
+.kindraw-link-button:hover {
+  color: #a35311;
+}
+
+.kindraw-tree__button--active {
+  background: rgba(244, 183, 93, 0.2);
+  color: #7f3e04;
+  font-weight: 600;
+}
+
+.kindraw-button {
+  padding: 11px 14px;
+  border-radius: 14px;
+  background: #132032;
+  color: #fff;
+  font-weight: 600;
+}
+
+.kindraw-button--secondary {
+  background: #ecf0f5;
+  color: #132032;
+}
+
+.kindraw-link-button {
+  padding: 0;
+  color: #405062;
+}
+
+.kindraw-link-button--danger {
+  color: #b42318;
+}
+
+.kindraw-breadcrumbs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.kindraw-badge,
+.kindraw-status-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  padding: 5px 10px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.kindraw-badge {
+  background: rgba(244, 183, 93, 0.2);
+  color: #7f3e04;
+}
+
+.kindraw-status-pill {
+  background: rgba(96, 158, 255, 0.16);
+  color: #15407d;
+}
+
+.kindraw-status-pill--saving {
+  background: rgba(244, 183, 93, 0.24);
+  color: #7f3e04;
+}
+
+.kindraw-status-pill--error {
+  background: rgba(180, 35, 24, 0.16);
+  color: #b42318;
+}
+
+.kindraw-title-input {
+  min-width: 260px;
+  border: 1px solid rgba(31, 41, 55, 0.1);
+  border-radius: 14px;
+  padding: 11px 14px;
+  background: rgba(255, 255, 255, 0.9);
+  font: inherit;
+  font-size: 1rem;
+}
+
+.kindraw-drawing-stage,
+.kindraw-share-shell__canvas {
+  min-height: 68vh;
+  border: 1px solid rgba(31, 41, 55, 0.08);
+  border-radius: 24px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.88);
+  box-shadow: 0 18px 44px rgba(31, 41, 55, 0.08);
+}
+
+.kindraw-drawing-stage .excalidraw,
+.kindraw-share-shell__canvas .excalidraw {
+  height: 100%;
+}
+
+.kindraw-doc-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 20px;
+  min-height: 68vh;
+}
+
+.kindraw-doc-layout__editor,
+.kindraw-doc-layout__preview {
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.kindraw-doc-layout__editor {
+  padding: 0;
+}
+
+.kindraw-doc-layout__editor .ttd-dialog-input--codemirror,
+.kindraw-doc-layout__editor .cm-editor,
+.kindraw-doc-layout__editor .cm-scroller {
+  height: 100%;
+}
+
+.kindraw-doc-layout__preview {
+  padding: 24px;
+  overflow: auto;
+}
+
+.kindraw-share-links__list {
+  list-style: none;
+  padding: 0;
+  margin: 16px 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.kindraw-share-links__list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 16px;
+  border-radius: 16px;
+  background: #fff8ef;
+}
+
+.kindraw-share-links__list a {
+  color: #15407d;
+  text-decoration: none;
+  word-break: break-all;
+}
+
+.kindraw-markdown {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.kindraw-markdown h1,
+.kindraw-markdown h2,
+.kindraw-markdown h3,
+.kindraw-markdown h4,
+.kindraw-markdown h5,
+.kindraw-markdown h6 {
+  margin: 0;
+  line-height: 1.1;
+}
+
+.kindraw-markdown p,
+.kindraw-markdown blockquote,
+.kindraw-markdown ul,
+.kindraw-markdown ol {
+  margin: 0;
+  line-height: 1.6;
+}
+
+.kindraw-markdown blockquote {
+  padding-left: 16px;
+  border-left: 4px solid rgba(244, 183, 93, 0.5);
+  color: #405062;
+}
+
+.kindraw-markdown__code,
+.kindraw-markdown__mermaid,
+.kindraw-markdown__mermaid-error {
+  margin: 0;
+  padding: 16px;
+  border-radius: 18px;
+  background: #132032;
+  color: #fff8ef;
+  overflow: auto;
+}
+
+.kindraw-markdown__mermaid {
+  background: linear-gradient(180deg, #ffffff, #f6f8fb);
+}
+
+.kindraw-markdown__mermaid canvas {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 0 auto;
+}
+
+.kindraw-markdown__mermaid-error {
+  background: #fff3f2;
+  color: #b42318;
+}
+
+.kindraw-markdown a {
+  color: #15407d;
+}
+
+.kindraw-loading-shell,
+.kindraw-login-shell,
+.kindraw-share-shell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px;
+}
+
+.kindraw-share-shell {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 24px;
+}
+
+.kindraw-share-shell__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.kindraw-login-card,
+.kindraw-empty-state {
+  width: min(680px, 100%);
+}
+
+.kindraw-login-card {
+  padding: 32px;
+}
+
+.kindraw-section__empty,
+.kindraw-share-links__empty,
+.kindraw-markdown__empty {
+  color: #5b6574;
+}
+
+@media (max-width: 1080px) {
+  .kindraw-shell__body,
+  .kindraw-doc-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .kindraw-sidebar {
+    border-right: none;
+    border-bottom: 1px solid rgba(31, 41, 55, 0.08);
+  }
+}
+
+@media (max-width: 720px) {
+  .kindraw-topbar,
+  .kindraw-main {
+    padding: 18px;
+  }
+
+  .kindraw-topbar,
+  .kindraw-topbar__session,
+  .kindraw-editor-header,
+  .kindraw-share-shell__header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .kindraw-editor-header__leading {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .kindraw-title-input {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .kindraw-share-links__list li {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}

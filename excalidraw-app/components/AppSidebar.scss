@@ -1,36 +1,639 @@
 .excalidraw {
-  .app-sidebar-promo-container {
-    padding: 0.75rem;
+  --kindraw-sidebar-width: min(22rem, 92vw);
+  --kindraw-sidebar-border: color-mix(
+    in srgb,
+    var(--color-gray-20) 78%,
+    transparent
+  );
+  --kindraw-sidebar-muted: color-mix(
+    in srgb,
+    var(--text-primary-color) 62%,
+    transparent
+  );
+  --kindraw-sidebar-accent-soft: color-mix(
+    in srgb,
+    var(--color-primary) 12%,
+    var(--color-surface-highest)
+  );
+  --kindraw-sidebar-accent-strong: color-mix(
+    in srgb,
+    var(--color-primary) 18%,
+    white
+  );
+
+  &.kindraw-sidebar-open-left {
+    .layer-ui__wrapper {
+      margin-left: var(--kindraw-sidebar-width);
+      width: calc(100% - var(--kindraw-sidebar-width)) !important;
+    }
+  }
+
+  .kindraw-app-sidebar__fallback-suppress {
+    display: none !important;
+  }
+
+  .kindraw-app-sidebar-root {
+    left: 0;
+    right: auto;
+    width: var(--kindraw-sidebar-width);
+    z-index: calc(var(--zIndex-ui-library) + 20);
+    border-right: 1px solid var(--kindraw-sidebar-border);
+    border-left: 0;
+    background: linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--color-surface-highest) 94%, white),
+      color-mix(in srgb, var(--color-surface-low) 88%, white)
+    );
+    box-shadow: 18px 0 32px rgba(15, 23, 42, 0.06);
+  }
+
+  .kindraw-app-sidebar__shell-header {
+    padding-bottom: 0.875rem;
+  }
+
+  .kindraw-app-sidebar__shell-title {
+    font-size: 1rem;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+  }
+
+  .kindraw-main-menu-trigger {
+    min-width: 2.75rem;
+    min-height: 2.75rem;
+    border-radius: 1rem;
+    border: 1px solid var(--kindraw-sidebar-border);
+    background: color-mix(in srgb, var(--color-surface-highest) 88%, white);
+    box-shadow: 0 8px 18px rgba(15, 23, 42, 0.06);
+  }
+
+  .kindraw-main-menu-trigger:hover {
+    background: var(--kindraw-sidebar-accent-soft);
+  }
+
+  .kindraw-main-menu-trigger svg {
+    width: 1.1rem;
+    height: 1.1rem;
+  }
+
+  &.kindraw-sidebar-open-left {
+    .kindraw-main-menu-trigger {
+      opacity: 0;
+      pointer-events: none;
+      transform: translateX(-0.5rem);
+    }
+  }
+
+  .kindraw-top-right-actions {
+    gap: 0.5rem;
+  }
+
+  .kindraw-top-right-actions__button {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    border: 1px solid var(--kindraw-sidebar-border);
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--color-surface-highest) 90%, white);
+    padding: 0.55rem 0.85rem;
+    cursor: pointer;
+    font: inherit;
+    color: inherit;
+    transition: background 160ms ease, border-color 160ms ease,
+      transform 160ms ease;
+  }
+
+  .kindraw-top-right-actions__button:hover {
+    background: var(--color-surface-low);
+    transform: translateY(-1px);
+  }
+
+  .kindraw-top-right-actions__button svg {
+    width: 1rem;
+    height: 1rem;
+  }
+
+  .kindraw-top-right-actions__button--active {
+    background: var(--kindraw-sidebar-accent-soft);
+    color: var(--color-primary-darker);
+    border-color: color-mix(in srgb, var(--color-primary) 45%, white);
+  }
+
+  .kindraw-app-sidebar {
+    padding: 0;
+  }
+
+  .kindraw-app-sidebar__panel {
+    padding: 1rem;
     display: flex;
     flex-direction: column;
-    text-align: center;
     gap: 1rem;
     flex: 1 1 auto;
   }
 
-  .app-sidebar-promo-image {
-    margin: 1rem 0;
-
-    height: 16.25rem;
-    background-size: contain;
-    background-position: center;
-    background-repeat: no-repeat;
-
-    background-image: radial-gradient(
-        circle,
-        transparent 60%,
-        var(--sidebar-bg-color) 100%
-      ),
-      var(--image-source);
-
+  .kindraw-app-sidebar__profile {
     display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding-bottom: 0.9rem;
+    border-bottom: 1px solid var(--kindraw-sidebar-border);
   }
 
-  .app-sidebar-promo-text {
-    padding: 0 2rem;
+  .kindraw-app-sidebar__profile-main {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    min-width: 0;
   }
 
-  .link-button {
-    margin: 0 auto;
+  .kindraw-app-sidebar__avatar {
+    width: 2.6rem;
+    height: 2.6rem;
+    border-radius: 0.9rem;
+    background: var(--kindraw-sidebar-accent-soft);
+    color: var(--color-primary-darker);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.88rem;
+    font-weight: 700;
+    flex: 0 0 auto;
+    overflow: hidden;
+    border: 1px solid color-mix(in srgb, var(--color-primary) 20%, white);
+  }
+
+  .kindraw-app-sidebar__avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .kindraw-app-sidebar__profile-copy {
+    min-width: 0;
+  }
+
+  .kindraw-app-sidebar__profile-copy strong,
+  .kindraw-app-sidebar__profile-copy span {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .kindraw-app-sidebar__profile-copy strong {
+    font-size: 1rem;
+    line-height: 1.1;
+  }
+
+  .kindraw-app-sidebar__profile-copy span {
+    margin-top: 0.16rem;
+    color: var(--kindraw-sidebar-muted);
+    font-size: 0.78rem;
+  }
+
+  .kindraw-app-sidebar__overview,
+  .kindraw-app-sidebar__section--current {
+    background: linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--color-surface-highest) 94%, white),
+      color-mix(in srgb, var(--color-surface-low) 80%, white)
+    );
+    border: 1px solid var(--kindraw-sidebar-border);
+    border-radius: 1.1rem;
+    padding: 0.95rem;
+  }
+
+  .kindraw-app-sidebar__overview {
+    display: flex;
+    gap: 0.875rem;
+    align-items: flex-start;
+  }
+
+  .kindraw-app-sidebar__overview-icon,
+  .kindraw-app-sidebar__section-icon,
+  .kindraw-app-sidebar__tree-icon,
+  .kindraw-app-sidebar__item-icon,
+  .kindraw-app-sidebar__tool-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .kindraw-app-sidebar__overview-icon {
+    width: 2.5rem;
+    height: 2.5rem;
+    border-radius: 0.95rem;
+    flex: 0 0 auto;
+    background: var(--kindraw-sidebar-accent-soft);
+    color: var(--color-primary-darker);
+    border: 1px solid color-mix(in srgb, var(--color-primary) 20%, white);
+  }
+
+  .kindraw-app-sidebar__overview-icon svg,
+  .kindraw-app-sidebar__section-icon svg,
+  .kindraw-app-sidebar__tree-icon svg,
+  .kindraw-app-sidebar__item-icon svg,
+  .kindraw-app-sidebar__tool-icon svg {
+    width: 1rem;
+    height: 1rem;
+  }
+
+  .kindraw-app-sidebar__overview-copy h2 {
+    margin: 0.25rem 0 0.35rem;
+    font-size: 1.05rem;
+    line-height: 1.15;
+    letter-spacing: -0.01em;
+  }
+
+  .kindraw-app-sidebar__eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--kindraw-sidebar-muted);
+  }
+
+  .kindraw-app-sidebar__overview-copy p,
+  .kindraw-app-sidebar__helper,
+  .kindraw-share-links__header p,
+  .kindraw-share-links__empty {
+    margin: 0;
+    font-size: 0.82rem;
+    line-height: 1.5;
+    color: var(--kindraw-sidebar-muted);
+  }
+
+  .kindraw-app-sidebar__back-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    width: fit-content;
+    margin-top: 0.25rem;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--color-primary);
+    cursor: pointer;
+    font: inherit;
+    font-size: 0.82rem;
+    font-weight: 600;
+  }
+
+  .kindraw-app-sidebar__back-button svg {
+    width: 0.95rem;
+    height: 0.95rem;
+  }
+
+  .kindraw-app-sidebar__back-button:hover {
+    color: var(--color-primary-darker);
+  }
+
+  .kindraw-app-sidebar__section {
+    border-top: 1px solid var(--kindraw-sidebar-border);
+    padding-top: 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  .kindraw-app-sidebar__section--current {
+    border-top: 0;
+    gap: 0.75rem;
+  }
+
+  .kindraw-app-sidebar__section-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.75rem;
+  }
+
+  .kindraw-app-sidebar__section-head--stacked {
+    align-items: flex-start;
+  }
+
+  .kindraw-app-sidebar__section-title {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    min-width: 0;
+  }
+
+  .kindraw-app-sidebar__section-title h3 {
+    margin: 0;
+    font-size: 0.92rem;
+    line-height: 1.2;
+    letter-spacing: -0.01em;
+  }
+
+  .kindraw-app-sidebar__section-meta {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    flex: 0 0 auto;
+  }
+
+  .kindraw-app-sidebar__section-count {
+    min-width: 1.6rem;
+    height: 1.6rem;
+    padding: 0 0.45rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--color-surface-highest) 75%, white);
+    border: 1px solid var(--kindraw-sidebar-border);
+    font-size: 0.72rem;
+    color: var(--kindraw-sidebar-muted);
+  }
+
+  .kindraw-app-sidebar__section-action,
+  .kindraw-app-sidebar__button,
+  .kindraw-app-sidebar__tool-button,
+  .kindraw-app-sidebar__tree-button,
+  .kindraw-app-sidebar__item,
+  .kindraw-app-sidebar__breadcrumb,
+  .kindraw-app-sidebar__link {
+    font: inherit;
+    color: inherit;
+    cursor: pointer;
+    border: 0;
+    background: transparent;
+  }
+
+  .kindraw-app-sidebar__section-action {
+    width: 2rem;
+    height: 2rem;
+    border-radius: 0.8rem;
+    border: 1px solid var(--kindraw-sidebar-border);
+    background: color-mix(in srgb, var(--color-surface-highest) 88%, white);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 160ms ease, transform 160ms ease;
+  }
+
+  .kindraw-app-sidebar__section-action:hover,
+  .kindraw-app-sidebar__button:hover,
+  .kindraw-app-sidebar__tool-button:hover,
+  .kindraw-app-sidebar__tree-button:hover,
+  .kindraw-app-sidebar__item:hover,
+  .kindraw-app-sidebar__breadcrumb:hover,
+  .kindraw-app-sidebar__link:hover {
+    background: var(--color-surface-low);
+  }
+
+  .kindraw-app-sidebar__section-action:hover {
+    transform: translateY(-1px);
+  }
+
+  .kindraw-app-sidebar__button {
+    min-height: 2.7rem;
+    border-radius: 0.9rem;
+    border: 1px solid var(--kindraw-sidebar-border);
+    padding: 0.7rem 0.9rem;
+    text-align: center;
+  }
+
+  .kindraw-app-sidebar__button--primary {
+    background: var(--color-primary);
+    color: var(--color-surface-lowest);
+    border-color: var(--color-primary);
+  }
+
+  .kindraw-app-sidebar__button--primary:hover {
+    background: color-mix(in srgb, var(--color-primary) 92%, black);
+  }
+
+  .kindraw-app-sidebar__button--secondary {
+    background: color-mix(in srgb, var(--color-surface-highest) 86%, white);
+  }
+
+  .kindraw-app-sidebar__button--ghost {
+    background: transparent;
+  }
+
+  .kindraw-app-sidebar__link {
+    width: fit-content;
+    padding: 0.1rem 0;
+    color: var(--kindraw-sidebar-muted);
+  }
+
+  .kindraw-app-sidebar__link--muted {
+    margin-top: -0.1rem;
+    font-size: 0.78rem;
+  }
+
+  .kindraw-app-sidebar__input {
+    width: 100%;
+    border-radius: 0.9rem;
+    border: 1px solid var(--kindraw-sidebar-border);
+    background: color-mix(in srgb, var(--color-surface-highest) 90%, white);
+    color: inherit;
+    font: inherit;
+    padding: 0.75rem 0.85rem;
+    box-sizing: border-box;
+  }
+
+  .kindraw-app-sidebar__input:focus {
+    outline: 2px solid color-mix(in srgb, var(--color-primary) 34%, white);
+    outline-offset: 1px;
+    border-color: color-mix(in srgb, var(--color-primary) 45%, white);
+  }
+
+  .kindraw-app-sidebar__field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.38rem;
+    font-size: 0.8rem;
+    font-weight: 600;
+  }
+
+  .kindraw-app-sidebar__composer {
+    display: flex;
+    flex-direction: column;
+    gap: 0.7rem;
+    padding: 0.85rem;
+    border-radius: 1rem;
+    background: color-mix(in srgb, var(--color-surface-highest) 86%, white);
+    border: 1px solid var(--kindraw-sidebar-border);
+  }
+
+  .kindraw-app-sidebar__composer-actions {
+    display: grid;
+    gap: 0.55rem;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .kindraw-app-sidebar__breadcrumbs {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    margin-top: -0.1rem;
+  }
+
+  .kindraw-app-sidebar__breadcrumb-group {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+  }
+
+  .kindraw-app-sidebar__breadcrumb {
+    padding: 0.18rem 0.45rem;
+    border-radius: 999px;
+    font-size: 0.76rem;
+    color: var(--kindraw-sidebar-muted);
+  }
+
+  .kindraw-app-sidebar__breadcrumb--active {
+    background: var(--kindraw-sidebar-accent-soft);
+    color: var(--color-primary-darker);
+  }
+
+  .kindraw-app-sidebar__breadcrumb-separator {
+    display: inline-flex;
+    align-items: center;
+    color: var(--kindraw-sidebar-muted);
+    opacity: 0.72;
+  }
+
+  .kindraw-app-sidebar__breadcrumb-separator svg {
+    width: 0.8rem;
+    height: 0.8rem;
+  }
+
+  .kindraw-app-sidebar__tree,
+  .kindraw-app-sidebar__items {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+  }
+
+  .kindraw-app-sidebar__tree {
+    padding-left: 0.95rem;
+  }
+
+  .kindraw-app-sidebar__tree-node {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+  }
+
+  .kindraw-app-sidebar__tree-button,
+  .kindraw-app-sidebar__item {
+    width: 100%;
+    padding: 0.7rem 0.75rem;
+    border-radius: 0.95rem;
+    border: 1px solid transparent;
+    text-align: left;
+  }
+
+  .kindraw-app-sidebar__tree-entry,
+  .kindraw-app-sidebar__item-main {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.55rem;
+    min-width: 0;
+  }
+
+  .kindraw-app-sidebar__tree-label,
+  .kindraw-app-sidebar__item-title {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .kindraw-app-sidebar__tree-icon,
+  .kindraw-app-sidebar__item-icon {
+    color: var(--kindraw-sidebar-muted);
+    opacity: 0.9;
+  }
+
+  .kindraw-app-sidebar__tree-button--active,
+  .kindraw-app-sidebar__item--active {
+    background: var(--kindraw-sidebar-accent-strong);
+    border-color: color-mix(in srgb, var(--color-primary) 24%, white);
+    color: var(--color-primary-darker);
+  }
+
+  .kindraw-app-sidebar__tree-button--active .kindraw-app-sidebar__tree-icon,
+  .kindraw-app-sidebar__item--active .kindraw-app-sidebar__item-icon {
+    color: var(--color-primary-darker);
+  }
+
+  .kindraw-app-sidebar__item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.7rem;
+  }
+
+  .kindraw-app-sidebar__item small {
+    flex: 0 0 auto;
+    text-transform: uppercase;
+    font-size: 0.66rem;
+    letter-spacing: 0.08em;
+    color: var(--kindraw-sidebar-muted);
+  }
+
+  .kindraw-app-sidebar__item-card {
+    margin: 0;
+  }
+
+  .kindraw-app-sidebar__status {
+    font-size: 0.74rem;
+    color: var(--kindraw-sidebar-muted);
+  }
+
+  .kindraw-app-sidebar__status--saving {
+    color: var(--color-warning);
+  }
+
+  .kindraw-app-sidebar__status--error,
+  .kindraw-app-sidebar__error {
+    color: var(--color-danger);
+  }
+
+  .kindraw-app-sidebar__tools-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.55rem;
+  }
+
+  .kindraw-app-sidebar__tool-button {
+    min-height: 3rem;
+    border-radius: 1rem;
+    border: 1px solid var(--kindraw-sidebar-border);
+    background: color-mix(in srgb, var(--color-surface-highest) 88%, white);
+    padding: 0.8rem 0.85rem;
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+  }
+
+  .kindraw-app-sidebar__tool-button span:last-child {
+    font-size: 0.8rem;
+  }
+
+  .kindraw-app-sidebar__empty,
+  .kindraw-app-sidebar__error {
+    margin: 0;
+    font-size: 0.82rem;
+  }
+
+  .kindraw-app-sidebar__error {
+    padding-top: 0.25rem;
+  }
+
+  @media (max-width: 900px) {
+    .kindraw-top-right-actions__button span {
+      display: none;
+    }
   }
 }

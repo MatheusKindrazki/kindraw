@@ -1,82 +1,96 @@
-import { loginIcon } from "@excalidraw/excalidraw/components/icons";
+import { loginIcon, usersIcon } from "@excalidraw/excalidraw/components/icons";
 import { POINTER_EVENTS } from "@excalidraw/common";
-import { useI18n } from "@excalidraw/excalidraw/i18n";
 import { WelcomeScreen } from "@excalidraw/excalidraw/index";
 import React from "react";
 
-import { isExcalidrawPlusSignedUser } from "../app_constants";
+import type { KindrawRoute } from "../kindraw/router";
+import type { KindrawSession } from "../kindraw/types";
 
-export const AppWelcomeScreen: React.FC<{
-  onCollabDialogOpen: () => any;
+type AppWelcomeScreenProps = {
+  currentItemTitle: string | null;
   isCollabEnabled: boolean;
-}> = React.memo((props) => {
-  const { t } = useI18n();
-  let headingContent;
+  kindrawSession: KindrawSession | null | undefined;
+  onCollabDialogOpen: () => any;
+  onGithubLogin: () => void;
+  routeKind: KindrawRoute["kind"];
+};
 
-  if (isExcalidrawPlusSignedUser) {
-    headingContent = t("welcomeScreen.app.center_heading_plus")
-      .split(/(Excalidraw\+)/)
-      .map((bit, idx) => {
-        if (bit === "Excalidraw+") {
-          return (
-            <a
-              style={{ pointerEvents: POINTER_EVENTS.inheritFromUI }}
-              href={`${
-                import.meta.env.VITE_APP_PLUS_APP
-              }?utm_source=excalidraw&utm_medium=app&utm_content=welcomeScreenSignedInUser`}
-              key={idx}
-            >
-              Excalidraw+
-            </a>
-          );
-        }
-        return bit;
-      });
-  } else {
-    headingContent = (
-      <>
-        {t("welcomeScreen.app.center_heading")}
-        <br />
-        {t("welcomeScreen.app.center_heading_line2")}
-        <br />
-        {t("welcomeScreen.app.center_heading_line3")}
-      </>
+export const AppWelcomeScreen: React.FC<AppWelcomeScreenProps> = React.memo(
+  ({
+    currentItemTitle,
+    isCollabEnabled,
+    kindrawSession,
+    onCollabDialogOpen,
+    onGithubLogin,
+    routeKind,
+  }) => {
+    const headingContent =
+      routeKind === "drawing" && currentItemTitle ? (
+        <>
+          Editando {currentItemTitle}
+          <br />
+          Realtime no topo. Workspace e links publicos na lateral.
+        </>
+      ) : kindrawSession ? (
+        <>
+          Canvas e workspace no mesmo fluxo.
+          <br />
+          Use a lateral para criar drawings e organizar subpastas.
+        </>
+      ) : (
+        <>
+          Excalidraw com workspace do Kindraw.
+          <br />
+          Salve drawings e compartilhe links publicos.
+        </>
+      );
+
+    return (
+      <WelcomeScreen>
+        <WelcomeScreen.Hints.MenuHint>
+          Workspace e arquivos
+        </WelcomeScreen.Hints.MenuHint>
+        <WelcomeScreen.Hints.ToolbarHint>
+          Ferramentas do canvas
+        </WelcomeScreen.Hints.ToolbarHint>
+        <WelcomeScreen.Hints.HelpHint>
+          Ajuda e atalhos
+        </WelcomeScreen.Hints.HelpHint>
+        <WelcomeScreen.Center>
+          <WelcomeScreen.Center.Logo>
+            <div style={{ pointerEvents: POINTER_EVENTS.inheritFromUI }}>
+              Kindraw
+            </div>
+          </WelcomeScreen.Center.Logo>
+          <WelcomeScreen.Center.Heading>
+            {headingContent}
+          </WelcomeScreen.Center.Heading>
+          <WelcomeScreen.Center.Menu>
+            {!kindrawSession ? (
+              <WelcomeScreen.Center.MenuItem
+                icon={loginIcon}
+                onSelect={onGithubLogin}
+                shortcut={null}
+              >
+                Entrar com GitHub
+              </WelcomeScreen.Center.MenuItem>
+            ) : null}
+
+            {isCollabEnabled ? (
+              <WelcomeScreen.Center.MenuItem
+                icon={usersIcon}
+                onSelect={onCollabDialogOpen}
+                shortcut={null}
+              >
+                Abrir realtime
+              </WelcomeScreen.Center.MenuItem>
+            ) : null}
+
+            <WelcomeScreen.Center.MenuItemLoadScene />
+            <WelcomeScreen.Center.MenuItemHelp />
+          </WelcomeScreen.Center.Menu>
+        </WelcomeScreen.Center>
+      </WelcomeScreen>
     );
-  }
-
-  return (
-    <WelcomeScreen>
-      <WelcomeScreen.Hints.MenuHint>
-        {t("welcomeScreen.app.menuHint")}
-      </WelcomeScreen.Hints.MenuHint>
-      <WelcomeScreen.Hints.ToolbarHint />
-      <WelcomeScreen.Hints.HelpHint />
-      <WelcomeScreen.Center>
-        <WelcomeScreen.Center.Logo />
-        <WelcomeScreen.Center.Heading>
-          {headingContent}
-        </WelcomeScreen.Center.Heading>
-        <WelcomeScreen.Center.Menu>
-          <WelcomeScreen.Center.MenuItemLoadScene />
-          <WelcomeScreen.Center.MenuItemHelp />
-          {props.isCollabEnabled && (
-            <WelcomeScreen.Center.MenuItemLiveCollaborationTrigger
-              onSelect={() => props.onCollabDialogOpen()}
-            />
-          )}
-          {!isExcalidrawPlusSignedUser && (
-            <WelcomeScreen.Center.MenuItemLink
-              href={`${
-                import.meta.env.VITE_APP_PLUS_LP
-              }/plus?utm_source=excalidraw&utm_medium=app&utm_content=welcomeScreenGuest`}
-              shortcut={null}
-              icon={loginIcon}
-            >
-              Sign up
-            </WelcomeScreen.Center.MenuItemLink>
-          )}
-        </WelcomeScreen.Center.Menu>
-      </WelcomeScreen.Center>
-    </WelcomeScreen>
-  );
-});
+  },
+);

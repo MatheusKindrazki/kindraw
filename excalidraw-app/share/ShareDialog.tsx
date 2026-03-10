@@ -8,9 +8,6 @@ import {
   LinkIcon,
   playerPlayIcon,
   playerStopFilledIcon,
-  share,
-  shareIOS,
-  shareWindows,
 } from "@excalidraw/excalidraw/components/icons";
 import { useUIAppState } from "@excalidraw/excalidraw/context/ui-appState";
 import { useCopyStatus } from "@excalidraw/excalidraw/hooks/useCopiedIndicator";
@@ -20,37 +17,29 @@ import { useEffect, useRef, useState } from "react";
 
 import { atom, useAtom, useAtomValue } from "../app-jotai";
 import { activeRoomLinkAtom } from "../collab/Collab";
+import { buildPublicShareUrl } from "../kindraw/api";
 
 import "./ShareDialog.scss";
 import { QRCode } from "./QRCode";
 
 import type { CollabAPI } from "../collab/Collab";
+import type { KindrawItem } from "../kindraw/types";
 
-type OnExportToBackend = () => void;
-type ShareDialogType = "share" | "collaborationOnly";
+type ShareDialogType = "publicLink" | "collaborationOnly";
 
 export const shareDialogStateAtom = atom<
   { isOpen: false } | { isOpen: true; type: ShareDialogType }
 >({ isOpen: false });
 
-const getShareIcon = () => {
-  const navigator = window.navigator as any;
-  const isAppleBrowser = /Apple/.test(navigator.vendor);
-  const isWindowsBrowser = navigator.appVersion.indexOf("Win") !== -1;
-
-  if (isAppleBrowser) {
-    return shareIOS;
-  } else if (isWindowsBrowser) {
-    return shareWindows;
-  }
-
-  return share;
-};
-
 export type ShareDialogProps = {
   collabAPI: CollabAPI | null;
   handleClose: () => void;
-  onExportToBackend: OnExportToBackend;
+  publicShare: {
+    busy?: boolean;
+    currentItem: KindrawItem | null;
+    onCreateShareLink: () => Promise<void> | void;
+    onRevokeShareLink: (shareLinkId: string) => Promise<void> | void;
+  };
   type: ShareDialogType;
 };
 
@@ -67,7 +56,6 @@ const ActiveRoomDialog = ({
   const [, setJustCopied] = useState(false);
   const timerRef = useRef<number>(0);
   const ref = useRef<HTMLInputElement>(null);
-  const isShareSupported = "share" in navigator;
   const { onCopy, copyStatus } = useCopyStatus();
 
   const copyRoomLink = async () => {
@@ -90,18 +78,6 @@ const ActiveRoomDialog = ({
     ref.current?.select();
   };
 
-  const shareRoomLink = async () => {
-    try {
-      await navigator.share({
-        title: t("roomDialog.shareTitle"),
-        text: t("roomDialog.shareTitle"),
-        url: activeRoomLink,
-      });
-    } catch (error: any) {
-      // Just ignore.
-    }
-  };
-
   return (
     <>
       <h3 className="ShareDialog__active__header">
@@ -122,16 +98,6 @@ const ActiveRoomDialog = ({
           fullWidth
           value={activeRoomLink}
         />
-        {isShareSupported && (
-          <FilledButton
-            size="large"
-            variant="icon"
-            label="Share"
-            icon={getShareIcon()}
-            className="ShareDialog__active__share"
-            onClick={shareRoomLink}
-          />
-        )}
         <FilledButton
           size="large"
           label={t("buttons.copyLink")}
@@ -178,6 +144,94 @@ const ActiveRoomDialog = ({
   );
 };
 
+const PublicLinkDialog = ({
+  currentItem,
+  busy,
+  onCreateShareLink,
+  onRevokeShareLink,
+}: ShareDialogProps["publicShare"]) => {
+  const { onCopy, copyStatus } = useCopyStatus();
+  const [copiedLinkId, setCopiedLinkId] = useState<string | null>(null);
+
+  const copyPublicLink = async (token: string, shareLinkId: string) => {
+    await copyTextToSystemClipboard(buildPublicShareUrl(token));
+    setCopiedLinkId(shareLinkId);
+    onCopy();
+  };
+
+  if (!currentItem) {
+    return (
+      <>
+        <div className="ShareDialog__picker__header">Link publico</div>
+        <div className="ShareDialog__picker__description">
+          Abra um drawing salvo do Kindraw para compartilhar pela nossa API.
+        </div>
+      </>
+    );
+  }
+
+  return (
+    <>
+      <div className="ShareDialog__picker__header">Link publico</div>
+      <div className="ShareDialog__picker__description">
+        Compartilhe <strong>{currentItem.title}</strong> com um link read-only
+        gerado pela API do Kindraw.
+      </div>
+
+      {!currentItem.shareLinks[0] ? (
+        <div className="ShareDialog__picker__button">
+          <FilledButton
+            size="large"
+            label="Gerar link publico"
+            icon={LinkIcon}
+            onClick={() => onCreateShareLink()}
+            disabled={busy}
+          />
+        </div>
+      ) : null}
+
+      {currentItem.shareLinks[0] ? (
+        <div className="ShareDialog__public">
+          {(() => {
+            const shareLink = currentItem.shareLinks[0]!;
+            const publicUrl = buildPublicShareUrl(shareLink.token);
+            return (
+              <div className="ShareDialog__public__row" key={shareLink.id}>
+                <TextField readonly fullWidth label="Link" value={publicUrl} />
+                <div className="ShareDialog__public__actions">
+                  <FilledButton
+                    size="large"
+                    label="Copiar"
+                    icon={copyIcon}
+                    status={
+                      copiedLinkId === shareLink.id ? copyStatus : undefined
+                    }
+                    onClick={() =>
+                      void copyPublicLink(shareLink.token, shareLink.id)
+                    }
+                  />
+                  <FilledButton
+                    size="large"
+                    variant="outlined"
+                    color="danger"
+                    label="Revogar"
+                    onClick={() => onRevokeShareLink(shareLink.id)}
+                    disabled={busy}
+                  />
+                </div>
+              </div>
+            );
+          })()}
+        </div>
+      ) : (
+        <div className="ShareDialog__picker__description">
+          Nenhum link ativo ainda.
+        </div>
+      )}
+    </>
+  );
+};
+
 const ShareDialogPicker = (props: ShareDialogProps) => {
   const { t } = useI18n();
 
@@ -205,43 +259,10 @@ const ShareDialogPicker = (props: ShareDialogProps) => {
           }}
         />
       </div>
-
-      {props.type === "share" && (
-        <div className="ShareDialog__separator">
-          <span>{t("shareDialog.or")}</span>
-        </div>
-      )}
     </>
   ) : null;
 
-  return (
-    <>
-      {startCollabJSX}
-
-      {props.type === "share" && (
-        <>
-          <div className="ShareDialog__picker__header">
-            {t("exportDialog.link_title")}
-          </div>
-          <div className="ShareDialog__picker__description">
-            {t("exportDialog.link_details")}
-          </div>
-
-          <div className="ShareDialog__picker__button">
-            <FilledButton
-              size="large"
-              label={t("exportDialog.link_button")}
-              icon={LinkIcon}
-              onClick={async () => {
-                await props.onExportToBackend();
-                props.handleClose();
-              }}
-            />
-          </div>
-        </>
-      )}
-    </>
-  );
+  return <>{startCollabJSX}</>;
 };
 
 const ShareDialogInner = (props: ShareDialogProps) => {
@@ -250,7 +271,9 @@ const ShareDialogInner = (props: ShareDialogProps) => {
   return (
     <Dialog size="small" onCloseRequest={props.handleClose} title={false}>
       <div className="ShareDialog">
-        {props.collabAPI && activeRoomLink ? (
+        {props.type === "publicLink" ? (
+          <PublicLinkDialog {...props.publicShare} />
+        ) : props.collabAPI && activeRoomLink ? (
           <ActiveRoomDialog
             collabAPI={props.collabAPI}
             activeRoomLink={activeRoomLink}
@@ -266,7 +289,7 @@ const ShareDialogInner = (props: ShareDialogProps) => {
 
 export const ShareDialog = (props: {
   collabAPI: CollabAPI | null;
-  onExportToBackend: OnExportToBackend;
+  publicShare: ShareDialogProps["publicShare"];
 }) => {
   const [shareDialogState, setShareDialogState] = useAtom(shareDialogStateAtom);
 
@@ -286,7 +309,7 @@ export const ShareDialog = (props: {
     <ShareDialogInner
       handleClose={() => setShareDialogState({ isOpen: false })}
       collabAPI={props.collabAPI}
-      onExportToBackend={props.onExportToBackend}
+      publicShare={props.publicShare}
       type={shareDialogState.type}
     />
   );
