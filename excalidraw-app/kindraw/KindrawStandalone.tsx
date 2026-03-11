@@ -1,37 +1,38 @@
-import { Excalidraw } from "@excalidraw/excalidraw";
 import { t } from "@excalidraw/excalidraw/i18n";
 import { useCallback, useEffect, useState, startTransition } from "react";
 
-import { getPublicItem, getSession, getTree, openGithubLogin } from "./api";
+import {
+  getPublicItem,
+  getSession,
+  getWorkspaceTree,
+  openGithubLogin,
+} from "./api";
 import { DocEditorPage } from "./DocEditorPage";
-import { createPublicDrawingInitialData } from "./content";
-import { MarkdownPreview } from "./MarkdownPreview";
+import { HybridEditorPage } from "./HybridEditorPage";
+import { HybridPublicShareView } from "./HybridPublicShareView";
 import { createKindrawItemPageMeta, syncKindrawPageMeta } from "./pageMeta";
+import { isKindrawHybridItem } from "./types";
 import { getErrorMessage } from "./utils";
 import "./kindraw.scss";
 
 import type {
+  KindrawHybridView,
+  KindrawItem,
   KindrawPublicItemResponse,
   KindrawSession,
-  KindrawTreeResponse,
+  KindrawWorkspaceTreeResponse,
 } from "./types";
 
-type KindrawDocScreenProps = {
-  itemId: string;
-};
-
-export const KindrawDocScreen = ({ itemId }: KindrawDocScreenProps) => {
+const useStandaloneSessionTree = () => {
   const [session, setSession] = useState<KindrawSession | null | undefined>(
     undefined,
   );
-  const [tree, setTree] = useState<KindrawTreeResponse | null>(null);
+  const [tree, setTree] = useState<KindrawWorkspaceTreeResponse | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const currentItemTitle =
-    tree?.items.find((item) => item.id === itemId)?.title || null;
 
   const refreshTree = useCallback(async () => {
     try {
-      const nextTree = await getTree();
+      const nextTree = await getWorkspaceTree();
       startTransition(() => {
         setTree(nextTree);
       });
@@ -57,7 +58,7 @@ export const KindrawDocScreen = ({ itemId }: KindrawDocScreenProps) => {
           return;
         }
 
-        const nextTree = await getTree();
+        const nextTree = await getWorkspaceTree();
         startTransition(() => {
           setTree(nextTree);
         });
@@ -71,6 +72,35 @@ export const KindrawDocScreen = ({ itemId }: KindrawDocScreenProps) => {
 
     void load();
   }, []);
+
+  return {
+    errorMessage,
+    refreshTree,
+    session,
+    tree,
+  };
+};
+
+const createItemsById = (tree: KindrawWorkspaceTreeResponse | null) =>
+  Object.fromEntries(
+    (tree?.items || [])
+      .filter((item): item is KindrawItem => !isKindrawHybridItem(item))
+      .map((item) => [item.id, item]),
+  );
+
+type KindrawDocScreenProps = {
+  itemId: string;
+};
+
+export const KindrawDocScreen = ({ itemId }: KindrawDocScreenProps) => {
+  const { errorMessage, refreshTree, session, tree } =
+    useStandaloneSessionTree();
+  const currentItemTitle =
+    tree?.items.find((item) =>
+      item.kind === "hybrid"
+        ? item.docItemId === itemId || item.drawingItemId === itemId
+        : item.id === itemId,
+    )?.title || null;
 
   useEffect(() => {
     syncKindrawPageMeta(
@@ -130,21 +160,105 @@ export const KindrawDocScreen = ({ itemId }: KindrawDocScreenProps) => {
     <div className="kindraw-doc-screen">
       <DocEditorPage
         itemId={itemId}
-        itemsById={Object.fromEntries(
-          tree.items.map((item) => [item.id, item]),
-        )}
+        itemsById={createItemsById(tree)}
         onTreeRefresh={refreshTree}
       />
     </div>
   );
 };
 
+type KindrawHybridScreenProps = {
+  hybridId: string;
+  view: KindrawHybridView;
+  sectionId: string | null;
+};
+
+export const KindrawHybridScreen = ({
+  hybridId,
+  view,
+  sectionId,
+}: KindrawHybridScreenProps) => {
+  const { errorMessage, refreshTree, session, tree } =
+    useStandaloneSessionTree();
+  const currentHybridTitle =
+    tree?.items.find((item) => item.kind === "hybrid" && item.id === hybridId)
+      ?.title || null;
+
+  useEffect(() => {
+    syncKindrawPageMeta(
+      createKindrawItemPageMeta({
+        title: currentHybridTitle,
+        kind: "doc",
+        url: window.location.href,
+      }) || {
+        url: window.location.href,
+      },
+    );
+  }, [currentHybridTitle, hybridId]);
+
+  if (typeof session === "undefined") {
+    return (
+      <div className="kindraw-loading-shell">
+        <p>{t("kindraw.publicView.loadingDocument")}</p>
+      </div>
+    );
+  }
+
+  if (!session) {
+    return (
+      <div className="kindraw-login-shell">
+        <div className="kindraw-login-card">
+          <span className="kindraw-eyebrow">Kindraw</span>
+          <h1>Entre para editar este artefato híbrido</h1>
+          <div className="kindraw-toolbar">
+            <button
+              className="kindraw-button"
+              onClick={openGithubLogin}
+              type="button"
+            >
+              {t("kindraw.actions.signInWithGitHub")}
+            </button>
+            <a className="kindraw-link-button" href="/">
+              {t("kindraw.publicView.backToCanvas")}
+            </a>
+          </div>
+          {errorMessage ? (
+            <p className="kindraw-error-copy">{errorMessage}</p>
+          ) : null}
+        </div>
+      </div>
+    );
+  }
+
+  if (!tree) {
+    return (
+      <div className="kindraw-loading-shell">
+        <p>{t("kindraw.sidebar.loadingWorkspace")}</p>
+      </div>
+    );
+  }
+
+  return (
+    <HybridEditorPage
+      hybridId={hybridId}
+      initialSectionId={sectionId}
+      initialView={view}
+      itemsById={createItemsById(tree)}
+      onTreeRefresh={refreshTree}
+    />
+  );
+};
+
 type KindrawPublicSharePageProps = {
   token: string;
+  view?: "document" | "both" | "canvas";
+  sectionId?: string | null;
 };
 
 export const KindrawPublicSharePage = ({
   token,
+  view = "both",
+  sectionId = null,
 }: KindrawPublicSharePageProps) => {
   const [itemResponse, setItemResponse] =
     useState<KindrawPublicItemResponse | null>(null);
@@ -153,14 +267,14 @@ export const KindrawPublicSharePage = ({
   const loadShare = useCallback(async () => {
     setErrorMessage(null);
     try {
-      const response = await getPublicItem(token);
+      const response = await getPublicItem(token, { view });
       startTransition(() => {
         setItemResponse(response);
       });
     } catch (error) {
       setErrorMessage(getErrorMessage(error));
     }
-  }, [token]);
+  }, [token, view]);
 
   useEffect(() => {
     void loadShare();
@@ -200,68 +314,15 @@ export const KindrawPublicSharePage = ({
     );
   }
 
+  const effectiveSectionId =
+    sectionId || new URLSearchParams(window.location.search).get("section");
+
   return (
-    <div
-      className={`kindraw-share-shell${
-        itemResponse.item.kind === "drawing"
-          ? " kindraw-share-shell--public-canvas"
-          : ""
-      }`}
-    >
-      {itemResponse.item.kind === "drawing" ? (
-        <>
-          <header className="kindraw-public-view__header kindraw-public-view__header--overlay">
-            <div>
-              <span className="kindraw-eyebrow">
-                {t("kindraw.publicView.eyebrow")}
-              </span>
-              <h1>{itemResponse.item.title}</h1>
-              <p>{t("kindraw.publicView.description")}</p>
-            </div>
-          </header>
-
-          <section className="kindraw-public-view__canvas">
-            <div className="kindraw-public-view__canvas-backdrop" />
-            <div className="kindraw-public-view__canvas-stage">
-              <Excalidraw
-                initialData={createPublicDrawingInitialData(
-                  itemResponse.content,
-                )}
-                UIOptions={{
-                  canvasActions: {
-                    clearCanvas: false,
-                    export: false,
-                    loadScene: false,
-                    saveAsImage: false,
-                    saveToActiveFile: false,
-                    toggleTheme: false,
-                  },
-                }}
-                renderTopLeftUI={() => null}
-                renderTopRightUI={() => null}
-                viewModeEnabled={true}
-                zenModeEnabled={true}
-              />
-            </div>
-          </section>
-        </>
-      ) : (
-        <>
-          <header className="kindraw-public-view__header">
-            <div>
-              <span className="kindraw-eyebrow">
-                {t("kindraw.publicView.eyebrow")}
-              </span>
-              <h1>{itemResponse.item.title}</h1>
-              <p>{t("kindraw.publicView.description")}</p>
-            </div>
-          </header>
-
-          <section className="kindraw-share-shell__content">
-            <MarkdownPreview markdown={itemResponse.content} />
-          </section>
-        </>
-      )}
-    </div>
+    <HybridPublicShareView
+      itemResponse={itemResponse}
+      sectionId={effectiveSectionId}
+      shareToken={token}
+      view={view}
+    />
   );
 };

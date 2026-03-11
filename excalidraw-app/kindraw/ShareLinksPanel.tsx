@@ -1,4 +1,4 @@
-import { useI18n } from "@excalidraw/excalidraw/i18n";
+import { t } from "@excalidraw/excalidraw/i18n";
 
 import { buildPublicShareUrl } from "./api";
 
@@ -9,6 +9,7 @@ type ShareLinksPanelProps = {
   onCreateShareLink: () => Promise<void> | void;
   onRevokeShareLink: (shareLinkId: string) => Promise<void> | void;
   busy?: boolean;
+  buildShareUrl?: (token: string) => string;
 };
 
 const copyToClipboard = async (value: string) => {
@@ -28,8 +29,8 @@ export const ShareLinksPanel = ({
   onCreateShareLink,
   onRevokeShareLink,
   busy,
+  buildShareUrl = buildPublicShareUrl,
 }: ShareLinksPanelProps) => {
-  const { t } = useI18n();
   const activeShareLink = shareLinks[0] || null;
 
   return (
@@ -55,19 +56,17 @@ export const ShareLinksPanel = ({
         <ul className="kindraw-share-links__list">
           <li key={activeShareLink.id}>
             <a
-              href={buildPublicShareUrl(activeShareLink.token)}
+              href={buildShareUrl(activeShareLink.token)}
               rel="noreferrer"
               target="_blank"
             >
-              {buildPublicShareUrl(activeShareLink.token)}
+              {buildShareUrl(activeShareLink.token)}
             </a>
             <div className="kindraw-share-links__actions">
               <button
                 className="kindraw-link-button"
                 onClick={() =>
-                  void copyToClipboard(
-                    buildPublicShareUrl(activeShareLink.token),
-                  )
+                  void copyToClipboard(buildShareUrl(activeShareLink.token))
                 }
                 type="button"
               >

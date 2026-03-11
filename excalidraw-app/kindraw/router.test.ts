@@ -1,4 +1,5 @@
 import {
+  buildHybridPath,
   isKindrawPath,
   matchKindrawRoute,
   shouldAutoCreateRootDrawing,
@@ -27,12 +28,21 @@ describe("Kindraw router", () => {
       kind: "doc",
       itemId: "item-2",
     });
+
+    expect(matchKindrawRoute("/hybrid/h-1?view=canvas&section=intro")).toEqual({
+      kind: "hybrid",
+      hybridId: "h-1",
+      view: "canvas",
+      sectionId: "intro",
+    });
   });
 
   it("should match share routes and ignore public app paths", () => {
     expect(matchKindrawRoute("/share/public-token")).toEqual({
       kind: "share",
       token: "public-token",
+      view: "both",
+      sectionId: null,
     });
 
     expect(matchKindrawRoute("/")).toEqual({
@@ -41,7 +51,17 @@ describe("Kindraw router", () => {
     });
 
     expect(isKindrawPath("/doc/item-2")).toBe(true);
+    expect(isKindrawPath("/hybrid/h-1?view=both")).toBe(true);
     expect(isKindrawPath("/legacy")).toBe(false);
+  });
+
+  it("should build hybrid routes", () => {
+    expect(
+      buildHybridPath("hybrid-1", {
+        view: "document",
+        sectionId: "overview",
+      }),
+    ).toBe("/hybrid/hybrid-1?view=document&section=overview");
   });
 
   it("should identify when root should auto-create a drawing", () => {

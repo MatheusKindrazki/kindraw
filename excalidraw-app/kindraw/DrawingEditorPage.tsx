@@ -10,7 +10,7 @@ import {
   updateItemMeta,
 } from "./api";
 import { parseDrawingContent } from "./content";
-import { buildFolderPath, navigateKindraw } from "./router";
+import { buildFolderPath, buildHybridPath, navigateKindraw } from "./router";
 import { ShareLinksPanel } from "./ShareLinksPanel";
 import { getKindrawDraft, setKindrawDraft } from "./storage";
 import { getErrorMessage, isDraftNewer } from "./utils";
@@ -246,6 +246,8 @@ export const DrawingEditorPage = ({
     );
   }
 
+  const hybridMeta = itemResponse.item.hybrid || null;
+
   return (
     <div className="kindraw-editor-shell">
       <header className="kindraw-editor-header">
@@ -273,6 +275,21 @@ export const DrawingEditorPage = ({
           />
         </div>
         <div className="kindraw-editor-header__status">
+          {hybridMeta ? (
+            <button
+              className="kindraw-link-button"
+              onClick={() =>
+                navigateKindraw(
+                  buildHybridPath(hybridMeta.hybridId, {
+                    view: hybridMeta.defaultView,
+                  }),
+                )
+              }
+              type="button"
+            >
+              Abrir híbrido
+            </button>
+          ) : null}
           <span
             className={`kindraw-status-pill kindraw-status-pill--${saveState}`}
           >

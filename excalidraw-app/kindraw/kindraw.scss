@@ -124,7 +124,8 @@
 }
 
 .kindraw-workspace,
-.kindraw-editor-shell {
+.kindraw-editor-shell,
+.kindraw-hybrid-shell {
   display: flex;
   flex-direction: column;
   gap: 20px;
@@ -297,6 +298,7 @@
 .kindraw-drawing-stage,
 .kindraw-share-shell__canvas,
 .kindraw-public-view__canvas {
+  display: flex;
   min-height: 68vh;
   border: 1px solid rgba(31, 41, 55, 0.08);
   border-radius: 24px;
@@ -308,7 +310,8 @@
 .kindraw-drawing-stage .excalidraw,
 .kindraw-share-shell__canvas .excalidraw,
 .kindraw-public-view__canvas .excalidraw {
-  height: 100%;
+  flex: 1;
+  min-height: inherit;
 }
 
 .kindraw-public-view__header {
@@ -517,6 +520,165 @@
   color: #15407d;
 }
 
+.kindraw-hybrid-shell__header {
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.kindraw-hybrid-shell__toggle,
+.kindraw-hybrid-shell__mobile-tabs {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px;
+  border-radius: 999px;
+  width: fit-content;
+  background: rgba(19, 32, 50, 0.08);
+}
+
+.kindraw-hybrid-shell__toggle-button,
+.kindraw-hybrid-shell__mobile-tab {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  padding: 9px 14px;
+  border-radius: 999px;
+  color: #405062;
+  font-weight: 600;
+}
+
+.kindraw-hybrid-shell__toggle-button--active,
+.kindraw-hybrid-shell__mobile-tab--active {
+  background: #132032;
+  color: #fff;
+}
+
+.kindraw-hybrid-shell__body {
+  display: grid;
+  gap: 18px;
+}
+
+.kindraw-hybrid-shell__body--both {
+  gap: 12px;
+  align-items: start;
+}
+
+.kindraw-hybrid-shell__document {
+  min-width: 0;
+}
+
+.kindraw-hybrid-shell__divider {
+  width: 18px;
+  min-height: 76vh;
+  border: none;
+  border-radius: 999px;
+  background:
+    linear-gradient(
+      180deg,
+      rgba(19, 32, 50, 0.08) 0%,
+      rgba(96, 158, 255, 0.3) 50%,
+      rgba(19, 32, 50, 0.08) 100%
+    );
+  cursor: col-resize;
+  align-self: stretch;
+}
+
+.kindraw-hybrid-shell__divider:hover {
+  background:
+    linear-gradient(
+      180deg,
+      rgba(19, 32, 50, 0.16) 0%,
+      rgba(96, 158, 255, 0.44) 50%,
+      rgba(19, 32, 50, 0.16) 100%
+    );
+}
+
+.kindraw-hybrid-shell__divider:focus-visible {
+  outline: 2px solid rgba(21, 64, 125, 0.28);
+  outline-offset: 2px;
+}
+
+.kindraw-hybrid-shell__canvas {
+  min-height: 76vh;
+}
+
+.kindraw-hybrid-doc {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.kindraw-hybrid-doc__section {
+  border: 1px solid rgba(31, 41, 55, 0.08);
+  border-radius: 24px;
+  padding: 18px;
+  background: rgba(255, 255, 255, 0.88);
+  box-shadow: 0 16px 40px rgba(31, 41, 55, 0.05);
+}
+
+.kindraw-hybrid-doc__section--active {
+  border-color: rgba(96, 158, 255, 0.45);
+  box-shadow: 0 0 0 3px rgba(96, 158, 255, 0.12);
+}
+
+.kindraw-hybrid-doc__section-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.kindraw-hybrid-doc__section-header h3 {
+  margin: 6px 0 0;
+  font-size: 1.15rem;
+  line-height: 1.15;
+}
+
+.kindraw-hybrid-doc__section-header--readonly {
+  margin-bottom: 12px;
+}
+
+.kindraw-hybrid-doc__editor {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.kindraw-hybrid-doc__textarea {
+  min-height: 220px;
+  border: 1px solid rgba(31, 41, 55, 0.12);
+  border-radius: 18px;
+  padding: 16px;
+  resize: vertical;
+  background: rgba(255, 255, 255, 0.94);
+  font: inherit;
+  line-height: 1.6;
+}
+
+.kindraw-hybrid-public-view {
+  display: grid;
+  grid-template-columns: minmax(320px, 0.88fr) minmax(380px, 1.12fr);
+  gap: 20px;
+  width: 100%;
+}
+
+.kindraw-hybrid-public-view__document {
+  min-width: 0;
+  padding: 20px;
+  border: 1px solid rgba(31, 41, 55, 0.08);
+  border-radius: 24px;
+  background: rgba(255, 255, 255, 0.88);
+  box-shadow: 0 16px 40px rgba(31, 41, 55, 0.08);
+}
+
+.kindraw-hybrid-public-view__canvas {
+  min-height: 72vh;
+  border-radius: 24px;
+  overflow: hidden;
+}
+
 .kindraw-loading-shell,
 .kindraw-login-shell,
 .kindraw-share-shell {
@@ -556,8 +718,14 @@
 
 @media (max-width: 1080px) {
   .kindraw-shell__body,
-  .kindraw-doc-layout {
+  .kindraw-doc-layout,
+  .kindraw-hybrid-shell__body--both,
+  .kindraw-hybrid-public-view {
     grid-template-columns: 1fr;
+  }
+
+  .kindraw-hybrid-shell__divider {
+    display: none;
   }
 
   .kindraw-sidebar {
@@ -575,6 +743,8 @@
   .kindraw-topbar,
   .kindraw-topbar__session,
   .kindraw-editor-header,
+  .kindraw-hybrid-shell__header,
+  .kindraw-hybrid-doc__section-header,
   .kindraw-share-shell__header,
   .kindraw-public-view__header {
     flex-direction: column;

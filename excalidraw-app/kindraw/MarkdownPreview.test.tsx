@@ -56,6 +56,12 @@ describe("MarkdownPreview", () => {
     expect(onNavigate).toHaveBeenCalledWith("/doc/item-1");
   });
 
+  it("should resolve hybrid section links", () => {
+    expect(resolveKindrawHref("kindraw://section/hybrid-1/overview")).toBe(
+      "/hybrid/hybrid-1?view=both&section=overview",
+    );
+  });
+
   it("should render fenced code blocks", () => {
     render(<MarkdownPreview markdown={"```ts\nconst value = 1;\n```"} />);
 

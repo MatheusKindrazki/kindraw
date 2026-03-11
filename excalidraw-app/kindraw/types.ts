@@ -1,4 +1,6 @@
 export type KindrawItemKind = "drawing" | "doc";
+export type KindrawHybridView = "document" | "both" | "canvas";
+export type KindrawHybridRole = "doc" | "drawing";
 
 export type KindrawUser = {
   id: string;
@@ -32,6 +34,14 @@ export type KindrawCollaborationRoom = {
   enabledAt: string;
 };
 
+export type KindrawHybridMetadata = {
+  hybridId: string;
+  role: KindrawHybridRole;
+  docItemId: string;
+  drawingItemId: string;
+  defaultView: KindrawHybridView;
+};
+
 export type KindrawItem = {
   id: string;
   kind: KindrawItemKind;
@@ -44,17 +54,46 @@ export type KindrawItem = {
   shareLinks: KindrawShareLink[];
   collaborationRoomId: string | null;
   collaborationEnabledAt: string | null;
+  hybrid?: KindrawHybridMetadata | null;
 };
+
+export type KindrawHybridItem = {
+  id: string;
+  kind: "hybrid";
+  title: string;
+  folderId: string | null;
+  ownerId: string;
+  updatedAt: string;
+  createdAt: string;
+  archivedAt: null;
+  shareLinks: KindrawShareLink[];
+  defaultView: KindrawHybridView;
+  docItemId: string;
+  drawingItemId: string;
+};
+
+export type KindrawTreeItem = KindrawItem | KindrawHybridItem;
 
 export type KindrawTreeResponse = {
   folders: KindrawFolder[];
   items: KindrawItem[];
 };
 
+export type KindrawWorkspaceTreeResponse = {
+  folders: KindrawFolder[];
+  items: KindrawTreeItem[];
+};
+
 export type KindrawItemResponse = {
   item: KindrawItem;
   content: string;
   collaborationRoom: KindrawCollaborationRoom | null;
+};
+
+export type KindrawHybridItemResponse = {
+  hybrid: KindrawHybridItem;
+  document: KindrawItemResponse;
+  drawing: KindrawItemResponse;
 };
 
 export type KindrawCollaborationBootstrapResponse = {
@@ -66,9 +105,21 @@ export type KindrawCollaborationBootstrapResponse = {
 export type KindrawPublicItemResponse = {
   item: Pick<KindrawItem, "id" | "kind" | "title" | "updatedAt">;
   content: string;
+  hybrid?: {
+    id: string;
+    defaultView: KindrawHybridView;
+    drawing: {
+      item: Pick<KindrawItem, "id" | "kind" | "title" | "updatedAt">;
+      content: string;
+    };
+  } | null;
 };
 
 export type KindrawDraft = {
   content: string;
   updatedAt: string;
 };
+
+export const isKindrawHybridItem = (
+  item: KindrawTreeItem,
+): item is KindrawHybridItem => item.kind === "hybrid";

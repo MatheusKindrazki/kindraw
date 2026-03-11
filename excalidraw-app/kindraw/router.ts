@@ -1,4 +1,8 @@
-import type { KindrawItem } from "./types";
+import type {
+  KindrawHybridItem,
+  KindrawHybridView,
+  KindrawItem,
+} from "./types";
 
 const ROUTE_EVENT = "kindraw:route-change";
 let historyPatched = false;
@@ -7,7 +11,18 @@ export type KindrawRoute =
   | { kind: "workspace"; folderId: string | null }
   | { kind: "drawing"; itemId: string }
   | { kind: "doc"; itemId: string }
-  | { kind: "share"; token: string }
+  | {
+      kind: "hybrid";
+      hybridId: string;
+      view: KindrawHybridView;
+      sectionId: string | null;
+    }
+  | {
+      kind: "share";
+      token: string;
+      view: KindrawHybridView;
+      sectionId: string | null;
+    }
   | { kind: "public" };
 
 const trimTrailingSlash = (pathname: string) => {
@@ -17,8 +32,24 @@ const trimTrailingSlash = (pathname: string) => {
   return pathname;
 };
 
+const normalizeRouteInput = (value: string) => {
+  const url = new URL(value, "http://kindraw.local");
+  return {
+    pathname: trimTrailingSlash(url.pathname),
+    searchParams: url.searchParams,
+  };
+};
+
+const parseHybridView = (
+  value: string | null,
+  fallback: KindrawHybridView,
+): KindrawHybridView =>
+  value === "document" || value === "both" || value === "canvas"
+    ? value
+    : fallback;
+
 export const matchKindrawRoute = (pathname: string): KindrawRoute => {
-  const normalized = trimTrailingSlash(pathname);
+  const { pathname: normalized, searchParams } = normalizeRouteInput(pathname);
 
   if (normalized === "/") {
     return { kind: "workspace", folderId: null };
@@ -37,8 +68,22 @@ export const matchKindrawRoute = (pathname: string): KindrawRoute => {
     return { kind: "doc", itemId: normalized.replace("/doc/", "") };
   }
 
+  if (normalized.startsWith("/hybrid/")) {
+    return {
+      kind: "hybrid",
+      hybridId: normalized.replace("/hybrid/", ""),
+      view: parseHybridView(searchParams.get("view"), "both"),
+      sectionId: searchParams.get("section"),
+    };
+  }
+
   if (normalized.startsWith("/share/")) {
-    return { kind: "share", token: normalized.replace("/share/", "") };
+    return {
+      kind: "share",
+      token: normalized.replace("/share/", ""),
+      view: parseHybridView(searchParams.get("view"), "both"),
+      sectionId: searchParams.get("section"),
+    };
   }
 
   return { kind: "public" };
@@ -53,7 +98,46 @@ export const buildFolderPath = (folderId: string | null) =>
 export const buildItemPath = (item: Pick<KindrawItem, "id" | "kind">) =>
   item.kind === "drawing" ? `/draw/${item.id}` : `/doc/${item.id}`;
 
-export const buildSharePath = (token: string) => `/share/${token}`;
+export const buildHybridPath = (
+  hybridId: string,
+  opts?: {
+    view?: KindrawHybridView;
+    sectionId?: string | null;
+  },
+) => {
+  const params = new URLSearchParams();
+  params.set("view", opts?.view || "both");
+  if (opts?.sectionId) {
+    params.set("section", opts.sectionId);
+  }
+  return `/hybrid/${hybridId}?${params.toString()}`;
+};
+
+export const buildHybridItemPath = (
+  item: Pick<KindrawHybridItem, "id" | "defaultView">,
+) =>
+  buildHybridPath(item.id, {
+    view: item.defaultView,
+  });
+
+export const buildSharePath = (
+  token: string,
+  opts?: {
+    view?: KindrawHybridView;
+    sectionId?: string | null;
+  },
+) => {
+  const params = new URLSearchParams();
+  if (opts?.view) {
+    params.set("view", opts.view);
+  }
+  if (opts?.sectionId) {
+    params.set("section", opts.sectionId);
+  }
+  return params.size
+    ? `/share/${token}?${params.toString()}`
+    : `/share/${token}`;
+};
 
 export const shouldAutoCreateRootDrawing = (
   pathname: string,
@@ -109,4 +193,6 @@ export const subscribeToLocation = (listener: () => void) => {
 };
 
 export const getLocationPathname = () =>
-  typeof window === "undefined" ? "/" : window.location.pathname;
+  typeof window === "undefined"
+    ? "/"
+    : `${window.location.pathname}${window.location.search}`;

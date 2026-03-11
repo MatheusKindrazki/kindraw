@@ -4,6 +4,9 @@ import { marked } from "marked";
 import { convertToExcalidrawElements } from "@excalidraw/element";
 import { exportToCanvas } from "@excalidraw/utils";
 
+import { buildHybridPath } from "./router";
+import { parseKindrawSectionLink } from "./hybridSections";
+
 import type { KindrawItem } from "./types";
 
 type MarkdownToken = {
@@ -28,6 +31,10 @@ type MarkdownPreviewProps = {
   itemsById?: Record<string, KindrawItem>;
   onNavigate?: (pathname: string) => void;
   emptyMessage?: string;
+  resolveInternalHref?: (
+    href: string,
+    resolvedHref: string | null,
+  ) => string | null;
 };
 
 export const parseMarkdownBlocks = (markdown: string) =>
@@ -40,10 +47,19 @@ export const resolveKindrawHref = (
   href: string,
   itemsById?: Record<string, KindrawItem>,
 ) => {
+  const sectionTarget = parseKindrawSectionLink(href);
+  if (sectionTarget) {
+    return buildHybridPath(sectionTarget.hybridId, {
+      view: "both",
+      sectionId: sectionTarget.sectionId,
+    });
+  }
+
   if (
     href === "/" ||
     href.startsWith("/draw/") ||
     href.startsWith("/doc/") ||
+    href.startsWith("/hybrid/") ||
     href.startsWith("/folder/")
   ) {
     return href;
@@ -87,15 +103,23 @@ const InlineLink = ({
   title,
   itemsById,
   onNavigate,
+  resolveInternalHref,
   children,
 }: {
   href: string;
   title?: string | null;
   itemsById?: Record<string, KindrawItem>;
   onNavigate?: (pathname: string) => void;
+  resolveInternalHref?: (
+    href: string,
+    resolvedHref: string | null,
+  ) => string | null;
   children: React.ReactNode;
 }) => {
-  const internalHref = resolveKindrawHref(href, itemsById);
+  const resolvedKindrawHref = resolveKindrawHref(href, itemsById);
+  const internalHref = resolveInternalHref
+    ? resolveInternalHref(href, resolvedKindrawHref)
+    : resolvedKindrawHref;
 
   if (internalHref && onNavigate) {
     return (
@@ -209,6 +233,10 @@ const renderInlineTokens = (
   tokens: MarkdownToken[] | undefined,
   itemsById?: Record<string, KindrawItem>,
   onNavigate?: (pathname: string) => void,
+  resolveInternalHref?: (
+    href: string,
+    resolvedHref: string | null,
+  ) => string | null,
   keyPrefix = "inline",
 ): React.ReactNode => {
   if (!tokens?.length) {
@@ -223,7 +251,13 @@ const renderInlineTokens = (
         if (token.tokens?.length) {
           return (
             <span key={key}>
-              {renderInlineTokens(token.tokens, itemsById, onNavigate, key)}
+              {renderInlineTokens(
+                token.tokens,
+                itemsById,
+                onNavigate,
+                resolveInternalHref,
+                key,
+              )}
             </span>
           );
         }
@@ -231,13 +265,25 @@ const renderInlineTokens = (
       case "strong":
         return (
           <strong key={key}>
-            {renderInlineTokens(token.tokens, itemsById, onNavigate, key)}
+            {renderInlineTokens(
+              token.tokens,
+              itemsById,
+              onNavigate,
+              resolveInternalHref,
+              key,
+            )}
           </strong>
         );
       case "em":
         return (
           <em key={key}>
-            {renderInlineTokens(token.tokens, itemsById, onNavigate, key)}
+            {renderInlineTokens(
+              token.tokens,
+              itemsById,
+              onNavigate,
+              resolveInternalHref,
+              key,
+            )}
           </em>
         );
       case "codespan":
@@ -250,8 +296,15 @@ const renderInlineTokens = (
             title={token.title}
             itemsById={itemsById}
             onNavigate={onNavigate}
+            resolveInternalHref={resolveInternalHref}
           >
-            {renderInlineTokens(token.tokens, itemsById, onNavigate, key) ||
+            {renderInlineTokens(
+              token.tokens,
+              itemsById,
+              onNavigate,
+              resolveInternalHref,
+              key,
+            ) ||
               token.text ||
               token.href}
           </InlineLink>
@@ -261,7 +314,13 @@ const renderInlineTokens = (
       case "del":
         return (
           <del key={key}>
-            {renderInlineTokens(token.tokens, itemsById, onNavigate, key)}
+            {renderInlineTokens(
+              token.tokens,
+              itemsById,
+              onNavigate,
+              resolveInternalHref,
+              key,
+            )}
           </del>
         );
       default:
@@ -274,6 +333,10 @@ const renderBlockTokens = (
   tokens: MarkdownToken[],
   itemsById?: Record<string, KindrawItem>,
   onNavigate?: (pathname: string) => void,
+  resolveInternalHref?: (
+    href: string,
+    resolvedHref: string | null,
+  ) => string | null,
   keyPrefix = "block",
 ) =>
   tokens.map((token, index) => {
@@ -289,20 +352,38 @@ const renderBlockTokens = (
         ];
         return (
           <HeadingTag key={key}>
-            {renderInlineTokens(token.tokens, itemsById, onNavigate, key)}
+            {renderInlineTokens(
+              token.tokens,
+              itemsById,
+              onNavigate,
+              resolveInternalHref,
+              key,
+            )}
           </HeadingTag>
         );
       }
       case "paragraph":
         return (
           <p key={key}>
-            {renderInlineTokens(token.tokens, itemsById, onNavigate, key)}
+            {renderInlineTokens(
+              token.tokens,
+              itemsById,
+              onNavigate,
+              resolveInternalHref,
+              key,
+            )}
           </p>
         );
       case "text":
         return token.tokens?.length ? (
           <p key={key}>
-            {renderInlineTokens(token.tokens, itemsById, onNavigate, key)}
+            {renderInlineTokens(
+              token.tokens,
+              itemsById,
+              onNavigate,
+              resolveInternalHref,
+              key,
+            )}
           </p>
         ) : (
           <p key={key}>{token.text || token.raw || ""}</p>
@@ -310,7 +391,13 @@ const renderBlockTokens = (
       case "blockquote":
         return (
           <blockquote key={key}>
-            {renderBlockTokens(token.tokens || [], itemsById, onNavigate, key)}
+            {renderBlockTokens(
+              token.tokens || [],
+              itemsById,
+              onNavigate,
+              resolveInternalHref,
+              key,
+            )}
           </blockquote>
         );
       case "list": {
@@ -331,6 +418,7 @@ const renderBlockTokens = (
                   item.tokens || [],
                   itemsById,
                   onNavigate,
+                  resolveInternalHref,
                   `${key}-item-${itemIndex}`,
                 )}
               </li>
@@ -360,6 +448,7 @@ const renderBlockTokens = (
                         headerCell.tokens || [],
                         itemsById,
                         onNavigate,
+                        resolveInternalHref,
                         `${key}-head-${cellIndex}`,
                       )}
                     </th>
@@ -375,6 +464,7 @@ const renderBlockTokens = (
                           cell.tokens || [],
                           itemsById,
                           onNavigate,
+                          resolveInternalHref,
                           `${key}-row-${rowIndex}-cell-${cellIndex}`,
                         )}
                       </td>
@@ -397,6 +487,7 @@ export const MarkdownPreview = ({
   itemsById,
   onNavigate,
   emptyMessage,
+  resolveInternalHref,
 }: MarkdownPreviewProps) => {
   const tokens = useMemo(() => parseMarkdownBlocks(markdown), [markdown]);
 
@@ -410,7 +501,7 @@ export const MarkdownPreview = ({
 
   return (
     <div className="kindraw-markdown-preview">
-      {renderBlockTokens(tokens, itemsById, onNavigate)}
+      {renderBlockTokens(tokens, itemsById, onNavigate, resolveInternalHref)}
     </div>
   );
 };

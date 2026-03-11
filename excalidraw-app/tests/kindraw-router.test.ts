@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   buildFolderPath,
+  buildHybridPath,
   buildItemPath,
   matchKindrawRoute,
   shouldAutoCreateRootDrawing,
@@ -28,12 +29,20 @@ describe("Kindraw router", () => {
       kind: "doc",
       itemId: "item-2",
     });
+    expect(matchKindrawRoute("/hybrid/hybrid-1?view=both")).toEqual({
+      kind: "hybrid",
+      hybridId: "hybrid-1",
+      view: "both",
+      sectionId: null,
+    });
   });
 
   it("matches public share routes", () => {
     expect(matchKindrawRoute("/share/token-1")).toEqual({
       kind: "share",
       token: "token-1",
+      view: "both",
+      sectionId: null,
     });
   });
 
@@ -46,6 +55,9 @@ describe("Kindraw router", () => {
         kind: "doc",
       }),
     ).toBe("/doc/doc-1");
+    expect(buildHybridPath("hybrid-1", { view: "canvas" })).toBe(
+      "/hybrid/hybrid-1?view=canvas",
+    );
   });
 
   it("flags root workspace for auto-creation", () => {

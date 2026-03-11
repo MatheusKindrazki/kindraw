@@ -1,11 +1,16 @@
+import { isKindrawHybridItem } from "./types";
+
 import type {
   KindrawCollaborationBootstrapResponse,
   KindrawCollaborationRoom,
+  KindrawHybridItemResponse,
+  KindrawHybridView,
   KindrawItemKind,
   KindrawItemResponse,
   KindrawPublicItemResponse,
   KindrawSession,
   KindrawTreeResponse,
+  KindrawWorkspaceTreeResponse,
 } from "./types";
 
 type JsonRequestInit = Omit<RequestInit, "body"> & {
@@ -64,7 +69,16 @@ export const logout = () =>
     method: "POST",
   });
 
-export const getTree = () => requestJson<KindrawTreeResponse>("/api/tree");
+export const getWorkspaceTree = () =>
+  requestJson<KindrawWorkspaceTreeResponse>("/api/tree");
+
+export const getTree = async (): Promise<KindrawTreeResponse> => {
+  const tree = await getWorkspaceTree();
+  return {
+    ...tree,
+    items: tree.items.filter((item) => !isKindrawHybridItem(item)),
+  };
+};
 
 export const createFolder = (name: string, parentId: string | null) =>
   requestJson<{ folderId: string }>("/api/folders", {
@@ -97,8 +111,24 @@ export const createItem = (input: {
     body: input,
   });
 
+export const createHybridItem = (input: {
+  title: string;
+  folderId: string | null;
+}) =>
+  requestJson<{
+    hybridId: string;
+    docItemId: string;
+    drawingItemId: string;
+  }>("/api/hybrid-items", {
+    method: "POST",
+    body: input,
+  });
+
 export const getItem = (itemId: string) =>
   requestJson<KindrawItemResponse>(`/api/items/${itemId}`);
+
+export const getHybridItem = (hybridId: string) =>
+  requestJson<KindrawHybridItemResponse>(`/api/hybrid-items/${hybridId}`);
 
 export const updateItemMeta = (
   itemId: string,
@@ -109,6 +139,19 @@ export const updateItemMeta = (
   },
 ) =>
   requestJson<void>(`/api/items/${itemId}/meta`, {
+    method: "PATCH",
+    body: input,
+  });
+
+export const updateHybridItemMeta = (
+  hybridId: string,
+  input: {
+    title?: string;
+    folderId?: string | null;
+    defaultView?: KindrawHybridView;
+  },
+) =>
+  requestJson<void>(`/api/hybrid-items/${hybridId}/meta`, {
     method: "PATCH",
     body: input,
   });
@@ -130,6 +173,11 @@ export const deleteItem = (itemId: string) =>
     method: "DELETE",
   });
 
+export const deleteHybridItem = (hybridId: string) =>
+  requestJson<void>(`/api/hybrid-items/${hybridId}`, {
+    method: "DELETE",
+  });
+
 export const createShareLink = (itemId: string) =>
   requestJson<{
     shareLink: {
@@ -139,6 +187,18 @@ export const createShareLink = (itemId: string) =>
       revokedAt: string | null;
     };
   }>(`/api/items/${itemId}/share-links`, {
+    method: "POST",
+  });
+
+export const createHybridShareLink = (hybridId: string) =>
+  requestJson<{
+    shareLink: {
+      id: string;
+      token: string;
+      createdAt: string;
+      revokedAt: string | null;
+    };
+  }>(`/api/hybrid-items/${hybridId}/share-links`, {
     method: "POST",
   });
 
@@ -172,10 +232,46 @@ export const revokeShareLink = (shareLinkId: string) =>
     method: "DELETE",
   });
 
-export const getPublicItem = (token: string) =>
-  requestJson<KindrawPublicItemResponse>(`/api/public/${token}`, {
-    credentials: "omit",
-  });
+export const getPublicItem = (
+  token: string,
+  opts?: {
+    view?: KindrawHybridView;
+    sectionId?: string | null;
+  },
+) => {
+  const params = new URLSearchParams();
+  if (opts?.view) {
+    params.set("view", opts.view);
+  }
+  if (opts?.sectionId) {
+    params.set("section", opts.sectionId);
+  }
 
-export const buildPublicShareUrl = (token: string) =>
-  `${window.location.origin}/share/${token}`;
+  const suffix = params.size ? `?${params.toString()}` : "";
+
+  return requestJson<KindrawPublicItemResponse>(
+    `/api/public/${token}${suffix}`,
+    {
+      credentials: "omit",
+    },
+  );
+};
+
+export const buildPublicShareUrl = (
+  token: string,
+  opts?: {
+    view?: KindrawHybridView;
+    sectionId?: string | null;
+  },
+) => {
+  const params = new URLSearchParams();
+  if (opts?.view) {
+    params.set("view", opts.view);
+  }
+  if (opts?.sectionId) {
+    params.set("section", opts.sectionId);
+  }
+
+  const suffix = params.size ? `?${params.toString()}` : "";
+  return `${window.location.origin}/share/${token}${suffix}`;
+};

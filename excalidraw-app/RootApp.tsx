@@ -3,6 +3,7 @@ import { useSyncExternalStore } from "react";
 import ExcalidrawApp from "./App";
 import {
   KindrawDocScreen,
+  KindrawHybridScreen,
   KindrawPublicSharePage,
 } from "./kindraw/KindrawStandalone";
 import {
@@ -23,8 +24,20 @@ const RootApp = () => {
     return <KindrawDocScreen itemId={route.itemId} />;
   }
 
+  if (route.kind === "hybrid") {
+    return (
+      <KindrawHybridScreen
+        hybridId={route.hybridId}
+        sectionId={route.sectionId}
+        view={route.view}
+      />
+    );
+  }
+
   if (route.kind === "share") {
-    return <KindrawPublicSharePage token={route.token} />;
+    return (
+      <KindrawPublicSharePage token={route.token} view={route.view || "both"} />
+    );
   }
 
   return <ExcalidrawApp />;

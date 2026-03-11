@@ -1,4 +1,5 @@
 export type KindrawItemKind = "drawing" | "doc";
+export type KindrawHybridView = "document" | "both" | "canvas";
 
 export type KindrawUser = {
   id: string;
@@ -32,6 +33,14 @@ export type KindrawCollaborationRoom = {
   enabledAt: string;
 };
 
+export type KindrawHybridLink = {
+  hybridId: string;
+  docItemId: string;
+  drawingItemId: string;
+  role: KindrawItemKind;
+  defaultView: KindrawHybridView;
+};
+
 export type KindrawItem = {
   id: string;
   kind: KindrawItemKind;
@@ -44,17 +53,41 @@ export type KindrawItem = {
   shareLinks: KindrawShareLink[];
   collaborationRoomId: string | null;
   collaborationEnabledAt: string | null;
+  hybrid: KindrawHybridLink | null;
 };
+
+export type KindrawHybridItem = {
+  id: string;
+  kind: "hybrid";
+  title: string;
+  folderId: string | null;
+  ownerId: string;
+  updatedAt: string;
+  createdAt: string;
+  archivedAt: null;
+  shareLinks: KindrawShareLink[];
+  docItemId: string;
+  drawingItemId: string;
+  defaultView: KindrawHybridView;
+};
+
+export type KindrawTreeEntry = KindrawItem | KindrawHybridItem;
 
 export type KindrawTreeResponse = {
   folders: KindrawFolder[];
-  items: KindrawItem[];
+  items: KindrawTreeEntry[];
 };
 
 export type KindrawItemResponse = {
   item: KindrawItem;
   content: string;
   collaborationRoom: KindrawCollaborationRoom | null;
+};
+
+export type KindrawHybridItemResponse = {
+  hybrid: KindrawHybridItem;
+  document: KindrawItemResponse;
+  drawing: KindrawItemResponse;
 };
 
 export type KindrawCollaborationBootstrapResponse = {
@@ -66,6 +99,14 @@ export type KindrawCollaborationBootstrapResponse = {
 export type KindrawPublicItemResponse = {
   item: Pick<KindrawItem, "id" | "kind" | "title" | "updatedAt">;
   content: string;
+  hybrid: null | {
+    id: string;
+    defaultView: KindrawHybridView;
+    drawing: {
+      item: Pick<KindrawItem, "id" | "kind" | "title" | "updatedAt">;
+      content: string;
+    };
+  };
 };
 
 export type SessionRecord = {
@@ -87,6 +128,16 @@ export type ItemRecord = Omit<KindrawItem, "shareLinks" | "folderId"> & {
   collaborationRoomKey: string | null;
 };
 
+export type HybridItemRecord = {
+  id: string;
+  ownerId: string;
+  docItemId: string;
+  drawingItemId: string;
+  defaultView: KindrawHybridView;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type ShareLinkRecord = KindrawShareLink & {
   itemId: string;
   createdByUserId: string;
@@ -104,6 +155,11 @@ export type CreateItemInput = {
   content: string;
 };
 
+export type CreateHybridItemInput = {
+  title: string;
+  folderId?: string | null;
+};
+
 export type PatchFolderInput = {
   name?: string;
   parentId?: string | null;
@@ -113,6 +169,12 @@ export type PatchItemMetaInput = {
   title?: string;
   folderId?: string | null;
   archived?: boolean;
+};
+
+export type PatchHybridItemMetaInput = {
+  title?: string;
+  folderId?: string | null;
+  defaultView?: KindrawHybridView;
 };
 
 export interface D1PreparedStatement {

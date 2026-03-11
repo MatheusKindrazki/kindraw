@@ -5,44 +5,51 @@ import {
   startTransition,
   useSyncExternalStore,
 } from "react";
-import { Excalidraw } from "@excalidraw/excalidraw";
 
 import {
+  createHybridItem,
   createFolder,
   createItem,
+  deleteHybridItem,
   deleteFolder,
   deleteItem,
   getPublicItem,
   getSession,
-  getTree,
+  getWorkspaceTree,
   logout,
   openGithubLogin,
   renameFolder,
+  updateHybridItemMeta,
   updateItemMeta,
 } from "./api";
 import { DocEditorPage } from "./DocEditorPage";
 import { DrawingEditorPage } from "./DrawingEditorPage";
-import { createInitialItemContent, parseDrawingContent } from "./content";
-import { MarkdownPreview } from "./MarkdownPreview";
+import { HybridEditorPage } from "./HybridEditorPage";
+import { HybridPublicShareView } from "./HybridPublicShareView";
+import { createInitialItemContent } from "./content";
 import {
   buildFolderPath,
+  buildHybridItemPath,
+  buildHybridPath,
   buildItemPath,
   getLocationPathname,
   matchKindrawRoute,
   navigateKindraw,
   subscribeToLocation,
 } from "./router";
+import { isKindrawHybridItem } from "./types";
 import { getErrorMessage } from "./utils";
 
 import "./kindraw.scss";
 
 import type {
   KindrawFolder,
+  KindrawHybridItem,
   KindrawItem,
   KindrawItemKind,
   KindrawPublicItemResponse,
   KindrawSession,
-  KindrawTreeResponse,
+  KindrawWorkspaceTreeResponse,
 } from "./types";
 
 const formatUpdatedAt = (updatedAt: string) =>
@@ -124,22 +131,28 @@ const WorkspacePage = ({
   tree,
   onCreateFolder,
   onCreateItem,
+  onCreateHybridItem,
+  onDeleteHybridItem,
   onDeleteFolder,
   onDeleteItem,
+  onRenameHybridItem,
   onRenameFolder,
   onRenameItem,
 }: {
   currentFolderId: string | null;
-  tree: KindrawTreeResponse;
+  tree: KindrawWorkspaceTreeResponse;
   onCreateFolder: (parentId: string | null) => Promise<void> | void;
   onCreateItem: (
     kind: KindrawItemKind,
     folderId: string | null,
   ) => Promise<void> | void;
+  onCreateHybridItem: (folderId: string | null) => Promise<void> | void;
   onDeleteFolder: (folder: KindrawFolder) => Promise<void> | void;
   onDeleteItem: (item: KindrawItem) => Promise<void> | void;
+  onDeleteHybridItem: (item: KindrawHybridItem) => Promise<void> | void;
   onRenameFolder: (folder: KindrawFolder) => Promise<void> | void;
   onRenameItem: (item: KindrawItem) => Promise<void> | void;
+  onRenameHybridItem: (item: KindrawHybridItem) => Promise<void> | void;
 }) => {
   const currentFolder =
     tree.folders.find((folder) => folder.id === currentFolderId) || null;
@@ -166,6 +179,13 @@ const WorkspacePage = ({
             type="button"
           >
             Nova pasta
+          </button>
+          <button
+            className="kindraw-button kindraw-button--secondary"
+            onClick={() => void onCreateHybridItem(currentFolderId)}
+            type="button"
+          >
+            Novo hibrido
           </button>
           <button
             className="kindraw-button kindraw-button--secondary"
@@ -271,44 +291,87 @@ const WorkspacePage = ({
         </div>
         {visibleItems.length ? (
           <div className="kindraw-card-grid">
-            {visibleItems.map((item) => (
-              <article className="kindraw-item-card" key={item.id}>
-                <div className="kindraw-item-card__header">
-                  <span className="kindraw-badge">{item.kind}</span>
-                  <span className="kindraw-item-card__date">
-                    {formatUpdatedAt(item.updatedAt)}
-                  </span>
-                </div>
-                <button
-                  className="kindraw-item-card__title"
-                  onClick={() => navigateKindraw(buildItemPath(item))}
-                  type="button"
-                >
-                  {item.title}
-                </button>
-                <div className="kindraw-item-card__meta">
-                  {item.shareLinks.length
-                    ? `${item.shareLinks.length} link(s) publicos`
-                    : "Privado"}
-                </div>
-                <div className="kindraw-inline-actions">
+            {visibleItems.map((item) => {
+              if (isKindrawHybridItem(item)) {
+                return (
+                  <article className="kindraw-item-card" key={item.id}>
+                    <div className="kindraw-item-card__header">
+                      <span className="kindraw-badge">{item.kind}</span>
+                      <span className="kindraw-item-card__date">
+                        {formatUpdatedAt(item.updatedAt)}
+                      </span>
+                    </div>
+                    <button
+                      className="kindraw-item-card__title"
+                      onClick={() => navigateKindraw(buildHybridItemPath(item))}
+                      type="button"
+                    >
+                      {item.title}
+                    </button>
+                    <div className="kindraw-item-card__meta">
+                      {item.shareLinks.length
+                        ? `${item.shareLinks.length} link(s) publicos`
+                        : "Privado"}
+                    </div>
+                    <div className="kindraw-inline-actions">
+                      <button
+                        className="kindraw-link-button"
+                        onClick={() => void onRenameHybridItem(item)}
+                        type="button"
+                      >
+                        Renomear
+                      </button>
+                      <button
+                        className="kindraw-link-button kindraw-link-button--danger"
+                        onClick={() => void onDeleteHybridItem(item)}
+                        type="button"
+                      >
+                        Excluir
+                      </button>
+                    </div>
+                  </article>
+                );
+              }
+
+              return (
+                <article className="kindraw-item-card" key={item.id}>
+                  <div className="kindraw-item-card__header">
+                    <span className="kindraw-badge">{item.kind}</span>
+                    <span className="kindraw-item-card__date">
+                      {formatUpdatedAt(item.updatedAt)}
+                    </span>
+                  </div>
                   <button
-                    className="kindraw-link-button"
-                    onClick={() => void onRenameItem(item)}
+                    className="kindraw-item-card__title"
+                    onClick={() => navigateKindraw(buildItemPath(item))}
                     type="button"
                   >
-                    Renomear
+                    {item.title}
                   </button>
-                  <button
-                    className="kindraw-link-button kindraw-link-button--danger"
-                    onClick={() => void onDeleteItem(item)}
-                    type="button"
-                  >
-                    Excluir
-                  </button>
-                </div>
-              </article>
-            ))}
+                  <div className="kindraw-item-card__meta">
+                    {item.shareLinks.length
+                      ? `${item.shareLinks.length} link(s) publicos`
+                      : "Privado"}
+                  </div>
+                  <div className="kindraw-inline-actions">
+                    <button
+                      className="kindraw-link-button"
+                      onClick={() => void onRenameItem(item)}
+                      type="button"
+                    >
+                      Renomear
+                    </button>
+                    <button
+                      className="kindraw-link-button kindraw-link-button--danger"
+                      onClick={() => void onDeleteItem(item)}
+                      type="button"
+                    >
+                      Excluir
+                    </button>
+                  </div>
+                </article>
+              );
+            })}
           </div>
         ) : (
           <p className="kindraw-section__empty">
@@ -325,17 +388,22 @@ const PublicSharePage = ({ token }: { token: string }) => {
     useState<KindrawPublicItemResponse | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
+  const route = matchKindrawRoute(getLocationPathname());
+
   const loadShare = useCallback(async () => {
     setErrorMessage(null);
     try {
-      const response = await getPublicItem(token);
+      const response = await getPublicItem(token, {
+        view: route.kind === "share" ? route.view || undefined : undefined,
+        sectionId: route.kind === "share" ? route.sectionId : null,
+      });
       startTransition(() => {
         setItemResponse(response);
       });
     } catch (error) {
       setErrorMessage(getErrorMessage(error));
     }
-  }, [token]);
+  }, [route, token]);
 
   useEffect(() => {
     void loadShare();
@@ -361,43 +429,17 @@ const PublicSharePage = ({ token }: { token: string }) => {
   }
 
   return (
-    <div className="kindraw-share-shell">
-      <header className="kindraw-share-shell__header">
-        <div>
-          <span className="kindraw-eyebrow">Link publico</span>
-          <h1>{itemResponse.item.title}</h1>
-          <p>Somente leitura</p>
-        </div>
-        <a className="kindraw-link-button" href="/">
-          Abrir Kindraw
-        </a>
-      </header>
-
-      {itemResponse.item.kind === "doc" ? (
-        <section className="kindraw-share-shell__content">
-          <MarkdownPreview markdown={itemResponse.content} />
-        </section>
-      ) : (
-        <section className="kindraw-share-shell__canvas">
-          <Excalidraw
-            initialData={parseDrawingContent(itemResponse.content)}
-            UIOptions={{
-              canvasActions: {
-                clearCanvas: false,
-                export: false,
-                loadScene: false,
-                saveAsImage: false,
-                saveToActiveFile: false,
-                toggleTheme: false,
-              },
-            }}
-            viewModeEnabled={true}
-          />
-        </section>
-      )}
-    </div>
+    <HybridPublicShareView
+      itemResponse={itemResponse}
+      sectionId={route.kind === "share" ? route.sectionId : null}
+      shareToken={token}
+      view={route.kind === "share" ? route.view : "both"}
+    />
   );
 };
+
+const isKindrawDocumentItem = (item: KindrawItem | KindrawHybridItem) =>
+  !isKindrawHybridItem(item);
 
 export const KindrawApp = () => {
   const pathname = useSyncExternalStore(
@@ -409,11 +451,13 @@ export const KindrawApp = () => {
   const [session, setSession] = useState<KindrawSession | null | undefined>(
     undefined,
   );
-  const [tree, setTree] = useState<KindrawTreeResponse | null>(null);
+  const [tree, setTree] = useState<KindrawWorkspaceTreeResponse | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isMutating, setIsMutating] = useState(false);
   const itemsById = Object.fromEntries(
-    (tree?.items || []).map((item) => [item.id, item]),
+    (tree?.items || [])
+      .filter(isKindrawDocumentItem)
+      .map((item) => [item.id, item]),
   );
 
   const refreshTree = useCallback(async () => {
@@ -422,7 +466,7 @@ export const KindrawApp = () => {
     }
 
     try {
-      const nextTree = await getTree();
+      const nextTree = await getWorkspaceTree();
       startTransition(() => {
         setTree(nextTree);
       });
@@ -439,7 +483,7 @@ export const KindrawApp = () => {
         setSession(nextSession);
       });
       if (nextSession) {
-        const nextTree = await getTree();
+        const nextTree = await getWorkspaceTree();
         startTransition(() => {
           setTree(nextTree);
         });
@@ -529,6 +573,29 @@ export const KindrawApp = () => {
     [refreshTree, runMutation],
   );
 
+  const handleCreateHybridItem = useCallback(
+    async (folderId: string | null) => {
+      const title = promptForName("Titulo do hibrido", "Nova nota visual");
+      if (!title) {
+        return;
+      }
+
+      await runMutation(async () => {
+        const response = await createHybridItem({
+          title,
+          folderId,
+        });
+        await refreshTree();
+        navigateKindraw(
+          buildHybridPath(response.hybridId, {
+            view: "both",
+          }),
+        );
+      });
+    },
+    [refreshTree, runMutation],
+  );
+
   const handleRenameFolder = useCallback(
     async (folder: KindrawFolder) => {
       const nextName = promptForName("Novo nome da pasta", folder.name);
@@ -589,6 +656,38 @@ export const KindrawApp = () => {
           (route.kind === "drawing" || route.kind === "doc") &&
           route.itemId === item.id
         ) {
+          navigateKindraw(buildFolderPath(item.folderId), { replace: true });
+        }
+      });
+    },
+    [refreshTree, route, runMutation],
+  );
+
+  const handleRenameHybridItem = useCallback(
+    async (item: KindrawHybridItem) => {
+      const nextTitle = promptForName("Novo titulo do hibrido", item.title);
+      if (!nextTitle || nextTitle === item.title) {
+        return;
+      }
+
+      await runMutation(async () => {
+        await updateHybridItemMeta(item.id, { title: nextTitle });
+        await refreshTree();
+      });
+    },
+    [refreshTree, runMutation],
+  );
+
+  const handleDeleteHybridItem = useCallback(
+    async (item: KindrawHybridItem) => {
+      if (!window.confirm(`Desvincular "${item.title}"?`)) {
+        return;
+      }
+
+      await runMutation(async () => {
+        await deleteHybridItem(item.id);
+        await refreshTree();
+        if (route.kind === "hybrid" && route.hybridId === item.id) {
           navigateKindraw(buildFolderPath(item.folderId), { replace: true });
         }
       });
@@ -752,6 +851,17 @@ export const KindrawApp = () => {
               >
                 Markdown
               </button>
+              <button
+                className="kindraw-button kindraw-button--secondary"
+                onClick={() =>
+                  void handleCreateHybridItem(
+                    route.kind === "workspace" ? route.folderId : null,
+                  )
+                }
+                type="button"
+              >
+                Hibrido
+              </button>
             </div>
           </div>
           {errorMessage ? (
@@ -763,13 +873,24 @@ export const KindrawApp = () => {
           {route.kind === "workspace" ? (
             <WorkspacePage
               currentFolderId={route.folderId}
+              onCreateHybridItem={handleCreateHybridItem}
               onCreateFolder={handleCreateFolder}
               onCreateItem={handleCreateItem}
+              onDeleteHybridItem={handleDeleteHybridItem}
               onDeleteFolder={handleDeleteFolder}
               onDeleteItem={handleDeleteItem}
+              onRenameHybridItem={handleRenameHybridItem}
               onRenameFolder={handleRenameFolder}
               onRenameItem={handleRenameItem}
               tree={tree}
+            />
+          ) : route.kind === "hybrid" ? (
+            <HybridEditorPage
+              hybridId={route.hybridId}
+              initialSectionId={route.sectionId}
+              initialView={route.view}
+              itemsById={itemsById}
+              onTreeRefresh={refreshTree}
             />
           ) : route.kind === "drawing" ? (
             <DrawingEditorPage

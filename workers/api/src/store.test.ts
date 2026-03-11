@@ -44,10 +44,21 @@ type ShareLinkRow = {
   revoked_at: string | null;
 };
 
+type HybridItemRow = {
+  id: string;
+  owner_id: string;
+  doc_item_id: string;
+  drawing_item_id: string;
+  default_view: "document" | "both" | "canvas";
+  created_at: string;
+  updated_at: string;
+};
+
 type FakeState = {
   folders: FolderRow[];
   items: ItemRow[];
   shareLinks: ShareLinkRow[];
+  hybridItems: HybridItemRow[];
 };
 
 const normalizeQuery = (query: string) => query.replace(/\s+/g, " ").trim();
@@ -101,6 +112,42 @@ class FakeStatement implements D1PreparedStatement {
       const [itemId, ownerId] = this.values as [string, string];
       return (this.state.items.find(
         (item) => item.id === itemId && item.owner_id === ownerId,
+      ) || null) as T | null;
+    }
+
+    if (query === "SELECT * FROM hybrid_items WHERE id = ? AND owner_id = ?") {
+      const [hybridId, ownerId] = this.values as [string, string];
+      return (this.state.hybridItems.find(
+        (item) => item.id === hybridId && item.owner_id === ownerId,
+      ) || null) as T | null;
+    }
+
+    if (
+      query ===
+      "SELECT * FROM hybrid_items WHERE (doc_item_id = ? OR drawing_item_id = ?) AND owner_id = ? LIMIT 1"
+    ) {
+      const [docItemId, drawingItemId, ownerId] = this.values as [
+        string,
+        string,
+        string,
+      ];
+      return (this.state.hybridItems.find(
+        (item) =>
+          item.owner_id === ownerId &&
+          (item.doc_item_id === docItemId ||
+            item.drawing_item_id === drawingItemId),
+      ) || null) as T | null;
+    }
+
+    if (
+      query ===
+      "SELECT * FROM hybrid_items WHERE (doc_item_id = ? OR drawing_item_id = ?) LIMIT 1"
+    ) {
+      const [docItemId, drawingItemId] = this.values as [string, string];
+      return (this.state.hybridItems.find(
+        (item) =>
+          item.doc_item_id === docItemId ||
+          item.drawing_item_id === drawingItemId,
       ) || null) as T | null;
     }
 
@@ -182,6 +229,26 @@ class FakeStatement implements D1PreparedStatement {
       } as T;
     }
 
+    if (
+      query ===
+      "SELECT id, kind, title, updated_at, content_blob_key FROM items WHERE id = ?"
+    ) {
+      const [itemId] = this.values as [string];
+      const item = this.state.items.find((entry) => entry.id === itemId);
+
+      if (!item) {
+        return null;
+      }
+
+      return {
+        id: item.id,
+        kind: item.kind,
+        title: item.title,
+        updated_at: item.updated_at,
+        content_blob_key: item.content_blob_key,
+      } as T;
+    }
+
     throw new Error(`Unsupported first() query in test double: ${query}`);
   }
 
@@ -242,6 +309,20 @@ class FakeStatement implements D1PreparedStatement {
           return entry.revoked_at === null && item?.owner_id === ownerId;
         })
         .sort((left, right) => right.created_at.localeCompare(left.created_at));
+      return { results: results as T[] };
+    }
+
+    if (
+      query ===
+      "SELECT * FROM hybrid_items WHERE owner_id = ? ORDER BY updated_at DESC, created_at DESC"
+    ) {
+      const [ownerId] = this.values as [string];
+      const results = this.state.hybridItems
+        .filter((entry) => entry.owner_id === ownerId)
+        .sort((left, right) => {
+          const byUpdated = right.updated_at.localeCompare(left.updated_at);
+          return byUpdated || right.created_at.localeCompare(left.created_at);
+        });
       return { results: results as T[] };
     }
 
@@ -350,6 +431,39 @@ class FakeStatement implements D1PreparedStatement {
 
     if (
       query ===
+      "INSERT INTO hybrid_items ( id, owner_id, doc_item_id, drawing_item_id, default_view, created_at, updated_at ) VALUES (?, ?, ?, ?, ?, ?, ?)"
+    ) {
+      const [
+        id,
+        ownerId,
+        docItemId,
+        drawingItemId,
+        defaultView,
+        createdAt,
+        updatedAt,
+      ] = this.values as [
+        string,
+        string,
+        string,
+        string,
+        "document" | "both" | "canvas",
+        string,
+        string,
+      ];
+      this.state.hybridItems.push({
+        id,
+        owner_id: ownerId,
+        doc_item_id: docItemId,
+        drawing_item_id: drawingItemId,
+        default_view: defaultView,
+        created_at: createdAt,
+        updated_at: updatedAt,
+      });
+      return {};
+    }
+
+    if (
+      query ===
       "UPDATE items SET title = ?, folder_id = ?, archived_at = ?, updated_at = ? WHERE id = ? AND owner_id = ?"
     ) {
       const [title, folderId, archivedAt, updatedAt, itemId, ownerId] = this
@@ -368,6 +482,28 @@ class FakeStatement implements D1PreparedStatement {
         item.title = title;
         item.folder_id = folderId;
         item.archived_at = archivedAt;
+        item.updated_at = updatedAt;
+      }
+      return {};
+    }
+
+    if (
+      query ===
+      "UPDATE items SET title = ?, folder_id = ?, updated_at = ? WHERE id = ? AND owner_id = ?"
+    ) {
+      const [title, folderId, updatedAt, itemId, ownerId] = this.values as [
+        string,
+        string | null,
+        string,
+        string,
+        string,
+      ];
+      const item = this.state.items.find(
+        (entry) => entry.id === itemId && entry.owner_id === ownerId,
+      );
+      if (item) {
+        item.title = title;
+        item.folder_id = folderId;
         item.updated_at = updatedAt;
       }
       return {};
@@ -424,10 +560,56 @@ class FakeStatement implements D1PreparedStatement {
       return {};
     }
 
+    if (
+      query ===
+      "UPDATE hybrid_items SET updated_at = ? WHERE id = ? AND owner_id = ?"
+    ) {
+      const [updatedAt, hybridId, ownerId] = this.values as [
+        string,
+        string,
+        string,
+      ];
+      const hybridItem = this.state.hybridItems.find(
+        (entry) => entry.id === hybridId && entry.owner_id === ownerId,
+      );
+      if (hybridItem) {
+        hybridItem.updated_at = updatedAt;
+      }
+      return {};
+    }
+
+    if (
+      query ===
+      "UPDATE hybrid_items SET default_view = ?, updated_at = ? WHERE id = ? AND owner_id = ?"
+    ) {
+      const [defaultView, updatedAt, hybridId, ownerId] = this.values as [
+        "document" | "both" | "canvas",
+        string,
+        string,
+        string,
+      ];
+      const hybridItem = this.state.hybridItems.find(
+        (entry) => entry.id === hybridId && entry.owner_id === ownerId,
+      );
+      if (hybridItem) {
+        hybridItem.default_view = defaultView;
+        hybridItem.updated_at = updatedAt;
+      }
+      return {};
+    }
+
     if (query === "DELETE FROM share_links WHERE item_id = ?") {
       const [itemId] = this.values as [string];
       this.state.shareLinks = this.state.shareLinks.filter(
         (entry) => entry.item_id !== itemId,
+      );
+      return {};
+    }
+
+    if (query === "DELETE FROM hybrid_items WHERE id = ? AND owner_id = ?") {
+      const [hybridId, ownerId] = this.values as [string, string];
+      this.state.hybridItems = this.state.hybridItems.filter(
+        (entry) => !(entry.id === hybridId && entry.owner_id === ownerId),
       );
       return {};
     }
@@ -564,6 +746,7 @@ const createStore = (state?: Partial<FakeState>) => {
     folders: state?.folders ?? [],
     items: state?.items ?? [],
     shareLinks: state?.shareLinks ?? [],
+    hybridItems: state?.hybridItems ?? [],
   };
   const blobs = new FakeR2Bucket();
   return {
@@ -647,6 +830,218 @@ describe("KindrawStore", () => {
     expect(state.folders[0]?.parent_id).toBeNull();
 
     uuidSpy.mockRestore();
+  });
+
+  it("cria um hybrid item e colapsa doc+drawing em uma unica entrada na arvore", async () => {
+    const uuidSpy = vi
+      .spyOn(crypto, "randomUUID")
+      .mockReturnValueOnce("00000000-0000-0000-0000-000000000111")
+      .mockReturnValueOnce("00000000-0000-0000-0000-000000000222")
+      .mockReturnValueOnce("00000000-0000-0000-0000-000000000333");
+    const { store, state, blobs } = createStore({
+      folders: [
+        {
+          id: "folder-1",
+          owner_id: "user-1",
+          parent_id: null,
+          name: "Architecture",
+          created_at: "2026-03-09T10:00:00.000Z",
+          updated_at: "2026-03-09T10:00:00.000Z",
+        },
+      ],
+    });
+
+    const created = await store.createHybridItem("user-1", {
+      title: "Portal Cross",
+      folderId: "folder-1",
+    });
+
+    expect(created).toEqual({
+      hybridId: "00000000-0000-0000-0000-000000000333",
+      docItemId: "00000000-0000-0000-0000-000000000111",
+      drawingItemId: "00000000-0000-0000-0000-000000000222",
+    });
+    expect(state.hybridItems).toEqual([
+      {
+        id: "00000000-0000-0000-0000-000000000333",
+        owner_id: "user-1",
+        doc_item_id: "00000000-0000-0000-0000-000000000111",
+        drawing_item_id: "00000000-0000-0000-0000-000000000222",
+        default_view: "both",
+        created_at: "2026-03-09T12:00:00.000Z",
+        updated_at: "2026-03-09T12:00:00.000Z",
+      },
+    ]);
+    expect(
+      blobs.objects.get(
+        "users/user-1/items/00000000-0000-0000-0000-000000000111/current.md",
+      ),
+    ).toBe("# Portal Cross\n\n");
+
+    const tree = await store.getTree("user-1");
+    expect(tree.items).toEqual([
+      {
+        id: "00000000-0000-0000-0000-000000000333",
+        kind: "hybrid",
+        title: "Portal Cross",
+        folderId: "folder-1",
+        ownerId: "user-1",
+        updatedAt: "2026-03-09T12:00:00.000Z",
+        createdAt: "2026-03-09T12:00:00.000Z",
+        archivedAt: null,
+        shareLinks: [],
+        docItemId: "00000000-0000-0000-0000-000000000111",
+        drawingItemId: "00000000-0000-0000-0000-000000000222",
+        defaultView: "both",
+      },
+    ]);
+
+    uuidSpy.mockRestore();
+  });
+
+  it("propaga metadados do hybrid e desfaz o vinculo sem apagar os itens", async () => {
+    const { store, state } = createStore({
+      items: [
+        {
+          id: "doc-1",
+          owner_id: "user-1",
+          folder_id: "folder-1",
+          kind: "doc",
+          title: "Portal Cross",
+          content_blob_key: "users/user-1/items/doc-1/current.md",
+          archived_at: null,
+          collaboration_room_key: null,
+          collaboration_enabled_at: null,
+          created_at: "2026-03-09T10:00:00.000Z",
+          updated_at: "2026-03-09T10:00:00.000Z",
+        },
+        {
+          id: "drawing-1",
+          owner_id: "user-1",
+          folder_id: "folder-1",
+          kind: "drawing",
+          title: "Portal Cross",
+          content_blob_key: "users/user-1/items/drawing-1/current.excalidraw",
+          archived_at: null,
+          collaboration_room_key: null,
+          collaboration_enabled_at: null,
+          created_at: "2026-03-09T10:00:00.000Z",
+          updated_at: "2026-03-09T10:00:00.000Z",
+        },
+      ],
+      folders: [
+        {
+          id: "folder-1",
+          owner_id: "user-1",
+          parent_id: null,
+          name: "Architecture",
+          created_at: "2026-03-09T10:00:00.000Z",
+          updated_at: "2026-03-09T10:00:00.000Z",
+        },
+      ],
+      hybridItems: [
+        {
+          id: "hybrid-1",
+          owner_id: "user-1",
+          doc_item_id: "doc-1",
+          drawing_item_id: "drawing-1",
+          default_view: "both",
+          created_at: "2026-03-09T10:00:00.000Z",
+          updated_at: "2026-03-09T10:00:00.000Z",
+        },
+      ],
+    });
+
+    await store.patchHybridItemMeta("user-1", "hybrid-1", {
+      title: "Portal Cross v2",
+      folderId: null,
+      defaultView: "canvas",
+    });
+
+    expect(state.items[0]?.title).toBe("Portal Cross v2");
+    expect(state.items[1]?.title).toBe("Portal Cross v2");
+    expect(state.items[0]?.folder_id).toBeNull();
+    expect(state.items[1]?.folder_id).toBeNull();
+    expect(state.hybridItems[0]?.default_view).toBe("canvas");
+
+    await store.deleteHybridItem("user-1", "hybrid-1");
+
+    expect(state.hybridItems).toEqual([]);
+    expect(state.items.map((item) => item.id)).toEqual(["doc-1", "drawing-1"]);
+  });
+
+  it("desfaz o vinculo hybrid ao deletar um item legado e preserva o companheiro", async () => {
+    const { store, state, blobs } = createStore({
+      items: [
+        {
+          id: "doc-1",
+          owner_id: "user-1",
+          folder_id: null,
+          kind: "doc",
+          title: "Portal Cross",
+          content_blob_key: "users/user-1/items/doc-1/current.md",
+          archived_at: null,
+          collaboration_room_key: null,
+          collaboration_enabled_at: null,
+          created_at: "2026-03-09T10:00:00.000Z",
+          updated_at: "2026-03-09T10:00:00.000Z",
+        },
+        {
+          id: "drawing-1",
+          owner_id: "user-1",
+          folder_id: null,
+          kind: "drawing",
+          title: "Portal Cross",
+          content_blob_key: "users/user-1/items/drawing-1/current.excalidraw",
+          archived_at: null,
+          collaboration_room_key: null,
+          collaboration_enabled_at: null,
+          created_at: "2026-03-09T10:00:00.000Z",
+          updated_at: "2026-03-09T10:00:00.000Z",
+        },
+      ],
+      shareLinks: [
+        {
+          id: "share-1",
+          item_id: "doc-1",
+          token: "token-1",
+          created_by_user_id: "user-1",
+          created_at: "2026-03-09T11:00:00.000Z",
+          revoked_at: null,
+        },
+      ],
+      hybridItems: [
+        {
+          id: "hybrid-1",
+          owner_id: "user-1",
+          doc_item_id: "doc-1",
+          drawing_item_id: "drawing-1",
+          default_view: "both",
+          created_at: "2026-03-09T10:00:00.000Z",
+          updated_at: "2026-03-09T10:00:00.000Z",
+        },
+      ],
+    });
+    await blobs.put("users/user-1/items/doc-1/current.md", "# Portal Cross");
+    await blobs.put(
+      "users/user-1/items/drawing-1/current.excalidraw",
+      '{"elements":[]}',
+    );
+
+    await store.deleteItem("user-1", "drawing-1");
+
+    expect(state.hybridItems).toEqual([]);
+    expect(state.items.map((item) => item.id)).toEqual(["doc-1"]);
+    expect(state.shareLinks.map((shareLink) => shareLink.item_id)).toEqual([
+      "doc-1",
+    ]);
+    await expect(store.getItem("user-1", "doc-1")).resolves.toMatchObject({
+      item: {
+        id: "doc-1",
+        hybrid: null,
+      },
+      content: "# Portal Cross",
+    });
   });
 
   it("impede deletar pasta que ainda possui itens", async () => {
@@ -771,6 +1166,7 @@ describe("KindrawStore", () => {
         updatedAt: "2026-03-09T10:00:00.000Z",
       },
       content: "# Kindraw",
+      hybrid: null,
     });
 
     await store.revokeShareLink(
@@ -786,6 +1182,88 @@ describe("KindrawStore", () => {
     } as Partial<HttpError>);
 
     uuidSpy.mockRestore();
+  });
+
+  it("retorna o drawing companion no payload publico quando o doc e hibrido", async () => {
+    const { store, blobs } = createStore({
+      items: [
+        {
+          id: "doc-1",
+          owner_id: "user-1",
+          folder_id: null,
+          kind: "doc",
+          title: "Spec",
+          content_blob_key: "users/user-1/items/doc-1/current.md",
+          archived_at: null,
+          collaboration_room_key: null,
+          collaboration_enabled_at: null,
+          created_at: "2026-03-09T10:00:00.000Z",
+          updated_at: "2026-03-09T10:00:00.000Z",
+        },
+        {
+          id: "drawing-1",
+          owner_id: "user-1",
+          folder_id: null,
+          kind: "drawing",
+          title: "Spec",
+          content_blob_key: "users/user-1/items/drawing-1/current.excalidraw",
+          archived_at: null,
+          collaboration_room_key: null,
+          collaboration_enabled_at: null,
+          created_at: "2026-03-09T10:00:00.000Z",
+          updated_at: "2026-03-09T10:00:00.000Z",
+        },
+      ],
+      shareLinks: [
+        {
+          id: "share-1",
+          item_id: "doc-1",
+          token: "token-1",
+          created_by_user_id: "user-1",
+          created_at: "2026-03-09T11:00:00.000Z",
+          revoked_at: null,
+        },
+      ],
+      hybridItems: [
+        {
+          id: "hybrid-1",
+          owner_id: "user-1",
+          doc_item_id: "doc-1",
+          drawing_item_id: "drawing-1",
+          default_view: "both",
+          created_at: "2026-03-09T10:00:00.000Z",
+          updated_at: "2026-03-09T10:00:00.000Z",
+        },
+      ],
+    });
+    await blobs.put("users/user-1/items/doc-1/current.md", "# Hybrid");
+    await blobs.put(
+      "users/user-1/items/drawing-1/current.excalidraw",
+      '{"elements":[]}',
+    );
+
+    await expect(store.getPublicItem("token-1")).resolves.toEqual({
+      item: {
+        id: "doc-1",
+        kind: "doc",
+        title: "Spec",
+        updatedAt: "2026-03-09T10:00:00.000Z",
+      },
+      content: "# Hybrid",
+      hybrid: {
+        id: "hybrid-1",
+        defaultView: "both",
+        drawing: {
+          item: {
+            id: "drawing-1",
+            kind: "drawing",
+            title: "Spec",
+            updatedAt: "2026-03-09T10:00:00.000Z",
+          },
+          content: '{"elements":[]}',
+        },
+      },
+    });
   });
 
   it("ativa colaboracao realtime fixa no drawing e expoe a sala no getItem", async () => {

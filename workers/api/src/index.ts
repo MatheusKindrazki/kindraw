@@ -7,10 +7,12 @@ import {
 
 import type {
   CreateFolderInput,
+  CreateHybridItemInput,
   CreateItemInput,
   Env,
   KindrawSession,
   PatchFolderInput,
+  PatchHybridItemMetaInput,
   PatchItemMetaInput,
 } from "./types";
 
@@ -494,6 +496,46 @@ export const routeRequest = async (request: Request, env: Env) => {
   if (pathname === "/api/tree" && request.method === "GET") {
     const { auth, store } = await requireAuth(request, env);
     return json(await store.getTree(auth.user.id));
+  }
+
+  if (pathname === "/api/hybrid-items" && request.method === "POST") {
+    const { auth, store } = await requireAuth(request, env);
+    const input = await readJson<CreateHybridItemInput>(request);
+    return json(await store.createHybridItem(auth.user.id, input), {
+      status: 201,
+    });
+  }
+
+  if (pathname.startsWith("/api/hybrid-items/")) {
+    const hybridId = pathname
+      .replace("/api/hybrid-items/", "")
+      .replace("/meta", "")
+      .replace("/share-links", "");
+    const { auth, store } = await requireAuth(request, env);
+
+    if (request.method === "GET" && !pathname.endsWith("/meta")) {
+      return json(await store.getHybridItem(auth.user.id, hybridId));
+    }
+
+    if (pathname.endsWith("/meta") && request.method === "PATCH") {
+      const input = await readJson<PatchHybridItemMetaInput>(request);
+      await store.patchHybridItemMeta(auth.user.id, hybridId, input);
+      return new Response(null, { status: 204 });
+    }
+
+    if (pathname.endsWith("/share-links") && request.method === "POST") {
+      return json(
+        {
+          shareLink: await store.createHybridShareLink(auth.user.id, hybridId),
+        },
+        { status: 201 },
+      );
+    }
+
+    if (request.method === "DELETE" && !pathname.endsWith("/meta")) {
+      await store.deleteHybridItem(auth.user.id, hybridId);
+      return new Response(null, { status: 204 });
+    }
   }
 
   if (pathname === "/api/folders" && request.method === "POST") {

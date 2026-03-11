@@ -11,6 +11,10 @@ const { mockStore, mockOpenAIChatCreate, mockOpenAIConstructor } = vi.hoisted(
       resolveSession: vi.fn(),
       deleteSession: vi.fn(),
       getTree: vi.fn(),
+      createHybridItem: vi.fn(),
+      getHybridItem: vi.fn(),
+      patchHybridItemMeta: vi.fn(),
+      deleteHybridItem: vi.fn(),
       createFolder: vi.fn(),
       patchFolder: vi.fn(),
       deleteFolder: vi.fn(),
@@ -188,6 +192,173 @@ describe("routeRequest", () => {
     expect(response.headers.get("Access-Control-Allow-Origin")).toBe(
       "http://localhost:3001",
     );
+  });
+
+  it("creates a hybrid item for an authenticated user", async () => {
+    mockStore.resolveSession.mockResolvedValue(authenticatedSession());
+    mockStore.createHybridItem.mockResolvedValue({
+      hybridId: "hybrid-1",
+      docItemId: "doc-1",
+      drawingItemId: "drawing-1",
+    });
+
+    const response = await worker.fetch(
+      new Request("http://localhost:8787/api/hybrid-items", {
+        method: "POST",
+        headers: {
+          Cookie: "kindraw_session=s-1",
+          Origin: "http://localhost:3001",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          title: "Portal Cross",
+          folderId: "folder-1",
+        }),
+      }),
+      env,
+    );
+
+    expect(response.status).toBe(201);
+    expect(await response.json()).toEqual({
+      hybridId: "hybrid-1",
+      docItemId: "doc-1",
+      drawingItemId: "drawing-1",
+    });
+    expect(mockStore.createHybridItem).toHaveBeenCalledWith("u-1", {
+      title: "Portal Cross",
+      folderId: "folder-1",
+    });
+  });
+
+  it("returns a hybrid item payload for an authenticated user", async () => {
+    mockStore.resolveSession.mockResolvedValue(authenticatedSession());
+    mockStore.getHybridItem.mockResolvedValue({
+      hybrid: {
+        id: "hybrid-1",
+        kind: "hybrid",
+        title: "Portal Cross",
+        folderId: null,
+        ownerId: "u-1",
+        updatedAt: "2026-03-10T12:00:00.000Z",
+        createdAt: "2026-03-10T11:00:00.000Z",
+        archivedAt: null,
+        shareLinks: [],
+        docItemId: "doc-1",
+        drawingItemId: "drawing-1",
+        defaultView: "both",
+      },
+      document: {
+        item: {
+          id: "doc-1",
+          kind: "doc",
+          title: "Portal Cross",
+          folderId: null,
+          ownerId: "u-1",
+          updatedAt: "2026-03-10T12:00:00.000Z",
+          createdAt: "2026-03-10T11:00:00.000Z",
+          archivedAt: null,
+          shareLinks: [],
+          collaborationRoomId: null,
+          collaborationEnabledAt: null,
+          hybrid: {
+            hybridId: "hybrid-1",
+            docItemId: "doc-1",
+            drawingItemId: "drawing-1",
+            role: "doc",
+            defaultView: "both",
+          },
+        },
+        content: "# Portal Cross",
+        collaborationRoom: null,
+      },
+      drawing: {
+        item: {
+          id: "drawing-1",
+          kind: "drawing",
+          title: "Portal Cross",
+          folderId: null,
+          ownerId: "u-1",
+          updatedAt: "2026-03-10T12:00:00.000Z",
+          createdAt: "2026-03-10T11:00:00.000Z",
+          archivedAt: null,
+          shareLinks: [],
+          collaborationRoomId: null,
+          collaborationEnabledAt: null,
+          hybrid: {
+            hybridId: "hybrid-1",
+            docItemId: "doc-1",
+            drawingItemId: "drawing-1",
+            role: "drawing",
+            defaultView: "both",
+          },
+        },
+        content: '{"elements":[]}',
+        collaborationRoom: null,
+      },
+    });
+
+    const response = await worker.fetch(
+      new Request("http://localhost:8787/api/hybrid-items/hybrid-1", {
+        headers: {
+          Cookie: "kindraw_session=s-1",
+          Origin: "http://localhost:3001",
+        },
+      }),
+      env,
+    );
+
+    expect(response.status).toBe(200);
+    expect(mockStore.getHybridItem).toHaveBeenCalledWith("u-1", "hybrid-1");
+  });
+
+  it("patches hybrid metadata for an authenticated user", async () => {
+    mockStore.resolveSession.mockResolvedValue(authenticatedSession());
+
+    const response = await worker.fetch(
+      new Request("http://localhost:8787/api/hybrid-items/hybrid-1/meta", {
+        method: "PATCH",
+        headers: {
+          Cookie: "kindraw_session=s-1",
+          Origin: "http://localhost:3001",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          title: "Portal Cross v2",
+          folderId: null,
+          defaultView: "canvas",
+        }),
+      }),
+      env,
+    );
+
+    expect(response.status).toBe(204);
+    expect(mockStore.patchHybridItemMeta).toHaveBeenCalledWith(
+      "u-1",
+      "hybrid-1",
+      {
+        title: "Portal Cross v2",
+        folderId: null,
+        defaultView: "canvas",
+      },
+    );
+  });
+
+  it("deletes a hybrid link for an authenticated user", async () => {
+    mockStore.resolveSession.mockResolvedValue(authenticatedSession());
+
+    const response = await worker.fetch(
+      new Request("http://localhost:8787/api/hybrid-items/hybrid-1", {
+        method: "DELETE",
+        headers: {
+          Cookie: "kindraw_session=s-1",
+          Origin: "http://localhost:3001",
+        },
+      }),
+      env,
+    );
+
+    expect(response.status).toBe(204);
+    expect(mockStore.deleteHybridItem).toHaveBeenCalledWith("u-1", "hybrid-1");
   });
 
   it("streams Mermaid output from the AI route", async () => {

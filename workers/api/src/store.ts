@@ -1,11 +1,17 @@
 import type {
   AuthContext,
   CreateFolderInput,
+  CreateHybridItemInput,
   CreateItemInput,
   D1Database,
   FolderRecord,
+  HybridItemRecord,
   KindrawCollaborationBootstrapResponse,
   KindrawCollaborationRoom,
+  KindrawHybridItem,
+  KindrawHybridItemResponse,
+  KindrawHybridLink,
+  KindrawHybridView,
   ItemRecord,
   KindrawItem,
   KindrawItemResponse,
@@ -14,6 +20,7 @@ import type {
   KindrawShareLink,
   KindrawTreeResponse,
   PatchFolderInput,
+  PatchHybridItemMetaInput,
   PatchItemMetaInput,
   R2Bucket,
   ShareLinkRecord,
@@ -69,6 +76,16 @@ type ShareLinkRow = {
   revoked_at: string | null;
 };
 
+type HybridItemRow = {
+  id: string;
+  owner_id: string;
+  doc_item_id: string;
+  drawing_item_id: string;
+  default_view: KindrawHybridView;
+  created_at: string;
+  updated_at: string;
+};
+
 export class HttpError extends Error {
   status: number;
 
@@ -104,7 +121,22 @@ const toKindrawShareLink = (row: ShareLinkRow): KindrawShareLink => ({
   revokedAt: row.revoked_at,
 });
 
-const toItem = (row: ItemRow, shareLinks: KindrawShareLink[]): KindrawItem => ({
+const toHybridLink = (
+  row: HybridItemRow,
+  role: KindrawItem["kind"],
+): KindrawHybridLink => ({
+  hybridId: row.id,
+  docItemId: row.doc_item_id,
+  drawingItemId: row.drawing_item_id,
+  role,
+  defaultView: row.default_view,
+});
+
+const toItem = (
+  row: ItemRow,
+  shareLinks: KindrawShareLink[],
+  hybrid: KindrawHybridLink | null = null,
+): KindrawItem => ({
   id: row.id,
   kind: row.kind,
   title: row.title,
@@ -116,9 +148,13 @@ const toItem = (row: ItemRow, shareLinks: KindrawShareLink[]): KindrawItem => ({
   shareLinks,
   collaborationRoomId: row.collaboration_enabled_at ? row.id : null,
   collaborationEnabledAt: row.collaboration_enabled_at,
+  hybrid,
 });
 
-const toItemRecord = (row: ItemRow): ItemRecord => ({
+const toItemRecord = (
+  row: ItemRow,
+  hybrid: KindrawHybridLink | null = null,
+): ItemRecord => ({
   id: row.id,
   kind: row.kind,
   title: row.title,
@@ -127,10 +163,40 @@ const toItemRecord = (row: ItemRow): ItemRecord => ({
   updatedAt: row.updated_at,
   createdAt: row.created_at,
   archivedAt: row.archived_at,
-  contentBlobKey: row.content_blob_key,
-  collaborationRoomKey: row.collaboration_room_key,
   collaborationRoomId: row.collaboration_enabled_at ? row.id : null,
   collaborationEnabledAt: row.collaboration_enabled_at,
+  hybrid,
+  contentBlobKey: row.content_blob_key,
+  collaborationRoomKey: row.collaboration_room_key,
+});
+
+const toHybridItemRecord = (row: HybridItemRow): HybridItemRecord => ({
+  id: row.id,
+  ownerId: row.owner_id,
+  docItemId: row.doc_item_id,
+  drawingItemId: row.drawing_item_id,
+  defaultView: row.default_view,
+  createdAt: row.created_at,
+  updatedAt: row.updated_at,
+});
+
+const toHybridItem = (
+  row: HybridItemRow,
+  docRow: ItemRow,
+  shareLinks: KindrawShareLink[],
+): KindrawHybridItem => ({
+  id: row.id,
+  kind: "hybrid",
+  title: docRow.title,
+  folderId: docRow.folder_id,
+  ownerId: row.owner_id,
+  updatedAt: row.updated_at,
+  createdAt: row.created_at,
+  archivedAt: null,
+  shareLinks,
+  docItemId: row.doc_item_id,
+  drawingItemId: row.drawing_item_id,
+  defaultView: row.default_view,
 });
 
 const isoNow = () => new Date().toISOString();
@@ -166,6 +232,18 @@ const createBlobKey = (
   `users/${ownerId}/items/${itemId}/current.${
     kind === "drawing" ? "excalidraw" : "md"
   }`;
+
+const createInitialItemContent = (kind: KindrawItem["kind"], title: string) =>
+  kind === "drawing"
+    ? JSON.stringify({
+        type: "excalidraw",
+        version: 2,
+        source: "kindraw",
+        elements: [],
+        appState: {},
+        files: {},
+      })
+    : `# ${title}\n\n`;
 
 const groupShareLinks = (shareLinks: ShareLinkRecord[]) => {
   const map = new Map<string, KindrawShareLink[]>();
@@ -362,6 +440,7 @@ export class KindrawStore {
       { results: folderRows },
       { results: itemRows },
       { results: shareRows },
+      { results: hybridRows },
     ] = await Promise.all([
       this.db
         .prepare(
@@ -389,9 +468,57 @@ export class KindrawStore {
         )
         .bind(ownerId)
         .all<ShareLinkRow>(),
+      this.db
+        .prepare(
+          `SELECT * FROM hybrid_items
+             WHERE owner_id = ?
+             ORDER BY updated_at DESC, created_at DESC`,
+        )
+        .bind(ownerId)
+        .all<HybridItemRow>(),
     ]);
 
     const shareMap = groupShareLinks(shareRows.map(toShareLink));
+    const hybridByDocId = new Map(
+      hybridRows.map((row) => [row.doc_item_id, row] as const),
+    );
+    const hybridByDrawingId = new Map(
+      hybridRows.map((row) => [row.drawing_item_id, row] as const),
+    );
+    const itemById = new Map(itemRows.map((row) => [row.id, row] as const));
+    const collapsedItemIds = new Set<string>();
+    const treeItems: KindrawTreeResponse["items"] = [];
+
+    for (const row of itemRows) {
+      if (collapsedItemIds.has(row.id)) {
+        continue;
+      }
+
+      const hybridRow =
+        row.kind === "doc"
+          ? hybridByDocId.get(row.id)
+          : hybridByDrawingId.get(row.id) || null;
+
+      if (hybridRow) {
+        const docRow = itemById.get(hybridRow.doc_item_id);
+        const drawingRow = itemById.get(hybridRow.drawing_item_id);
+
+        if (docRow && drawingRow) {
+          treeItems.push(
+            toHybridItem(
+              hybridRow,
+              docRow,
+              shareMap.get(hybridRow.doc_item_id) || [],
+            ),
+          );
+          collapsedItemIds.add(docRow.id);
+          collapsedItemIds.add(drawingRow.id);
+          continue;
+        }
+      }
+
+      treeItems.push(toItem(row, shareMap.get(row.id) || []));
+    }
 
     return {
       folders: folderRows.map((row) => {
@@ -404,7 +531,7 @@ export class KindrawStore {
           updatedAt: folder.updatedAt,
         };
       }),
-      items: itemRows.map((row) => toItem(row, shareMap.get(row.id) || [])),
+      items: treeItems,
     };
   }
 
@@ -553,10 +680,61 @@ export class KindrawStore {
     return itemId;
   }
 
+  async createHybridItem(ownerId: string, input: CreateHybridItemInput) {
+    const title = input.title.trim();
+    if (!title) {
+      throw new HttpError(400, "Hybrid item title is required.");
+    }
+
+    if (input.folderId) {
+      await this.requireFolder(ownerId, input.folderId);
+    }
+
+    const docItemId = await this.createItem(ownerId, {
+      kind: "doc",
+      title,
+      folderId: input.folderId ?? null,
+      content: createInitialItemContent("doc", title),
+    });
+    const drawingItemId = await this.createItem(ownerId, {
+      kind: "drawing",
+      title,
+      folderId: input.folderId ?? null,
+      content: createInitialItemContent("drawing", title),
+    });
+
+    const hybridId = crypto.randomUUID();
+    const now = isoNow();
+
+    await this.db
+      .prepare(
+        `INSERT INTO hybrid_items (
+           id,
+           owner_id,
+           doc_item_id,
+           drawing_item_id,
+           default_view,
+           created_at,
+           updated_at
+         )
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .bind(hybridId, ownerId, docItemId, drawingItemId, "both", now, now)
+      .run();
+
+    return {
+      hybridId,
+      docItemId,
+      drawingItemId,
+    };
+  }
+
   async getItem(ownerId: string, itemId: string): Promise<KindrawItemResponse> {
     const item = await this.requireItem(ownerId, itemId);
     const content = await this.getContent(item.contentBlobKey);
     const shareLinks = await this.listShareLinksForItem(itemId);
+    const hybridRow = await this.findHybridRowByItemId(ownerId, itemId);
+    const hybrid = hybridRow ? toHybridLink(hybridRow, item.kind) : null;
 
     return {
       item: toItem(
@@ -574,6 +752,7 @@ export class KindrawStore {
           updated_at: item.updatedAt,
         },
         shareLinks,
+        hybrid,
       ),
       content,
       collaborationRoom:
@@ -626,6 +805,43 @@ export class KindrawStore {
     };
   }
 
+  async getHybridItem(
+    ownerId: string,
+    hybridId: string,
+  ): Promise<KindrawHybridItemResponse> {
+    const hybrid = await this.requireHybridItem(ownerId, hybridId);
+    const [document, drawing] = await Promise.all([
+      this.getItem(ownerId, hybrid.docItemId),
+      this.getItem(ownerId, hybrid.drawingItemId),
+    ]);
+    const docRow = await this.db
+      .prepare("SELECT * FROM items WHERE id = ? AND owner_id = ?")
+      .bind(hybrid.docItemId, ownerId)
+      .first<ItemRow>();
+
+    if (!docRow) {
+      throw new HttpError(404, "Hybrid document root not found.");
+    }
+
+    return {
+      hybrid: toHybridItem(
+        {
+          id: hybrid.id,
+          owner_id: hybrid.ownerId,
+          doc_item_id: hybrid.docItemId,
+          drawing_item_id: hybrid.drawingItemId,
+          default_view: hybrid.defaultView,
+          created_at: hybrid.createdAt,
+          updated_at: hybrid.updatedAt,
+        },
+        docRow,
+        document.item.shareLinks,
+      ),
+      document,
+      drawing,
+    };
+  }
+
   async patchItemMeta(
     ownerId: string,
     itemId: string,
@@ -651,14 +867,96 @@ export class KindrawStore {
           : null
         : item.archivedAt;
 
+    const hybridRow = await this.findHybridRowByItemId(ownerId, itemId);
+    const now = isoNow();
+
     await this.db
       .prepare(
         `UPDATE items
          SET title = ?, folder_id = ?, archived_at = ?, updated_at = ?
          WHERE id = ? AND owner_id = ?`,
       )
-      .bind(title, folderId, archivedAt, isoNow(), itemId, ownerId)
+      .bind(title, folderId, archivedAt, now, itemId, ownerId)
       .run();
+
+    if (!hybridRow) {
+      return;
+    }
+
+    const companionItemId =
+      hybridRow.doc_item_id === itemId
+        ? hybridRow.drawing_item_id
+        : hybridRow.doc_item_id;
+
+    await Promise.all([
+      this.db
+        .prepare(
+          `UPDATE items
+           SET title = ?, folder_id = ?, updated_at = ?
+           WHERE id = ? AND owner_id = ?`,
+        )
+        .bind(title, folderId, now, companionItemId, ownerId)
+        .run(),
+      this.db
+        .prepare(
+          `UPDATE hybrid_items
+           SET updated_at = ?
+           WHERE id = ? AND owner_id = ?`,
+        )
+        .bind(now, hybridRow.id, ownerId)
+        .run(),
+    ]);
+  }
+
+  async patchHybridItemMeta(
+    ownerId: string,
+    hybridId: string,
+    input: PatchHybridItemMetaInput,
+  ) {
+    const hybrid = await this.requireHybridItem(ownerId, hybridId);
+    const doc = await this.requireItem(ownerId, hybrid.docItemId);
+
+    const title =
+      typeof input.title === "string" ? input.title.trim() : doc.title;
+    if (!title) {
+      throw new HttpError(400, "Hybrid item title is required.");
+    }
+
+    const folderId =
+      "folderId" in input ? input.folderId ?? null : doc.folderId;
+    if (folderId) {
+      await this.requireFolder(ownerId, folderId);
+    }
+
+    const defaultView = input.defaultView ?? hybrid.defaultView;
+    const now = isoNow();
+
+    await Promise.all([
+      this.db
+        .prepare(
+          `UPDATE items
+           SET title = ?, folder_id = ?, updated_at = ?
+           WHERE id = ? AND owner_id = ?`,
+        )
+        .bind(title, folderId, now, hybrid.docItemId, ownerId)
+        .run(),
+      this.db
+        .prepare(
+          `UPDATE items
+           SET title = ?, folder_id = ?, updated_at = ?
+           WHERE id = ? AND owner_id = ?`,
+        )
+        .bind(title, folderId, now, hybrid.drawingItemId, ownerId)
+        .run(),
+      this.db
+        .prepare(
+          `UPDATE hybrid_items
+           SET default_view = ?, updated_at = ?
+           WHERE id = ? AND owner_id = ?`,
+        )
+        .bind(defaultView, now, hybrid.id, ownerId)
+        .run(),
+    ]);
   }
 
   async putItemContent(ownerId: string, itemId: string, content: string) {
@@ -677,8 +975,15 @@ export class KindrawStore {
 
   async deleteItem(ownerId: string, itemId: string) {
     const item = await this.requireItem(ownerId, itemId);
+    const hybridRow = await this.findHybridRowByItemId(ownerId, itemId);
     await Promise.all([
       this.blobs.delete(item.contentBlobKey),
+      hybridRow
+        ? this.db
+            .prepare("DELETE FROM hybrid_items WHERE id = ? AND owner_id = ?")
+            .bind(hybridRow.id, ownerId)
+            .run()
+        : Promise.resolve(),
       this.db
         .prepare("DELETE FROM share_links WHERE item_id = ?")
         .bind(itemId)
@@ -688,6 +993,19 @@ export class KindrawStore {
         .bind(itemId, ownerId)
         .run(),
     ]);
+  }
+
+  async deleteHybridItem(ownerId: string, hybridId: string) {
+    await this.requireHybridItem(ownerId, hybridId);
+    await this.db
+      .prepare("DELETE FROM hybrid_items WHERE id = ? AND owner_id = ?")
+      .bind(hybridId, ownerId)
+      .run();
+  }
+
+  async createHybridShareLink(ownerId: string, hybridId: string) {
+    const hybrid = await this.requireHybridItem(ownerId, hybridId);
+    return this.createShareLink(ownerId, hybrid.docItemId);
   }
 
   async enableItemCollaboration(
@@ -827,6 +1145,45 @@ export class KindrawStore {
     }
 
     const content = await this.getContent(row.content_blob_key);
+    const hybridRow =
+      row.kind === "doc"
+        ? await this.findHybridRowByItemId(undefined, row.id)
+        : null;
+
+    let hybrid: KindrawPublicItemResponse["hybrid"] = null;
+
+    if (hybridRow) {
+      const drawing = await this.db
+        .prepare(
+          `SELECT id, kind, title, updated_at, content_blob_key
+           FROM items
+           WHERE id = ?`,
+        )
+        .bind(hybridRow.drawing_item_id)
+        .first<{
+          id: string;
+          kind: KindrawItem["kind"];
+          title: string;
+          updated_at: string;
+          content_blob_key: string;
+        }>();
+
+      if (drawing) {
+        hybrid = {
+          id: hybridRow.id,
+          defaultView: hybridRow.default_view,
+          drawing: {
+            item: {
+              id: drawing.id,
+              kind: drawing.kind,
+              title: drawing.title,
+              updatedAt: drawing.updated_at,
+            },
+            content: await this.getContent(drawing.content_blob_key),
+          },
+        };
+      }
+    }
 
     return {
       item: {
@@ -836,6 +1193,7 @@ export class KindrawStore {
         updatedAt: row.updated_at,
       },
       content,
+      hybrid,
     };
   }
 
@@ -890,7 +1248,48 @@ export class KindrawStore {
       throw new HttpError(404, "Item not found.");
     }
 
-    return toItemRecord(row);
+    const hybridRow = await this.findHybridRowByItemId(ownerId, itemId);
+    const hybrid =
+      hybridRow && hybridRow.doc_item_id === itemId
+        ? toHybridLink(hybridRow, "doc")
+        : hybridRow
+        ? toHybridLink(hybridRow, "drawing")
+        : null;
+
+    return toItemRecord(row, hybrid);
+  }
+
+  private async requireHybridItem(ownerId: string, hybridId: string) {
+    const row = await this.db
+      .prepare("SELECT * FROM hybrid_items WHERE id = ? AND owner_id = ?")
+      .bind(hybridId, ownerId)
+      .first<HybridItemRow>();
+
+    if (!row) {
+      throw new HttpError(404, "Hybrid item not found.");
+    }
+
+    return toHybridItemRecord(row);
+  }
+
+  private async findHybridRowByItemId(
+    ownerId: string | undefined,
+    itemId: string,
+  ) {
+    const baseQuery =
+      "SELECT * FROM hybrid_items WHERE (doc_item_id = ? OR drawing_item_id = ?)";
+
+    if (!ownerId) {
+      return this.db
+        .prepare(`${baseQuery} LIMIT 1`)
+        .bind(itemId, itemId)
+        .first<HybridItemRow>();
+    }
+
+    return this.db
+      .prepare(`${baseQuery} AND owner_id = ? LIMIT 1`)
+      .bind(itemId, itemId, ownerId)
+      .first<HybridItemRow>();
   }
 
   private async ensureFolderNotMovedIntoDescendant(
