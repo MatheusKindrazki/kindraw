@@ -6,6 +6,7 @@ import { getPublicItem, getSession, getTree, openGithubLogin } from "./api";
 import { DocEditorPage } from "./DocEditorPage";
 import { createPublicDrawingInitialData } from "./content";
 import { MarkdownPreview } from "./MarkdownPreview";
+import { createKindrawItemPageMeta, syncKindrawPageMeta } from "./pageMeta";
 import { getErrorMessage } from "./utils";
 import "./kindraw.scss";
 
@@ -25,6 +26,8 @@ export const KindrawDocScreen = ({ itemId }: KindrawDocScreenProps) => {
   );
   const [tree, setTree] = useState<KindrawTreeResponse | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const currentItemTitle =
+    tree?.items.find((item) => item.id === itemId)?.title || null;
 
   const refreshTree = useCallback(async () => {
     try {
@@ -68,6 +71,18 @@ export const KindrawDocScreen = ({ itemId }: KindrawDocScreenProps) => {
 
     void load();
   }, []);
+
+  useEffect(() => {
+    syncKindrawPageMeta(
+      createKindrawItemPageMeta({
+        title: currentItemTitle,
+        kind: "doc",
+        url: window.location.href,
+      }) || {
+        url: window.location.href,
+      },
+    );
+  }, [currentItemTitle, itemId]);
 
   if (typeof session === "undefined") {
     return (
@@ -151,6 +166,19 @@ export const KindrawPublicSharePage = ({
     void loadShare();
   }, [loadShare]);
 
+  useEffect(() => {
+    syncKindrawPageMeta(
+      createKindrawItemPageMeta({
+        title: itemResponse?.item.title,
+        kind: itemResponse?.item.kind || "drawing",
+        surface: "share",
+        url: window.location.href,
+      }) || {
+        url: window.location.href,
+      },
+    );
+  }, [itemResponse?.item.kind, itemResponse?.item.title, token]);
+
   if (errorMessage) {
     return (
       <div className="kindraw-share-shell">
@@ -196,7 +224,9 @@ export const KindrawPublicSharePage = ({
             <div className="kindraw-public-view__canvas-backdrop" />
             <div className="kindraw-public-view__canvas-stage">
               <Excalidraw
-                initialData={createPublicDrawingInitialData(itemResponse.content)}
+                initialData={createPublicDrawingInitialData(
+                  itemResponse.content,
+                )}
                 UIOptions={{
                   canvasActions: {
                     clearCanvas: false,

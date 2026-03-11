@@ -180,6 +180,10 @@ import {
   subscribeToLocation,
 } from "./kindraw/router";
 import { generateKindrawCanvasTitle } from "./kindraw/naming";
+import {
+  createKindrawItemPageMeta,
+  syncKindrawPageMeta,
+} from "./kindraw/pageMeta";
 import { getKindrawDraft, setKindrawDraft } from "./kindraw/storage";
 import { getErrorMessage, isDraftNewer } from "./kindraw/utils";
 
@@ -1438,6 +1442,23 @@ const ExcalidrawWrapper = () => {
     setKindrawIsEditingTitle(false);
     setKindrawDraftTitle(kindrawActiveCanvasTitle || "");
   }, [kindrawActiveCanvasTitle, pathname]);
+
+  useEffect(() => {
+    if (kindrawRoute.kind === "drawing") {
+      syncKindrawPageMeta(
+        createKindrawItemPageMeta({
+          title: kindrawActiveCanvasTitle,
+          kind: "drawing",
+          url: window.location.href,
+        }),
+      );
+      return;
+    }
+
+    syncKindrawPageMeta({
+      url: window.location.href,
+    });
+  }, [kindrawActiveCanvasTitle, kindrawRoute, pathname]);
 
   useEffect(() => {
     if (!kindrawIsEditingTitle) {
