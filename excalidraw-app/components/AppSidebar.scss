@@ -1115,6 +1115,33 @@
     background: color-mix(in srgb, var(--color-surface-highest) 94%, white);
   }
 
+  .kindraw-technical-export__details {
+    display: grid;
+    gap: 0.55rem;
+  }
+
+  .kindraw-technical-export__details p {
+    margin: 0;
+  }
+
+  .kindraw-technical-export__hint {
+    color: var(--text-secondary-color);
+    font-size: 0.82rem;
+  }
+
+  .kindraw-technical-export__actions {
+    display: grid;
+    gap: 0.65rem;
+    margin-top: 0.95rem;
+  }
+
+  .kindraw-technical-export__action {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.55rem;
+  }
+
   @media (max-width: 900px) {
     --kindraw-sidebar-width: min(24rem, calc(100vw - 0.75rem));
 

@@ -68,6 +68,7 @@ import DropdownMenu from "./dropdownMenu/DropdownMenu";
 import { PropertiesPopover } from "./PropertiesPopover";
 import {
   EmbedIcon,
+  ExportIcon,
   extraToolsIcon,
   frameToolIcon,
   mermaidLogoIcon,
@@ -1261,6 +1262,13 @@ export const ShapesSwitcher = ({
             data-testid="toolbar-embeddable"
           >
             {t("toolBar.mermaidToExcalidraw")}
+          </DropdownMenu.Item>
+          <DropdownMenu.Item
+            onSelect={() => app.setOpenDialog({ name: "jsonExport" })}
+            icon={ExportIcon}
+            data-testid="toolbar-technical-export"
+          >
+            {t("kindraw.technicalExport.title")}
           </DropdownMenu.Item>
           {app.props.aiEnabled !== false && app.plugins.diagramToCode && (
             <DropdownMenu.Item

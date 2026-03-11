@@ -852,6 +852,21 @@
     },
     "links": {
       "title": "Kindraw links"
+    },
+    "technicalExport": {
+      "title": "Technical export",
+      "description": "Generate Mermaid from the current drawing, then copy it, download it, or open the result directly in draw.io.",
+      "copy": "Copy Mermaid",
+      "copying": "Copying...",
+      "copied": "Mermaid copied to the clipboard.",
+      "copyFailed": "Failed to copy Mermaid to the clipboard.",
+      "download": "Download .mmd",
+      "downloading": "Preparing file...",
+      "downloadFailed": "Failed to prepare the Mermaid export file.",
+      "drawIo": "Open in draw.io",
+      "empty": "This scene does not map cleanly to a Mermaid flowchart yet.",
+      "hint": "Works best with labeled shapes connected by bound arrows.",
+      "size": "{{size}} bytes of Mermaid output ready."
     }
   },
   "keys": {

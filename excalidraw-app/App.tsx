@@ -110,6 +110,8 @@ import { AppFooter } from "./components/AppFooter";
 import { AppMainMenu } from "./components/AppMainMenu";
 import { AppWelcomeScreen } from "./components/AppWelcomeScreen";
 import { TopErrorBoundary } from "./components/TopErrorBoundary";
+import { KindrawTechnicalExportCard } from "./kindraw/KindrawTechnicalExportCard";
+import { KINDRAW_CURATED_LIBRARIES } from "./kindraw/curatedLibraries";
 
 import {
   getCollaborationLinkData,
@@ -548,6 +550,55 @@ const ExcalidrawWrapper = () => {
     }
   }, [excalidrawAPI]);
 
+  useEffect(() => {
+    if (!excalidrawAPI || kindrawCuratedLibrariesBootstrappedRef.current) {
+      return;
+    }
+
+    const bootstrapKey = "kindraw-curated-libraries-v1";
+    if (window.localStorage.getItem(bootstrapKey) === "ready") {
+      kindrawCuratedLibrariesBootstrappedRef.current = true;
+      return;
+    }
+
+    kindrawCuratedLibrariesBootstrappedRef.current = true;
+    let cancelled = false;
+
+    const bootstrapLibraries = async () => {
+      try {
+        for (const library of KINDRAW_CURATED_LIBRARIES) {
+          // Sequential updates keep library merge semantics predictable.
+          // eslint-disable-next-line no-await-in-loop
+          const response = await fetch(library.source);
+          if (!response.ok) {
+            throw new Error(`Failed to fetch ${library.id}`);
+          }
+
+          // eslint-disable-next-line no-await-in-loop
+          await excalidrawAPI.updateLibrary({
+            libraryItems: await response.blob(),
+            merge: true,
+          });
+
+          if (cancelled) {
+            return;
+          }
+        }
+
+        window.localStorage.setItem(bootstrapKey, "ready");
+      } catch (error) {
+        kindrawCuratedLibrariesBootstrappedRef.current = false;
+        console.warn("Unable to preload Kindraw library packs", error);
+      }
+    };
+
+    void bootstrapLibraries();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [excalidrawAPI]);
+
   const pathname = useSyncExternalStore(
     subscribeToLocation,
     getLocationPathname,
@@ -581,6 +632,7 @@ const ExcalidrawWrapper = () => {
   const [kindrawIsEditingTitle, setKindrawIsEditingTitle] = useState(false);
   const [kindrawDraftTitle, setKindrawDraftTitle] = useState("");
   const kindrawApplyingSceneRef = useRef(false);
+  const kindrawCuratedLibrariesBootstrappedRef = useRef(false);
   const kindrawAutoCreateRootRef = useRef(false);
   const kindrawAutoJoinCollabRoomRef = useRef<string | null>(null);
   const kindrawLastSavedContentRef = useRef<string | null>(null);
@@ -2043,7 +2095,15 @@ const ExcalidrawWrapper = () => {
         UIOptions={{
           canvasActions: {
             toggleTheme: true,
-            export: {},
+            export: {
+              saveFileToDisk: true,
+              renderCustomUI: (exportedElements) => (
+                <KindrawTechnicalExportCard
+                  elements={exportedElements}
+                  title={kindrawActiveCanvasTitle}
+                />
+              ),
+            },
           },
         }}
         langCode={langCode}
