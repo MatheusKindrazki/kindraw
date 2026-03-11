@@ -18,59 +18,77 @@
   }
 
   .UserList__wrapper {
-    display: flex;
-    width: 100%;
+    display: inline-flex;
+    width: max-content;
+    flex: 0 0 auto;
+    min-width: 0;
     justify-content: flex-end;
     align-items: center;
+    overflow: visible;
     pointer-events: none !important;
   }
 
   .UserList {
     pointer-events: none;
-    padding: var(--userList-padding);
-    display: flex;
-    flex-wrap: wrap;
+    padding: 0;
+    display: inline-flex;
+    flex: 0 0 auto;
+    flex-wrap: nowrap;
     justify-content: flex-end;
     align-items: center;
-    gap: var(--avatarList-gap);
+    gap: 0;
+    width: max-content;
+    min-width: 0;
+    overflow: visible;
 
     box-sizing: border-box;
-
-    --max-size: calc(
-      var(--avatar-size) * var(--max-avatars, 2) + var(--avatarList-gap) *
-        (var(--max-avatars, 2) - 1) + var(--userList-padding) * 2
-    );
-
-    // max width & height set to fix the max-avatars
-    max-height: var(--max-size);
-    max-width: var(--max-size);
-
-    // Tweak in 30px increments to fit more/fewer avatars in a row/column ^^
+    --avatar-overlap: 0.42rem;
   }
 
   .UserList > * {
     pointer-events: var(--ui-pointerEvents);
+    position: relative;
+    flex: 0 0 auto;
+  }
+
+  .UserList > * + * {
+    margin-inline-start: calc(var(--avatar-overlap) * -1);
+  }
+
+  .UserList > *:hover,
+  .UserList > *:focus-within {
+    z-index: 10;
   }
 
   .UserList_mobile {
     padding: 0;
     justify-content: normal;
     margin: 0.5rem 0;
+    gap: var(--avatarList-gap);
+    flex-wrap: wrap;
     max-width: none;
     max-height: none;
+  }
+
+  .UserList_mobile > * + * {
+    margin-inline-start: 0;
   }
 
   .UserList__more {
     @include avatarStyles;
 
     & {
-      background-color: var(--color-gray-20);
-      border: 0 !important;
+      background-color: color-mix(
+        in srgb,
+        var(--color-surface-highest) 92%,
+        white
+      );
+      border: 2px solid var(--island-bg-color) !important;
+      box-shadow: 0 0 0 1px var(--default-border-color);
       font-size: 0.625rem;
-      font-weight: 400;
+      font-weight: 700;
       flex-shrink: 0;
       color: var(--color-gray-100);
-      font-weight: bold;
     }
   }
 
@@ -84,6 +102,13 @@
     position: relative;
     display: flex;
     flex: 0 0 auto;
+
+    .Avatar {
+      border: 2px solid var(--island-bg-color);
+      box-shadow: 0 0 0 1px var(--default-border-color);
+      background-clip: padding-box;
+    }
+
     .UserList__collaborator-status-icon {
       --size: 14px;
       position: absolute;

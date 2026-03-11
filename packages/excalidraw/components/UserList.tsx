@@ -1,8 +1,8 @@
 import { Popover } from "radix-ui";
 import clsx from "clsx";
-import React, { useLayoutEffect } from "react";
+import React from "react";
 
-import { supportsResizeObserver, isShallowEqual } from "@excalidraw/common";
+import { isShallowEqual } from "@excalidraw/common";
 
 import type { MarkRequired } from "@excalidraw/common/utility-types";
 
@@ -29,7 +29,7 @@ export type GoToCollaboratorComponentProps = {
 /** collaborator user id or socket id (fallback) */
 type ClientId = string & { _brand: "UserId" };
 
-const DEFAULT_MAX_AVATARS = 4;
+const DEFAULT_MAX_AVATARS = 3;
 const SHOW_COLLABORATORS_FILTER_AT = 8;
 
 const ConditionalTooltipWrapper = ({
@@ -140,37 +140,7 @@ export const UserList = React.memo(
         collaborator.username?.toLowerCase().includes(searchTerm),
     );
 
-    const userListWrapper = React.useRef<HTMLDivElement | null>(null);
-
-    useLayoutEffect(() => {
-      if (userListWrapper.current) {
-        const updateMaxAvatars = (width: number) => {
-          const maxAvatars = Math.max(1, Math.min(8, Math.floor(width / 38)));
-          setMaxAvatars(maxAvatars);
-        };
-
-        updateMaxAvatars(userListWrapper.current.clientWidth);
-
-        if (!supportsResizeObserver) {
-          return;
-        }
-
-        const resizeObserver = new ResizeObserver((entries) => {
-          for (const entry of entries) {
-            const { width } = entry.contentRect;
-            updateMaxAvatars(width);
-          }
-        });
-
-        resizeObserver.observe(userListWrapper.current);
-
-        return () => {
-          resizeObserver.disconnect();
-        };
-      }
-    }, []);
-
-    const [maxAvatars, setMaxAvatars] = React.useState(DEFAULT_MAX_AVATARS);
+    const maxAvatars = DEFAULT_MAX_AVATARS;
 
     if (uniqueCollaboratorsArray.length === 0) {
       return null;
@@ -204,7 +174,7 @@ export const UserList = React.memo(
         )}
       </div>
     ) : (
-      <div className="UserList__wrapper" ref={userListWrapper}>
+      <div className="UserList__wrapper">
         <div
           className={clsx("UserList", className)}
           style={{ [`--max-avatars` as any]: maxAvatars }}
