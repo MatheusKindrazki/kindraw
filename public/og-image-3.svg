@@ -5,40 +5,31 @@
   viewBox="0 0 1200 675"
   fill="none"
 >
-  <rect width="1200" height="675" rx="48" fill="#FBF9FF" />
-  <circle cx="1058" cy="102" r="154" fill="#E5DEFF" />
-  <circle cx="111" cy="583" r="145" fill="#E9FFF2" />
+  <rect width="1200" height="675" rx="48" fill="#FCFBFF" />
+  <circle cx="1082" cy="96" r="138" fill="#EEE9FF" />
+  <circle cx="132" cy="612" r="124" fill="#F2EEFF" />
   <rect
     x="122"
-    y="150"
-    width="164"
-    height="176"
-    rx="42"
-    fill="#6965DB"
-    opacity="0.16"
-  />
-  <rect
-    x="188"
-    y="98"
-    width="212"
-    height="230"
-    rx="52"
-    fill="white"
-    stroke="#191726"
-    stroke-width="22"
+    y="174"
+    width="124"
+    height="124"
+    rx="32"
+    fill="#F4F1FF"
+    stroke="#6C63FF"
+    stroke-width="16"
   />
   <path
-    d="M241 168V280M241 224L333 160M241 224L333 288"
-    stroke="#191726"
-    stroke-width="24"
+    d="M164 205V267M175 236L219 200M175 236L219 272"
+    stroke="#6C63FF"
+    stroke-width="18"
     stroke-linecap="round"
     stroke-linejoin="round"
   />
   <text
-    x="122"
-    y="430"
-    fill="#191726"
-    font-size="116"
+    x="286"
+    y="259"
+    fill="#201453"
+    font-size="104"
     font-family="Helvetica, Arial, sans-serif"
     font-weight="700"
     letter-spacing="-4"
@@ -47,20 +38,20 @@
   </text>
   <text
     x="122"
-    y="500"
-    fill="#4B5563"
-    font-size="36"
+    y="410"
+    fill="#3F4670"
+    font-size="40"
     font-family="Helvetica, Arial, sans-serif"
   >
-    Draw, organize, and share many diagrams for free.
+    A free multi-canvas workspace for diagrams and visual thinking.
   </text>
   <text
     x="122"
-    y="548"
-    fill="#4B5563"
-    font-size="36"
+    y="464"
+    fill="#3F4670"
+    font-size="40"
     font-family="Helvetica, Arial, sans-serif"
   >
-    GitHub login, folders, public links, and realtime collaboration.
+    Organize, share, and collaborate in realtime with Kindraw.
   </text>
 </svg>

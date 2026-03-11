@@ -13,27 +13,19 @@ const LogoIcon = () => (
     aria-hidden="true"
   >
     <rect
-      x="10"
-      y="14"
-      width="22"
+      x="8"
+      y="8"
+      width="24"
       height="24"
-      rx="6"
-      fill="currentColor"
-      opacity="0.14"
-    />
-    <rect
-      x="16"
-      y="10"
-      width="22"
-      height="24"
-      rx="6"
+      rx="7"
+      fill="var(--color-logo-surface)"
       stroke="currentColor"
       strokeWidth="3"
     />
     <path
-      d="M22 18v12M22 24l10-7M22 24l10 7"
+      d="M16.5 16v16M18.5 24l9.5-8M18.5 24l9.5 8"
       stroke="currentColor"
-      strokeWidth="3"
+      strokeWidth="3.2"
       strokeLinecap="round"
       strokeLinejoin="round"
     />

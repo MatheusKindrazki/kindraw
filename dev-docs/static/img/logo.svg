@@ -1,28 +1,5 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" fill="none">
-  <rect width="128" height="128" rx="28" fill="#fff8f0" />
-  <rect
-    x="24"
-    y="38"
-    width="44"
-    height="50"
-    rx="12"
-    fill="#13111c"
-    opacity="0.1"
-  />
-  <rect
-    x="38"
-    y="24"
-    width="52"
-    height="58"
-    rx="14"
-    stroke="#13111c"
-    stroke-width="6"
-  />
-  <path
-    d="M52 40v28M52 54l24-16M52 54l24 16"
-    stroke="#13111c"
-    stroke-width="6"
-    stroke-linecap="round"
-    stroke-linejoin="round"
-  />
+<svg xmlns="http://www.w3.org/2000/svg" width="320" height="84" viewBox="0 0 320 84" fill="none">
+  <rect x="8" y="10" width="46" height="46" rx="12" fill="#F4F1FF" stroke="#6C63FF" stroke-width="4"/>
+  <path d="M22 22V44M26 33L42 20M26 33L42 46" stroke="#6C63FF" stroke-width="4.8" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="72" y="43" fill="#201453" font-size="34" font-family="Helvetica, Arial, sans-serif" font-weight="700" letter-spacing="-1.4">Kindraw</text>
 </svg>

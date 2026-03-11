@@ -5,24 +5,21 @@
   viewBox="0 0 1000 1000"
   fill="none"
 >
-  <rect width="1000" height="1000" rx="220" fill="#F3EFE6" />
-  <path
-    d="M320 220V780"
-    stroke="#101010"
-    stroke-width="108"
-    stroke-linecap="round"
+  <rect width="1000" height="1000" rx="220" fill="white" />
+  <rect
+    x="210"
+    y="210"
+    width="580"
+    height="580"
+    rx="150"
+    fill="#F4F1FF"
+    stroke="#6C63FF"
+    stroke-width="72"
   />
   <path
-    d="M360 510L680 240"
-    stroke="#FF6B2C"
-    stroke-width="118"
-    stroke-linecap="round"
-    stroke-linejoin="round"
-  />
-  <path
-    d="M360 500L710 780"
-    stroke="#101010"
-    stroke-width="118"
+    d="M394 352V648M438 500L644 332M438 500L644 668"
+    stroke="#6C63FF"
+    stroke-width="84"
     stroke-linecap="round"
     stroke-linejoin="round"
   />
