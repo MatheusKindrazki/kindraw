@@ -56,7 +56,7 @@
     z-index: 2000;
     border-right: 1px solid var(--kindraw-sidebar-border);
     border-left: 0;
-    background: var(--kindraw-sidebar-panel);
+    background: #ffffff;
     box-shadow: var(--kindraw-sidebar-shadow);
     isolation: isolate;
   }
@@ -240,6 +240,18 @@
   }
 
   .kindraw-top-right-actions__button--active {
+    background: var(--kindraw-sidebar-accent-soft);
+    color: var(--color-primary-darker);
+    border-color: color-mix(in srgb, var(--color-primary) 40%, white);
+  }
+
+  .kindraw-top-right-actions__button--public.kindraw-top-right-actions__button--active {
+    background: color-mix(in srgb, #1d4ed8 10%, white);
+    color: #1d4ed8;
+    border-color: color-mix(in srgb, #1d4ed8 28%, white);
+  }
+
+  .kindraw-top-right-actions__button--collaboration.kindraw-top-right-actions__button--active {
     background: var(--kindraw-sidebar-accent-soft);
     color: var(--color-primary-darker);
     border-color: color-mix(in srgb, var(--color-primary) 40%, white);

@@ -110,6 +110,10 @@
           display: block;
           font-weight: 700;
         }
+
+        &--left {
+          text-align: left;
+        }
       }
 
       &__button {
@@ -244,6 +248,13 @@
         display: flex;
         gap: 0.75rem;
         justify-content: flex-end;
+      }
+
+      &__helper {
+        font-size: 0.8rem;
+        line-height: 1.5;
+        color: var(--text-primary-color);
+        opacity: 0.74;
       }
     }
   }

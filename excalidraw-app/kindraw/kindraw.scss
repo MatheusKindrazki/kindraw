@@ -295,7 +295,8 @@
 }
 
 .kindraw-drawing-stage,
-.kindraw-share-shell__canvas {
+.kindraw-share-shell__canvas,
+.kindraw-public-view__canvas {
   min-height: 68vh;
   border: 1px solid rgba(31, 41, 55, 0.08);
   border-radius: 24px;
@@ -305,8 +306,35 @@
 }
 
 .kindraw-drawing-stage .excalidraw,
-.kindraw-share-shell__canvas .excalidraw {
+.kindraw-share-shell__canvas .excalidraw,
+.kindraw-public-view__canvas .excalidraw {
   height: 100%;
+}
+
+.kindraw-public-view__header {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  width: min(960px, 100%);
+}
+
+.kindraw-public-view__header h1 {
+  margin: 0;
+  font-size: clamp(1.8rem, 3vw, 2.8rem);
+  line-height: 1.05;
+}
+
+.kindraw-public-view__header p {
+  margin: 0;
+  color: #5b6574;
+}
+
+.kindraw-public-view__canvas {
+  width: min(1400px, 100%);
+}
+
+.kindraw-public-view__canvas .layer-ui__wrapper {
+  display: none;
 }
 
 .kindraw-doc-layout {
@@ -482,7 +510,8 @@
   .kindraw-topbar,
   .kindraw-topbar__session,
   .kindraw-editor-header,
-  .kindraw-share-shell__header {
+  .kindraw-share-shell__header,
+  .kindraw-public-view__header {
     flex-direction: column;
     align-items: stretch;
   }

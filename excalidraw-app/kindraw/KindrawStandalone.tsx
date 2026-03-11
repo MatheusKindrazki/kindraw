@@ -1,4 +1,5 @@
 import { Excalidraw } from "@excalidraw/excalidraw";
+import { t } from "@excalidraw/excalidraw/i18n";
 import { useCallback, useEffect, useState, startTransition } from "react";
 
 import { getPublicItem, getSession, getTree, openGithubLogin } from "./api";
@@ -33,7 +34,7 @@ export const KindrawDocScreen = ({ itemId }: KindrawDocScreenProps) => {
       });
     } catch (error) {
       setErrorMessage(
-        getErrorMessage(error, "Falha ao atualizar o workspace."),
+        getErrorMessage(error, t("kindraw.status.workspaceRefreshFailed")),
       );
     }
   }, []);
@@ -58,7 +59,9 @@ export const KindrawDocScreen = ({ itemId }: KindrawDocScreenProps) => {
           setTree(nextTree);
         });
       } catch (error) {
-        setErrorMessage(getErrorMessage(error, "Falha ao carregar o Kindraw."));
+        setErrorMessage(
+          getErrorMessage(error, t("kindraw.status.workspaceLoadFailed")),
+        );
         setSession(null);
       }
     };
@@ -69,7 +72,7 @@ export const KindrawDocScreen = ({ itemId }: KindrawDocScreenProps) => {
   if (typeof session === "undefined") {
     return (
       <div className="kindraw-loading-shell">
-        <p>Carregando documento...</p>
+        <p>{t("kindraw.publicView.loadingDocument")}</p>
       </div>
     );
   }
@@ -79,17 +82,17 @@ export const KindrawDocScreen = ({ itemId }: KindrawDocScreenProps) => {
       <div className="kindraw-login-shell">
         <div className="kindraw-login-card">
           <span className="kindraw-eyebrow">Kindraw</span>
-          <h1>Entre com GitHub para editar este doc</h1>
+          <h1>{t("kindraw.publicView.signInToEditDocTitle")}</h1>
           <div className="kindraw-toolbar">
             <button
               className="kindraw-button"
               onClick={openGithubLogin}
               type="button"
             >
-              Entrar com GitHub
+              {t("kindraw.actions.signInWithGitHub")}
             </button>
             <a className="kindraw-link-button" href="/">
-              Voltar ao canvas
+              {t("kindraw.publicView.backToCanvas")}
             </a>
           </div>
           {errorMessage ? (
@@ -103,7 +106,7 @@ export const KindrawDocScreen = ({ itemId }: KindrawDocScreenProps) => {
   if (!tree) {
     return (
       <div className="kindraw-loading-shell">
-        <p>Carregando workspace...</p>
+        <p>{t("kindraw.sidebar.loadingWorkspace")}</p>
       </div>
     );
   }
@@ -152,7 +155,7 @@ export const KindrawPublicSharePage = ({
     return (
       <div className="kindraw-share-shell">
         <div className="kindraw-empty-state">
-          <h2>Link publico invalido</h2>
+          <h2>{t("kindraw.publicView.invalidTitle")}</h2>
           <p>{errorMessage}</p>
         </div>
       </div>
@@ -162,22 +165,23 @@ export const KindrawPublicSharePage = ({
   if (!itemResponse) {
     return (
       <div className="kindraw-share-shell">
-        <p className="kindraw-loading-shell">Carregando link publico...</p>
+        <p className="kindraw-loading-shell">
+          {t("kindraw.publicView.loadingPublicView")}
+        </p>
       </div>
     );
   }
 
   return (
     <div className="kindraw-share-shell">
-      <header className="kindraw-share-shell__header">
+      <header className="kindraw-public-view__header">
         <div>
-          <span className="kindraw-eyebrow">Link publico</span>
+          <span className="kindraw-eyebrow">
+            {t("kindraw.publicView.eyebrow")}
+          </span>
           <h1>{itemResponse.item.title}</h1>
-          <p>Somente leitura</p>
+          <p>{t("kindraw.publicView.description")}</p>
         </div>
-        <a className="kindraw-link-button" href="/">
-          Abrir canvas
-        </a>
       </header>
 
       {itemResponse.item.kind === "doc" ? (
@@ -185,7 +189,7 @@ export const KindrawPublicSharePage = ({
           <MarkdownPreview markdown={itemResponse.content} />
         </section>
       ) : (
-        <section className="kindraw-share-shell__canvas">
+        <section className="kindraw-public-view__canvas">
           <Excalidraw
             initialData={parseDrawingContent(itemResponse.content)}
             UIOptions={{
@@ -198,7 +202,10 @@ export const KindrawPublicSharePage = ({
                 toggleTheme: false,
               },
             }}
+            renderTopLeftUI={() => null}
+            renderTopRightUI={() => null}
             viewModeEnabled={true}
+            zenModeEnabled={true}
           />
         </section>
       )}

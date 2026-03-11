@@ -94,8 +94,11 @@ const ActiveRoomDialog = ({
   return (
     <>
       <h3 className="ShareDialog__active__header">
-        {t("labels.liveCollaboration").replace(/\./g, "")}
+        {t("kindraw.shareDialog.liveCollaborationTitle")}
       </h3>
+      <div className="ShareDialog__picker__description ShareDialog__picker__description--left">
+        {t("kindraw.shareDialog.liveCollaborationDescription")}
+      </div>
       {isGithubIdentity && userProfile ? (
         <div className="ShareDialog__identity">
           <div className="ShareDialog__identity__avatar">
@@ -142,17 +145,8 @@ const ActiveRoomDialog = ({
       </div>
       <QRCode value={activeRoomLink} />
       <div className="ShareDialog__active__description">
-        <p>
-          <span
-            role="img"
-            aria-hidden="true"
-            className="ShareDialog__active__description__emoji"
-          >
-            🔒{" "}
-          </span>
-          {t("roomDialog.desc_privacy")}
-        </p>
-        <p>{t("roomDialog.desc_exitSession")}</p>
+        <p>{t("kindraw.shareDialog.liveCollaborationHelper")}</p>
+        <p>{t("kindraw.shareDialog.publicViewSeparation")}</p>
       </div>
 
       <div className="ShareDialog__active__actions">
@@ -196,7 +190,7 @@ const PublicLinkDialog = ({
     return (
       <>
         <div className="ShareDialog__picker__header">
-          {t("kindraw.shareDialog.publicLinkTitle")}
+          {t("kindraw.shareDialog.publicViewTitle")}
         </div>
         <div className="ShareDialog__picker__description">
           {t("kindraw.shareDialog.publicLinkEmptyDescription")}
@@ -208,7 +202,7 @@ const PublicLinkDialog = ({
   return (
     <>
       <div className="ShareDialog__picker__header">
-        {t("kindraw.shareDialog.publicLinkTitle")}
+        {t("kindraw.shareDialog.publicViewTitle")}
       </div>
       <div className="ShareDialog__picker__description">
         {t("kindraw.shareDialog.publicLinkDescription", {
@@ -262,6 +256,9 @@ const PublicLinkDialog = ({
                     disabled={busy}
                   />
                 </div>
+                <div className="ShareDialog__public__helper">
+                  {t("kindraw.shareDialog.publicViewHelper")}
+                </div>
               </div>
             );
           })()}
@@ -283,12 +280,11 @@ const ShareDialogPicker = (props: ShareDialogProps) => {
   const startCollabJSX = collabAPI ? (
     <>
       <div className="ShareDialog__picker__header">
-        {t("labels.liveCollaboration").replace(/\./g, "")}
+        {t("kindraw.shareDialog.liveCollaborationTitle")}
       </div>
 
-      <div className="ShareDialog__picker__description">
-        <div style={{ marginBottom: "1em" }}>{t("roomDialog.desc_intro")}</div>
-        {t("roomDialog.desc_privacy")}
+      <div className="ShareDialog__picker__description ShareDialog__picker__description--left">
+        {t("kindraw.shareDialog.liveCollaborationDescription")}
       </div>
 
       <div className="ShareDialog__picker__button">

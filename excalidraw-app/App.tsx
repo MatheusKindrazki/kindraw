@@ -16,6 +16,7 @@ import { ErrorDialog } from "@excalidraw/excalidraw/components/ErrorDialog";
 import { OverwriteConfirmDialog } from "@excalidraw/excalidraw/components/OverwriteConfirm/OverwriteConfirm";
 import { openConfirmModal } from "@excalidraw/excalidraw/components/OverwriteConfirm/OverwriteConfirmState";
 import Spinner from "@excalidraw/excalidraw/components/Spinner";
+import { Tooltip } from "@excalidraw/excalidraw/components/Tooltip";
 import { getShortcutKey } from "@excalidraw/excalidraw/shortcut";
 import Trans from "@excalidraw/excalidraw/components/Trans";
 import {
@@ -52,6 +53,7 @@ import {
   LibraryIcon,
   LinkIcon,
   clipboard,
+  eyeIcon,
   usersIcon,
 } from "@excalidraw/excalidraw/components/icons";
 import { isElementLink } from "@excalidraw/element";
@@ -2075,84 +2077,112 @@ const ExcalidrawWrapper = () => {
                 </button>
               )}
               {kindrawIsDrawingRoute && kindrawCurrentItem ? (
-                <button
-                  aria-label={
-                    kindrawHasTopRightPublicLink
-                      ? t("kindraw.actions.copyPublicLink")
-                      : t("kindraw.actions.publicLink")
-                  }
-                  className={`kindraw-top-right-actions__button kindraw-top-right-actions__button--icon${
-                    kindrawHasTopRightPublicLink
-                      ? " kindraw-top-right-actions__button--active"
-                      : ""
-                  }`}
-                  disabled={
-                    kindrawIsSwitchingCanvas || kindrawCreatingPublicLink
-                  }
-                  onClick={() => void handleKindrawPrimaryShareAction()}
-                  title={
+                <Tooltip
+                  label={
                     kindrawHasTopRightPublicLink
                       ? getShortcutTitle(
-                          t("kindraw.actions.copyPublicLink"),
+                          t("kindraw.actions.copyPublicViewLink"),
                           KINDRAW_SHORTCUTS.publicLink.shortcut,
                         )
                       : getShortcutTitle(
-                          t("kindraw.actions.publicLink"),
+                          t("kindraw.actions.createPublicViewLink"),
                           KINDRAW_SHORTCUTS.publicLink.shortcut,
                         )
                   }
-                  type="button"
                 >
-                  {kindrawCreatingPublicLink ? (
-                    <Spinner
-                      className="kindraw-top-right-actions__spinner"
-                      size="1rem"
-                    />
-                  ) : kindrawHasTopRightPublicLink ? (
-                    clipboard
-                  ) : (
-                    LinkIcon
-                  )}
-                </button>
+                  <button
+                    aria-label={
+                      kindrawHasTopRightPublicLink
+                        ? t("kindraw.actions.copyPublicViewLink")
+                        : t("kindraw.actions.createPublicViewLink")
+                    }
+                    className={`kindraw-top-right-actions__button kindraw-top-right-actions__button--icon kindraw-top-right-actions__button--public${
+                      kindrawHasTopRightPublicLink
+                        ? " kindraw-top-right-actions__button--active"
+                        : ""
+                    }`}
+                    disabled={
+                      kindrawIsSwitchingCanvas || kindrawCreatingPublicLink
+                    }
+                    onClick={() => void handleKindrawPrimaryShareAction()}
+                    title={
+                      kindrawHasTopRightPublicLink
+                        ? getShortcutTitle(
+                            t("kindraw.actions.copyPublicViewLink"),
+                            KINDRAW_SHORTCUTS.publicLink.shortcut,
+                          )
+                        : getShortcutTitle(
+                            t("kindraw.actions.createPublicViewLink"),
+                            KINDRAW_SHORTCUTS.publicLink.shortcut,
+                          )
+                    }
+                    type="button"
+                  >
+                    {kindrawCreatingPublicLink ? (
+                      <Spinner
+                        className="kindraw-top-right-actions__spinner"
+                        size="1rem"
+                      />
+                    ) : kindrawHasTopRightPublicLink ? (
+                      clipboard
+                    ) : (
+                      eyeIcon
+                    )}
+                  </button>
+                </Tooltip>
               ) : null}
               {shouldShowKindrawRealtimeAction ? (
-                <button
-                  aria-label={
-                    isCollaborating
-                      ? t("kindraw.actions.manageCollaboration")
-                      : t("kindraw.actions.startCollaboration")
-                  }
-                  className={`kindraw-top-right-actions__button kindraw-top-right-actions__button--icon${
-                    isCollaborating
-                      ? " kindraw-top-right-actions__button--active"
-                      : ""
-                  }`}
-                  disabled={
-                    kindrawIsSwitchingCanvas || kindrawStartingRealtimeCollab
-                  }
-                  onClick={handleRealtimeAction}
-                  title={
+                <Tooltip
+                  label={
                     isCollaborating
                       ? getShortcutTitle(
-                          t("kindraw.actions.manageCollaboration"),
+                          t("kindraw.actions.manageLiveCollaboration"),
                           KINDRAW_SHORTCUTS.collaboration.shortcut,
                         )
                       : getShortcutTitle(
-                          t("kindraw.actions.startCollaboration"),
+                          t("kindraw.actions.startLiveCollaboration"),
                           KINDRAW_SHORTCUTS.collaboration.shortcut,
                         )
                   }
-                  type="button"
                 >
-                  {kindrawStartingRealtimeCollab ? (
-                    <Spinner
-                      className="kindraw-top-right-actions__spinner"
-                      size="1rem"
-                    />
-                  ) : (
-                    usersIcon
-                  )}
-                </button>
+                  <button
+                    aria-label={
+                      isCollaborating
+                        ? t("kindraw.actions.manageLiveCollaboration")
+                        : t("kindraw.actions.startLiveCollaboration")
+                    }
+                    className={`kindraw-top-right-actions__button kindraw-top-right-actions__button--icon kindraw-top-right-actions__button--collaboration${
+                      isCollaborating
+                        ? " kindraw-top-right-actions__button--active"
+                        : ""
+                    }`}
+                    disabled={
+                      kindrawIsSwitchingCanvas || kindrawStartingRealtimeCollab
+                    }
+                    onClick={handleRealtimeAction}
+                    title={
+                      isCollaborating
+                        ? getShortcutTitle(
+                            t("kindraw.actions.manageLiveCollaboration"),
+                            KINDRAW_SHORTCUTS.collaboration.shortcut,
+                          )
+                        : getShortcutTitle(
+                            t("kindraw.actions.startLiveCollaboration"),
+                            KINDRAW_SHORTCUTS.collaboration.shortcut,
+                          )
+                    }
+                    type="button"
+                  >
+                    {kindrawStartingRealtimeCollab ? (
+                      <Spinner
+                        className="kindraw-top-right-actions__spinner"
+                        size="1rem"
+                      />
+                    ) : (
+                      usersIcon
+                    )}
+                  </button>
+                </Tooltip>
               ) : null}
             </div>
           );
