@@ -173,41 +173,64 @@ export const KindrawPublicSharePage = ({
   }
 
   return (
-    <div className="kindraw-share-shell">
-      <header className="kindraw-public-view__header">
-        <div>
-          <span className="kindraw-eyebrow">
-            {t("kindraw.publicView.eyebrow")}
-          </span>
-          <h1>{itemResponse.item.title}</h1>
-          <p>{t("kindraw.publicView.description")}</p>
-        </div>
-      </header>
+    <div
+      className={`kindraw-share-shell${
+        itemResponse.item.kind === "drawing"
+          ? " kindraw-share-shell--public-canvas"
+          : ""
+      }`}
+    >
+      {itemResponse.item.kind === "drawing" ? (
+        <>
+          <header className="kindraw-public-view__header kindraw-public-view__header--overlay">
+            <div>
+              <span className="kindraw-eyebrow">
+                {t("kindraw.publicView.eyebrow")}
+              </span>
+              <h1>{itemResponse.item.title}</h1>
+              <p>{t("kindraw.publicView.description")}</p>
+            </div>
+          </header>
 
-      {itemResponse.item.kind === "doc" ? (
-        <section className="kindraw-share-shell__content">
-          <MarkdownPreview markdown={itemResponse.content} />
-        </section>
+          <section className="kindraw-public-view__canvas">
+            <div className="kindraw-public-view__canvas-backdrop" />
+            <div className="kindraw-public-view__canvas-stage">
+              <Excalidraw
+                initialData={createPublicDrawingInitialData(itemResponse.content)}
+                UIOptions={{
+                  canvasActions: {
+                    clearCanvas: false,
+                    export: false,
+                    loadScene: false,
+                    saveAsImage: false,
+                    saveToActiveFile: false,
+                    toggleTheme: false,
+                  },
+                }}
+                renderTopLeftUI={() => null}
+                renderTopRightUI={() => null}
+                viewModeEnabled={true}
+                zenModeEnabled={true}
+              />
+            </div>
+          </section>
+        </>
       ) : (
-        <section className="kindraw-public-view__canvas">
-          <Excalidraw
-            initialData={createPublicDrawingInitialData(itemResponse.content)}
-            UIOptions={{
-              canvasActions: {
-                clearCanvas: false,
-                export: false,
-                loadScene: false,
-                saveAsImage: false,
-                saveToActiveFile: false,
-                toggleTheme: false,
-              },
-            }}
-            renderTopLeftUI={() => null}
-            renderTopRightUI={() => null}
-            viewModeEnabled={true}
-            zenModeEnabled={true}
-          />
-        </section>
+        <>
+          <header className="kindraw-public-view__header">
+            <div>
+              <span className="kindraw-eyebrow">
+                {t("kindraw.publicView.eyebrow")}
+              </span>
+              <h1>{itemResponse.item.title}</h1>
+              <p>{t("kindraw.publicView.description")}</p>
+            </div>
+          </header>
+
+          <section className="kindraw-share-shell__content">
+            <MarkdownPreview markdown={itemResponse.content} />
+          </section>
+        </>
       )}
     </div>
   );
