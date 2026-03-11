@@ -897,7 +897,14 @@ export const AppSidebar = ({
                             </span>
                           </span>
                           <span className="kindraw-app-sidebar__canvas-copy">
-                            <strong>{item.title}</strong>
+                            <span className="kindraw-app-sidebar__canvas-title-row">
+                              <strong>{item.title}</strong>
+                              {isActive ? (
+                                <span className="kindraw-app-sidebar__canvas-selected-badge">
+                                  {t("stats.selected")}
+                                </span>
+                              ) : null}
+                            </span>
                             <span>{formatCanvasUpdatedAt(item.updatedAt)}</span>
                           </span>
                         </button>
