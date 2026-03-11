@@ -40,6 +40,7 @@ export type KindrawItem = {
   ownerId: string;
   updatedAt: string;
   createdAt: string;
+  archivedAt: string | null;
   shareLinks: KindrawShareLink[];
   collaborationRoomId: string | null;
   collaborationEnabledAt: string | null;
@@ -54,6 +55,12 @@ export type KindrawItemResponse = {
   item: KindrawItem;
   content: string;
   collaborationRoom: KindrawCollaborationRoom | null;
+};
+
+export type KindrawCollaborationBootstrapResponse = {
+  item: Pick<KindrawItem, "id" | "kind" | "title" | "updatedAt" | "createdAt">;
+  content: string;
+  collaborationRoom: KindrawCollaborationRoom;
 };
 
 export type KindrawPublicItemResponse = {

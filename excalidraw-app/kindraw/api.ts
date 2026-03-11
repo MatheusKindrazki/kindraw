@@ -1,4 +1,5 @@
 import type {
+  KindrawCollaborationBootstrapResponse,
   KindrawCollaborationRoom,
   KindrawItemKind,
   KindrawItemResponse,
@@ -104,12 +105,19 @@ export const updateItemMeta = (
   input: {
     title?: string;
     folderId?: string | null;
+    archived?: boolean;
   },
 ) =>
   requestJson<void>(`/api/items/${itemId}/meta`, {
     method: "PATCH",
     body: input,
   });
+
+export const archiveItem = (itemId: string) =>
+  updateItemMeta(itemId, { archived: true });
+
+export const restoreItem = (itemId: string) =>
+  updateItemMeta(itemId, { archived: false });
 
 export const updateItemContent = (itemId: string, content: string) =>
   requestJson<void>(`/api/items/${itemId}/content`, {
@@ -140,6 +148,19 @@ export const enableCollaborationRoom = (itemId: string) =>
   }>(`/api/items/${itemId}/collaboration-room`, {
     method: "POST",
   });
+
+export const getCollaborationRoomBootstrap = (
+  itemId: string,
+  roomKey: string,
+) =>
+  requestJson<KindrawCollaborationBootstrapResponse>(
+    `/api/collaboration-room/${itemId}/bootstrap?key=${encodeURIComponent(
+      roomKey,
+    )}`,
+    {
+      credentials: "omit",
+    },
+  );
 
 export const disableCollaborationRoom = (itemId: string) =>
   requestJson<void>(`/api/items/${itemId}/collaboration-room`, {

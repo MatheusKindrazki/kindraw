@@ -1,44 +1,39 @@
-import { useEffect, useRef, useState } from "react";
+import {
+  type CSSProperties,
+  type FormEvent,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
 import { DefaultSidebar, Sidebar } from "@excalidraw/excalidraw";
-import {
-  actionLoadScene,
-  actionShortcuts,
-} from "@excalidraw/excalidraw/actions";
-import { activeConfirmDialogAtom } from "@excalidraw/excalidraw/components/ActiveConfirmDialog";
+import DropdownMenu from "@excalidraw/excalidraw/components/dropdownMenu/DropdownMenu";
+import { ExcalidrawLogo } from "@excalidraw/excalidraw/components/ExcalidrawLogo";
 import {
   useEditorInterface,
-  useExcalidrawActionManager,
   useExcalidrawSetAppState,
 } from "@excalidraw/excalidraw/components/App";
 import {
-  ExportImageIcon,
+  DotsHorizontalIcon,
   LibraryIcon,
-  LoadIcon,
   PlusIcon,
-  TextIcon,
-  chevronLeftIcon,
+  archiveIcon,
+  checkIcon,
   chevronRight,
+  emptyIcon,
   file,
-  palette,
+  gridIcon,
+  historyIcon,
+  trashIcon,
   usersIcon,
 } from "@excalidraw/excalidraw/components/icons";
 import { useI18n } from "@excalidraw/excalidraw/i18n";
 import { useUIAppState } from "@excalidraw/excalidraw/context/ui-appState";
-import { useSetAtom } from "@excalidraw/excalidraw/editor-jotai";
 
-import { ShareLinksPanel } from "../kindraw/ShareLinksPanel";
-import {
-  buildFolderPath,
-  buildItemPath,
-  navigateKindraw,
-} from "../kindraw/router";
-import {
-  getFolderChildren,
-  getFolderTrail,
-  resolveRouteFolderId,
-} from "../kindraw/tree";
 import { openGithubLogin } from "../kindraw/api";
+import { generateKindrawCanvasTitle } from "../kindraw/naming";
+import { buildItemPath, navigateKindraw } from "../kindraw/router";
 
 import "./AppSidebar.scss";
 
@@ -51,70 +46,71 @@ import type {
   KindrawTreeResponse,
 } from "../kindraw/types";
 
+type CreateTagHandler = (
+  name: string,
+) => Promise<string | null | void> | string | null | void;
+
 type AppSidebarProps = {
   currentDrawingStatus?: string | null;
   currentItem: KindrawItem | null;
   drawingSaveState?: "idle" | "saving" | "error";
   errorMessage?: string | null;
   isMutating?: boolean;
-  onCreateFolder: (
-    parentId: string | null,
-    name: string,
-  ) => Promise<void> | void;
+  onAssignTag: (itemId: string, tagId: string | null) => Promise<void> | void;
+  onArchiveItem: (itemId: string, archived: boolean) => Promise<void> | void;
   onCreateItem: (
     kind: KindrawItemKind,
     folderId: string | null,
     title: string,
   ) => Promise<void> | void;
-  onCreateShareLink: () => Promise<void> | void;
+  onCreateTag: CreateTagHandler;
+  onDeleteItem: (itemId: string) => Promise<void> | void;
   onLogout: () => Promise<void> | void;
-  onRevokeShareLink: (shareLinkId: string) => Promise<void> | void;
   route: KindrawRoute;
   session: KindrawSession | null | undefined;
   tree: KindrawTreeResponse | null;
 };
 
-type ComposerMode = "drawing" | "folder";
+type ComposerMode = "drawing" | "tag";
+type SidebarView = "all" | "recent" | "shared" | "archived";
+
+const TAG_FILTER_ALL = "__all__";
+const TAG_FILTER_UNTAGGED = "__untagged__";
+const RECENT_DRAWINGS_LIMIT = 6;
+const TAG_SWATCHES = [
+  "#5B8DEF",
+  "#F5B53D",
+  "#29C182",
+  "#8B5CF6",
+  "#F472B6",
+  "#14B8A6",
+];
 
 const getComposerDefaults = (
   mode: ComposerMode,
-  currentFolderName: string | null,
+  selectedTagName: string | null,
   translate: ReturnType<typeof useI18n>["t"],
 ) => {
-  if (mode === "folder") {
+  if (mode === "tag") {
     return {
-      label: currentFolderName
-        ? translate("kindraw.sidebar.newFolderInFolderLabel", {
-            name: currentFolderName,
-          })
-        : translate("kindraw.sidebar.newFolderInRootLabel"),
-      helper: currentFolderName
-        ? translate("kindraw.sidebar.newFolderInFolderHelper")
-        : translate("kindraw.sidebar.newFolderInRootHelper"),
-      submitLabel: translate("kindraw.sidebar.createFolderSubmit"),
-      value: translate("kindraw.sidebar.newFolderDefault"),
+      placeholder: translate("kindraw.sidebar.newTagPlaceholder"),
+      submitLabel: translate("kindraw.sidebar.createTagSubmit"),
+      value: "",
     };
   }
 
   return {
-    label: currentFolderName
-      ? translate("kindraw.sidebar.newDrawingInFolderLabel", {
-          name: currentFolderName,
+    placeholder: selectedTagName
+      ? translate("kindraw.sidebar.newCanvasTaggedPlaceholder", {
+          name: selectedTagName,
         })
-      : translate("kindraw.sidebar.newDrawingInRootLabel"),
-    helper: translate("kindraw.sidebar.newDrawingHelper"),
-    submitLabel: translate("kindraw.sidebar.createDrawingSubmit"),
-    value: translate("kindraw.sidebar.newDrawingDefault"),
+      : translate("kindraw.sidebar.newCanvasPlaceholder"),
+    submitLabel: translate("kindraw.sidebar.createCanvasSubmit"),
+    value: generateKindrawCanvasTitle({
+      tagName: selectedTagName,
+    }),
   };
 };
-
-const getItemKindLabel = (
-  kind: KindrawItemKind,
-  translate: ReturnType<typeof useI18n>["t"],
-) =>
-  kind === "drawing"
-    ? translate("kindraw.sidebar.drawingKind")
-    : translate("kindraw.sidebar.docKind");
 
 const getInitials = (name: string) => {
   const tokens = name.trim().split(/\s+/).filter(Boolean);
@@ -124,120 +120,256 @@ const getInitials = (name: string) => {
     .join("");
 };
 
-const EditorActions = () => {
+const formatCanvasUpdatedAt = (updatedAt: string) => {
+  try {
+    return new Intl.DateTimeFormat(undefined, {
+      day: "numeric",
+      month: "short",
+    }).format(new Date(updatedAt));
+  } catch {
+    return updatedAt;
+  }
+};
+
+const hashToken = (token: string) =>
+  [...token].reduce((acc, char) => acc * 33 + char.charCodeAt(0), 17);
+
+const getTagColor = (token: string) =>
+  TAG_SWATCHES[Math.abs(hashToken(token)) % TAG_SWATCHES.length];
+
+const isSharedCanvas = (item: KindrawItem) =>
+  item.shareLinks.some((link) => !link.revokedAt) ||
+  Boolean(item.collaborationRoomId);
+
+const getCanvasSectionLabel = (
+  view: SidebarView,
+  translate: ReturnType<typeof useI18n>["t"],
+) => {
+  switch (view) {
+    case "archived":
+      return translate("kindraw.sidebar.archivedCanvases");
+    case "recent":
+      return translate("kindraw.sidebar.recentDrawings");
+    case "shared":
+      return translate("kindraw.sidebar.sharedCanvases");
+    default:
+      return translate("kindraw.sidebar.allCanvases");
+  }
+};
+
+const getEmptyStateLabel = (
+  view: SidebarView,
+  translate: ReturnType<typeof useI18n>["t"],
+) => {
+  switch (view) {
+    case "archived":
+      return translate("kindraw.sidebar.noArchivedCanvases");
+    case "shared":
+      return translate("kindraw.sidebar.noSharedCanvases");
+    default:
+      return translate("kindraw.sidebar.noCanvases");
+  }
+};
+
+const CanvasTagMenu = ({
+  currentTagId,
+  disabled,
+  itemId,
+  onAssignTag,
+  onCreateTag,
+  tags,
+}: {
+  currentTagId: string | null;
+  disabled?: boolean;
+  itemId: string;
+  onAssignTag: (itemId: string, tagId: string | null) => Promise<void> | void;
+  onCreateTag: CreateTagHandler;
+  tags: KindrawFolder[];
+}) => {
   const { t } = useI18n();
-  const actionManager = useExcalidrawActionManager();
-  const setAppState = useExcalidrawSetAppState();
-  const setActiveConfirmDialog = useSetAtom(activeConfirmDialogAtom);
+  const [isOpen, setIsOpen] = useState(false);
+  const [draft, setDraft] = useState("");
+  const currentTag = tags.find((tag) => tag.id === currentTagId) || null;
+  const currentColor = currentTag ? getTagColor(currentTag.id) : "#C0C7D4";
+  const triggerStyle = {
+    "--kindraw-tag-accent": currentColor,
+  } as CSSProperties;
+
+  useEffect(() => {
+    if (!isOpen) {
+      setDraft("");
+    }
+  }, [isOpen]);
+
+  const assignTag = async (tagId: string | null) => {
+    setIsOpen(false);
+    setDraft("");
+    await onAssignTag(itemId, tagId);
+  };
+
+  const handleCreateTag = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+
+    const value = draft.trim();
+    if (!value) {
+      return;
+    }
+
+    const createdTagId = await onCreateTag(value);
+    if (typeof createdTagId === "string") {
+      await onAssignTag(itemId, createdTagId);
+    }
+
+    setIsOpen(false);
+    setDraft("");
+  };
 
   return (
-    <section className="kindraw-app-sidebar__section">
-      <div className="kindraw-app-sidebar__section-head">
-        <div className="kindraw-app-sidebar__section-title">
-          <span className="kindraw-app-sidebar__section-icon">{palette}</span>
-          <h3>{t("kindraw.sidebar.editor")}</h3>
-        </div>
-      </div>
-
-      <div className="kindraw-app-sidebar__tools-grid">
-        {actionManager.isActionEnabled(actionLoadScene) ? (
-          <button
-            className="kindraw-app-sidebar__tool-button"
-            onClick={() => actionManager.executeAction(actionLoadScene)}
-            type="button"
-          >
-            <span className="kindraw-app-sidebar__tool-icon">{LoadIcon}</span>
-            <span>{t("kindraw.actions.importFile")}</span>
-          </button>
-        ) : null}
-
-        <button
-          className="kindraw-app-sidebar__tool-button"
-          onClick={() => setAppState({ openDialog: { name: "imageExport" } })}
-          type="button"
-        >
-          <span className="kindraw-app-sidebar__tool-icon">
-            {ExportImageIcon}
-          </span>
-          <span>{t("kindraw.actions.exportImage")}</span>
-        </button>
-
-        <button
-          className="kindraw-app-sidebar__tool-button"
-          onClick={() =>
-            setAppState({ openDialog: { name: "commandPalette" } })
-          }
-          type="button"
-        >
-          <span className="kindraw-app-sidebar__tool-icon">{palette}</span>
-          <span>{t("kindraw.actions.commands")}</span>
-        </button>
-
-        <button
-          className="kindraw-app-sidebar__tool-button"
-          onClick={() => actionManager.executeAction(actionShortcuts)}
-          type="button"
-        >
-          <span className="kindraw-app-sidebar__tool-icon">{usersIcon}</span>
-          <span>{t("kindraw.actions.shortcuts")}</span>
-        </button>
-      </div>
-
-      <button
-        className="kindraw-app-sidebar__link kindraw-app-sidebar__link--muted"
-        onClick={() => setActiveConfirmDialog("clearCanvas")}
-        type="button"
+    <DropdownMenu open={isOpen}>
+      <DropdownMenu.Trigger
+        aria-label={t("kindraw.sidebar.tagMenuAria")}
+        className="kindraw-app-sidebar__tag-dropdown-trigger"
+        data-open={isOpen ? "true" : "false"}
+        disabled={disabled}
+        onToggle={() => setIsOpen((current) => !current)}
       >
-        {t("kindraw.actions.clearCanvas")}
-      </button>
-    </section>
+        <span
+          className={`kindraw-app-sidebar__tag-pill${
+            currentTag ? "" : " kindraw-app-sidebar__tag-pill--muted"
+          }`}
+          style={triggerStyle}
+        >
+          <span className="kindraw-app-sidebar__tag-pill-dot" />
+          <span className="kindraw-app-sidebar__tag-pill-label">
+            {currentTag?.name || t("kindraw.sidebar.noTag")}
+          </span>
+        </span>
+        <span className="kindraw-app-sidebar__tag-dropdown-caret">
+          {chevronRight}
+        </span>
+      </DropdownMenu.Trigger>
+
+      <DropdownMenu.Content
+        align="end"
+        className="kindraw-app-sidebar__tag-dropdown"
+        onClickOutside={() => setIsOpen(false)}
+      >
+        <DropdownMenu.Item
+          icon={!currentTagId ? checkIcon : emptyIcon}
+          onSelect={() => {
+            void assignTag(null);
+          }}
+          selected={!currentTagId}
+        >
+          {t("kindraw.sidebar.noTag")}
+        </DropdownMenu.Item>
+
+        {tags.length ? <DropdownMenu.Separator /> : null}
+
+        {tags.map((tag) => (
+          <DropdownMenu.Item
+            icon={tag.id === currentTagId ? checkIcon : emptyIcon}
+            key={tag.id}
+            onSelect={() => {
+              void assignTag(tag.id);
+            }}
+            selected={tag.id === currentTagId}
+          >
+            {tag.name}
+          </DropdownMenu.Item>
+        ))}
+
+        <DropdownMenu.Separator />
+        <DropdownMenu.ItemCustom
+          className="kindraw-app-sidebar__tag-dropdown-custom"
+          onClick={(event) => event.stopPropagation()}
+        >
+          <form
+            className="kindraw-app-sidebar__tag-dropdown-form"
+            onSubmit={(event) => {
+              void handleCreateTag(event);
+            }}
+          >
+            <input
+              aria-label={t("kindraw.sidebar.newTagLabel")}
+              className="kindraw-app-sidebar__tag-dropdown-input"
+              disabled={disabled}
+              onChange={(event) => setDraft(event.target.value)}
+              onClick={(event) => event.stopPropagation()}
+              placeholder={t("kindraw.sidebar.newTagPlaceholder")}
+              type="text"
+              value={draft}
+            />
+            <button
+              className="kindraw-app-sidebar__mini-action kindraw-app-sidebar__mini-action--solid"
+              disabled={disabled || !draft.trim()}
+              type="submit"
+            >
+              {PlusIcon}
+            </button>
+          </form>
+        </DropdownMenu.ItemCustom>
+      </DropdownMenu.Content>
+    </DropdownMenu>
   );
 };
 
-const FolderTree = ({
-  currentFolderId,
-  folders,
-  parentId,
+const CanvasActionsMenu = ({
+  disabled,
+  item,
+  onArchiveItem,
+  onDeleteItem,
 }: {
-  currentFolderId: string | null;
-  folders: KindrawFolder[];
-  parentId: string | null;
+  disabled?: boolean;
+  item: KindrawItem;
+  onArchiveItem: (itemId: string, archived: boolean) => Promise<void> | void;
+  onDeleteItem: (itemId: string) => Promise<void> | void;
 }) => {
-  const children = getFolderChildren(folders, parentId);
-  if (!children.length) {
-    return null;
-  }
+  const { t } = useI18n();
+  const [isOpen, setIsOpen] = useState(false);
 
   return (
-    <ul className="kindraw-app-sidebar__tree">
-      {children.map((folder) => (
-        <li className="kindraw-app-sidebar__tree-node" key={folder.id}>
-          <button
-            className={`kindraw-app-sidebar__tree-button${
-              currentFolderId === folder.id
-                ? " kindraw-app-sidebar__tree-button--active"
-                : ""
-            }`}
-            onClick={() => navigateKindraw(buildFolderPath(folder.id))}
-            type="button"
-          >
-            <span className="kindraw-app-sidebar__tree-entry">
-              <span className="kindraw-app-sidebar__tree-icon">
-                {LibraryIcon}
-              </span>
-              <span className="kindraw-app-sidebar__tree-label">
-                {folder.name}
-              </span>
-            </span>
-          </button>
-          <FolderTree
-            currentFolderId={currentFolderId}
-            folders={folders}
-            parentId={folder.id}
-          />
-        </li>
-      ))}
-    </ul>
+    <DropdownMenu open={isOpen}>
+      <DropdownMenu.Trigger
+        aria-label={t("kindraw.sidebar.canvasActionsAria")}
+        className="kindraw-app-sidebar__canvas-actions-trigger"
+        data-open={isOpen ? "true" : "false"}
+        disabled={disabled}
+        onToggle={() => setIsOpen((current) => !current)}
+      >
+        {DotsHorizontalIcon}
+      </DropdownMenu.Trigger>
+
+      <DropdownMenu.Content
+        align="end"
+        className="kindraw-app-sidebar__canvas-actions-dropdown"
+        onClickOutside={() => setIsOpen(false)}
+      >
+        <DropdownMenu.Item
+          icon={item.archivedAt ? historyIcon : archiveIcon}
+          onSelect={() => {
+            setIsOpen(false);
+            void onArchiveItem(item.id, !item.archivedAt);
+          }}
+        >
+          {item.archivedAt
+            ? t("kindraw.sidebar.restoreCanvasAction")
+            : t("kindraw.sidebar.archiveCanvasAction")}
+        </DropdownMenu.Item>
+        <DropdownMenu.Separator />
+        <DropdownMenu.Item
+          className="kindraw-app-sidebar__canvas-actions-item--danger"
+          icon={trashIcon}
+          onSelect={() => {
+            setIsOpen(false);
+            void onDeleteItem(item.id);
+          }}
+        >
+          {t("kindraw.sidebar.deleteCanvasAction")}
+        </DropdownMenu.Item>
+      </DropdownMenu.Content>
+    </DropdownMenu>
   );
 };
 
@@ -247,11 +379,12 @@ export const AppSidebar = ({
   drawingSaveState,
   errorMessage,
   isMutating,
-  onCreateFolder,
+  onAssignTag,
+  onArchiveItem,
   onCreateItem,
-  onCreateShareLink,
+  onCreateTag,
+  onDeleteItem,
   onLogout,
-  onRevokeShareLink,
   route,
   session,
   tree,
@@ -264,12 +397,82 @@ export const AppSidebar = ({
   const composerInputRef = useRef<HTMLInputElement>(null);
   const [composerMode, setComposerMode] = useState<ComposerMode | null>(null);
   const [composerValue, setComposerValue] = useState("");
+  const [selectedTagFilter, setSelectedTagFilter] =
+    useState<string>(TAG_FILTER_ALL);
+  const [selectedView, setSelectedView] = useState<SidebarView>("all");
 
-  const currentFolderId = tree
-    ? resolveRouteFolderId(route, currentItem)
-    : null;
-  const currentFolder =
-    tree?.folders.find((folder) => folder.id === currentFolderId) || null;
+  const tags = useMemo(
+    () =>
+      [...(tree?.folders || [])].sort((a, b) => a.name.localeCompare(b.name)),
+    [tree?.folders],
+  );
+
+  const selectedTag =
+    selectedTagFilter !== TAG_FILTER_ALL &&
+    selectedTagFilter !== TAG_FILTER_UNTAGGED
+      ? tags.find((tag) => tag.id === selectedTagFilter) || null
+      : null;
+
+  const orderedCanvases = useMemo(() => {
+    if (!tree) {
+      return [];
+    }
+
+    return tree.items
+      .filter((item) => item.kind === "drawing")
+      .sort((a, b) => {
+        if (a.id === currentItem?.id) {
+          return -1;
+        }
+        if (b.id === currentItem?.id) {
+          return 1;
+        }
+
+        const byUpdatedAt =
+          new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
+
+        if (byUpdatedAt !== 0) {
+          return byUpdatedAt;
+        }
+
+        return a.title.localeCompare(b.title);
+      });
+  }, [currentItem?.id, tree]);
+
+  const sharedCount = useMemo(
+    () =>
+      orderedCanvases.filter((item) => !item.archivedAt && isSharedCanvas(item))
+        .length,
+    [orderedCanvases],
+  );
+
+  const archivedCount = useMemo(
+    () => orderedCanvases.filter((item) => Boolean(item.archivedAt)).length,
+    [orderedCanvases],
+  );
+
+  const visibleCanvases = useMemo(() => {
+    let canvases =
+      selectedView === "archived"
+        ? orderedCanvases.filter((item) => Boolean(item.archivedAt))
+        : orderedCanvases.filter((item) => !item.archivedAt);
+
+    if (selectedView === "recent") {
+      canvases = canvases.slice(0, RECENT_DRAWINGS_LIMIT);
+    } else if (selectedView === "shared") {
+      canvases = canvases.filter(isSharedCanvas);
+    }
+
+    if (selectedTagFilter === TAG_FILTER_UNTAGGED) {
+      return canvases.filter((item) => !item.folderId);
+    }
+
+    if (selectedTagFilter !== TAG_FILTER_ALL) {
+      return canvases.filter((item) => item.folderId === selectedTagFilter);
+    }
+
+    return canvases;
+  }, [orderedCanvases, selectedTagFilter, selectedView]);
 
   useEffect(() => {
     if (
@@ -315,11 +518,21 @@ export const AppSidebar = ({
   useEffect(() => {
     setComposerMode(null);
     setComposerValue("");
-  }, [currentFolderId]);
+  }, [selectedTagFilter, selectedView]);
+
+  useEffect(() => {
+    if (
+      selectedTagFilter !== TAG_FILTER_ALL &&
+      selectedTagFilter !== TAG_FILTER_UNTAGGED &&
+      !tags.some((tag) => tag.id === selectedTagFilter)
+    ) {
+      setSelectedTagFilter(TAG_FILTER_ALL);
+    }
+  }, [selectedTagFilter, tags]);
 
   const openComposer = (mode: ComposerMode) => {
-    const defaults = getComposerDefaults(mode, currentFolder?.name || null, t);
-    setComposerMode(mode);
+    const defaults = getComposerDefaults(mode, selectedTag?.name || null, t);
+    setComposerMode((current) => (current === mode ? null : mode));
     setComposerValue(defaults.value);
   };
 
@@ -327,6 +540,38 @@ export const AppSidebar = ({
     setComposerMode(null);
     setComposerValue("");
   };
+
+  const composerConfig = composerMode
+    ? getComposerDefaults(composerMode, selectedTag?.name || null, t)
+    : null;
+  const canvasSectionLabel = getCanvasSectionLabel(selectedView, t);
+  const emptyStateLabel = getEmptyStateLabel(selectedView, t);
+  const menuItems = [
+    {
+      id: "all" as const,
+      icon: gridIcon,
+      label: t("kindraw.sidebar.allCanvases"),
+      count: orderedCanvases.length,
+    },
+    {
+      id: "recent" as const,
+      icon: historyIcon,
+      label: t("kindraw.sidebar.recent"),
+      count: Math.min(orderedCanvases.length, RECENT_DRAWINGS_LIMIT),
+    },
+    {
+      id: "shared" as const,
+      icon: usersIcon,
+      label: t("kindraw.sidebar.shared"),
+      count: sharedCount,
+    },
+    {
+      id: "archived" as const,
+      icon: archiveIcon,
+      label: t("kindraw.sidebar.archived"),
+      count: archivedCount,
+    },
+  ];
 
   return (
     <>
@@ -337,428 +582,384 @@ export const AppSidebar = ({
         name="kindraw"
       >
         <Sidebar.Header className="kindraw-app-sidebar__shell-header">
-          <strong className="kindraw-app-sidebar__shell-title">Kindraw</strong>
+          <div className="kindraw-app-sidebar__brand">
+            <ExcalidrawLogo size="xs" withText />
+          </div>
         </Sidebar.Header>
 
         {typeof session === "undefined" ? (
           <div className="kindraw-app-sidebar__panel">
-            <p>{t("kindraw.sidebar.loadingWorkspace")}</p>
+            <p className="kindraw-app-sidebar__empty">
+              {t("kindraw.sidebar.loadingWorkspace")}
+            </p>
           </div>
         ) : !session ? (
           <div className="kindraw-app-sidebar__panel">
-            <section className="kindraw-app-sidebar__overview">
-              <div className="kindraw-app-sidebar__overview-icon">
+            <section className="kindraw-app-sidebar__guest-card">
+              <div className="kindraw-app-sidebar__guest-mark">
                 {LibraryIcon}
               </div>
-              <div className="kindraw-app-sidebar__overview-copy">
-                <span className="kindraw-app-sidebar__eyebrow">
+              <div className="kindraw-app-sidebar__guest-copy">
+                <span className="kindraw-app-sidebar__section-label">
                   {t("kindraw.sidebar.workspace")}
                 </span>
                 <h2>{t("kindraw.sidebar.guestTitle")}</h2>
                 <p>{t("kindraw.sidebar.guestDescription")}</p>
               </div>
+              <button
+                className="kindraw-app-sidebar__primary-button"
+                onClick={openGithubLogin}
+                type="button"
+              >
+                {t("kindraw.actions.signInWithGitHub")}
+              </button>
             </section>
-            <button
-              className="kindraw-app-sidebar__button kindraw-app-sidebar__button--primary"
-              onClick={openGithubLogin}
-              type="button"
-            >
-              {t("kindraw.actions.signInWithGitHub")}
-            </button>
           </div>
         ) : !tree ? (
           <div className="kindraw-app-sidebar__panel">
-            <p>{t("kindraw.sidebar.loadingWorkspaceTree")}</p>
+            <p className="kindraw-app-sidebar__empty">
+              {t("kindraw.sidebar.loadingWorkspaceTree")}
+            </p>
           </div>
         ) : (
-          (() => {
-            const folderTrail = getFolderTrail(tree.folders, currentFolderId);
-            const visibleItems = tree.items
-              .filter((item) => item.folderId === currentFolderId)
-              .sort((a, b) => {
-                if (a.kind !== b.kind) {
-                  return a.kind === "drawing" ? -1 : 1;
-                }
-                return a.title.localeCompare(b.title);
-              });
-            const composerConfig = composerMode
-              ? getComposerDefaults(
-                  composerMode,
-                  currentFolder?.name || null,
-                  t,
-                )
-              : null;
+          <div className="kindraw-app-sidebar__panel">
+            <header className="kindraw-app-sidebar__profile">
+              <div className="kindraw-app-sidebar__profile-main">
+                <div className="kindraw-app-sidebar__avatar">
+                  {session.user.avatarUrl ? (
+                    <img alt={session.user.name} src={session.user.avatarUrl} />
+                  ) : (
+                    <span>{getInitials(session.user.name)}</span>
+                  )}
+                </div>
+                <div className="kindraw-app-sidebar__profile-copy">
+                  <strong>{session.user.name}</strong>
+                  <span>@{session.user.githubLogin}</span>
+                </div>
+              </div>
+              <button
+                className="kindraw-app-sidebar__text-link"
+                disabled={isMutating}
+                onClick={() => void onLogout()}
+                type="button"
+              >
+                {t("kindraw.actions.signOut")}
+              </button>
+            </header>
 
-            return (
-              <div className="kindraw-app-sidebar__panel">
-                <header className="kindraw-app-sidebar__profile">
-                  <div className="kindraw-app-sidebar__profile-main">
-                    <div className="kindraw-app-sidebar__avatar">
-                      {session.user.avatarUrl ? (
-                        <img
-                          alt={session.user.name}
-                          src={session.user.avatarUrl}
-                        />
-                      ) : (
-                        <span>{getInitials(session.user.name)}</span>
-                      )}
-                    </div>
-                    <div className="kindraw-app-sidebar__profile-copy">
-                      <strong>{session.user.name}</strong>
-                      <span>@{session.user.githubLogin}</span>
-                    </div>
-                  </div>
-                  <button
-                    className="kindraw-app-sidebar__link"
+            <section className="kindraw-app-sidebar__cta-section">
+              <button
+                className="kindraw-app-sidebar__primary-button"
+                disabled={isMutating}
+                onClick={() => openComposer("drawing")}
+                type="button"
+              >
+                <span className="kindraw-app-sidebar__primary-button-icon">
+                  {PlusIcon}
+                </span>
+                <span>{t("kindraw.sidebar.newCanvasAction")}</span>
+              </button>
+
+              {composerMode === "drawing" && composerConfig ? (
+                <form
+                  className="kindraw-app-sidebar__inline-composer"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    const value = composerValue.trim();
+                    if (!value) {
+                      return;
+                    }
+
+                    void Promise.resolve(
+                      onCreateItem("drawing", selectedTag?.id || null, value),
+                    ).then(closeComposer);
+                  }}
+                >
+                  <input
+                    className="kindraw-app-sidebar__inline-input"
                     disabled={isMutating}
-                    onClick={() => void onLogout()}
+                    onChange={(event) => setComposerValue(event.target.value)}
+                    placeholder={composerConfig.placeholder}
+                    ref={composerInputRef}
+                    type="text"
+                    value={composerValue}
+                  />
+                  <div className="kindraw-app-sidebar__inline-actions">
+                    <button
+                      className="kindraw-app-sidebar__mini-action kindraw-app-sidebar__mini-action--solid"
+                      disabled={isMutating || !composerValue.trim()}
+                      type="submit"
+                    >
+                      {composerConfig.submitLabel}
+                    </button>
+                    <button
+                      className="kindraw-app-sidebar__mini-action"
+                      onClick={closeComposer}
+                      type="button"
+                    >
+                      {t("buttons.cancel")}
+                    </button>
+                  </div>
+                </form>
+              ) : null}
+            </section>
+
+            <section className="kindraw-app-sidebar__section">
+              <div className="kindraw-app-sidebar__section-header">
+                <span className="kindraw-app-sidebar__section-label">
+                  {t("kindraw.sidebar.mainMenu")}
+                </span>
+              </div>
+
+              <nav className="kindraw-app-sidebar__menu-list">
+                {menuItems.map((item) => (
+                  <button
+                    className={`kindraw-app-sidebar__menu-item${
+                      selectedView === item.id
+                        ? " kindraw-app-sidebar__menu-item--active"
+                        : ""
+                    }`}
+                    key={item.id}
+                    onClick={() => setSelectedView(item.id)}
                     type="button"
                   >
-                    {t("kindraw.actions.signOut")}
-                  </button>
-                </header>
-
-                <section className="kindraw-app-sidebar__overview">
-                  <div className="kindraw-app-sidebar__overview-icon">
-                    {LibraryIcon}
-                  </div>
-                  <div className="kindraw-app-sidebar__overview-copy">
-                    <span className="kindraw-app-sidebar__eyebrow">
-                      {currentFolder
-                        ? t("kindraw.sidebar.currentFolder")
-                        : t("kindraw.sidebar.workspaceRoot")}
+                    <span className="kindraw-app-sidebar__menu-item-copy">
+                      <span className="kindraw-app-sidebar__menu-icon">
+                        {item.icon}
+                      </span>
+                      <span>{item.label}</span>
                     </span>
-                    <h2>
-                      {currentFolder?.name ||
-                        t("kindraw.sidebar.workspaceTitle")}
-                    </h2>
-                    <p>
-                      {currentFolder
-                        ? t("kindraw.sidebar.currentFolderDescription")
-                        : t("kindraw.sidebar.workspaceDescription")}
-                    </p>
-                  </div>
-                </section>
+                    <span className="kindraw-app-sidebar__menu-count">
+                      {item.count}
+                    </span>
+                  </button>
+                ))}
+              </nav>
+            </section>
 
-                {route.kind === "drawing" && currentItem ? (
-                  <section className="kindraw-app-sidebar__section kindraw-app-sidebar__section--current">
-                    <div className="kindraw-app-sidebar__section-head kindraw-app-sidebar__section-head--stacked">
-                      <div className="kindraw-app-sidebar__section-title">
-                        <span className="kindraw-app-sidebar__section-icon">
-                          {file}
-                        </span>
-                        <div>
-                          <span className="kindraw-app-sidebar__eyebrow">
-                            {t("kindraw.sidebar.openFile")}
-                          </span>
-                          <h3>{currentItem.title}</h3>
-                        </div>
-                      </div>
-                      {currentDrawingStatus ? (
-                        <span
-                          className={`kindraw-app-sidebar__status kindraw-app-sidebar__status--${
-                            drawingSaveState || "idle"
-                          }`}
-                        >
-                          {currentDrawingStatus}
-                        </span>
-                      ) : null}
-                    </div>
-                    <p className="kindraw-app-sidebar__helper">
-                      {t("kindraw.sidebar.openFileDescription")}
-                    </p>
+            <section className="kindraw-app-sidebar__section">
+              <div className="kindraw-app-sidebar__section-header">
+                <span className="kindraw-app-sidebar__section-label">
+                  {t("kindraw.sidebar.tags")}
+                </span>
+                <button
+                  className="kindraw-app-sidebar__section-action"
+                  disabled={isMutating}
+                  onClick={() => openComposer("tag")}
+                  type="button"
+                >
+                  {PlusIcon}
+                  <span>{t("kindraw.sidebar.createTagAction")}</span>
+                </button>
+              </div>
+
+              {composerMode === "tag" && composerConfig ? (
+                <form
+                  className="kindraw-app-sidebar__inline-composer kindraw-app-sidebar__inline-composer--compact"
+                  onSubmit={async (event) => {
+                    event.preventDefault();
+                    const value = composerValue.trim();
+                    if (!value) {
+                      return;
+                    }
+
+                    const createdTagId = await onCreateTag(value);
+                    if (typeof createdTagId === "string") {
+                      setSelectedTagFilter(createdTagId);
+                    }
+                    closeComposer();
+                  }}
+                >
+                  <input
+                    className="kindraw-app-sidebar__inline-input"
+                    disabled={isMutating}
+                    onChange={(event) => setComposerValue(event.target.value)}
+                    placeholder={composerConfig.placeholder}
+                    ref={composerInputRef}
+                    type="text"
+                    value={composerValue}
+                  />
+                  <div className="kindraw-app-sidebar__inline-actions">
                     <button
-                      className="kindraw-app-sidebar__back-button"
-                      onClick={() =>
-                        navigateKindraw(buildFolderPath(currentItem.folderId))
+                      className="kindraw-app-sidebar__mini-action kindraw-app-sidebar__mini-action--solid"
+                      disabled={isMutating || !composerValue.trim()}
+                      type="submit"
+                    >
+                      {composerConfig.submitLabel}
+                    </button>
+                  </div>
+                </form>
+              ) : null}
+
+              <div className="kindraw-app-sidebar__tag-list">
+                <button
+                  className={`kindraw-app-sidebar__tag-filter${
+                    selectedTagFilter === TAG_FILTER_ALL
+                      ? " kindraw-app-sidebar__tag-filter--active"
+                      : ""
+                  }`}
+                  onClick={() => setSelectedTagFilter(TAG_FILTER_ALL)}
+                  type="button"
+                >
+                  <span className="kindraw-app-sidebar__tag-filter-label">
+                    {t("kindraw.sidebar.tagFilterAll")}
+                  </span>
+                </button>
+
+                <button
+                  className={`kindraw-app-sidebar__tag-filter${
+                    selectedTagFilter === TAG_FILTER_UNTAGGED
+                      ? " kindraw-app-sidebar__tag-filter--active"
+                      : ""
+                  }`}
+                  onClick={() => setSelectedTagFilter(TAG_FILTER_UNTAGGED)}
+                  type="button"
+                >
+                  <span className="kindraw-app-sidebar__tag-filter-dot kindraw-app-sidebar__tag-filter-dot--neutral" />
+                  <span className="kindraw-app-sidebar__tag-filter-label">
+                    {t("kindraw.sidebar.tagFilterUntagged")}
+                  </span>
+                </button>
+
+                {tags.map((tag) => {
+                  const swatch = getTagColor(tag.id);
+                  return (
+                    <button
+                      className={`kindraw-app-sidebar__tag-filter${
+                        selectedTagFilter === tag.id
+                          ? " kindraw-app-sidebar__tag-filter--active"
+                          : ""
+                      }`}
+                      key={tag.id}
+                      onClick={() => setSelectedTagFilter(tag.id)}
+                      style={
+                        {
+                          "--kindraw-tag-accent": swatch,
+                        } as CSSProperties
                       }
                       type="button"
                     >
-                      {chevronLeftIcon}
-                      <span>
-                        {t("kindraw.actions.backToWorkspace", {
-                          name:
-                            currentFolder?.name ||
-                            t("kindraw.sidebar.workspaceRoot").toLowerCase(),
-                        })}
+                      <span className="kindraw-app-sidebar__tag-filter-dot" />
+                      <span className="kindraw-app-sidebar__tag-filter-label">
+                        {tag.name}
                       </span>
                     </button>
-                    <ShareLinksPanel
-                      busy={isMutating || drawingSaveState === "saving"}
-                      onCreateShareLink={onCreateShareLink}
-                      onRevokeShareLink={onRevokeShareLink}
-                      shareLinks={currentItem.shareLinks}
-                    />
-                  </section>
-                ) : null}
+                  );
+                })}
+              </div>
+            </section>
 
-                <div className="kindraw-app-sidebar__breadcrumbs">
-                  <button
-                    className={`kindraw-app-sidebar__breadcrumb${
-                      !currentFolderId
-                        ? " kindraw-app-sidebar__breadcrumb--active"
-                        : ""
-                    }`}
-                    onClick={() => navigateKindraw("/")}
-                    type="button"
-                  >
-                    {t("kindraw.sidebar.root")}
-                  </button>
-                  {folderTrail.map((folder) => (
-                    <div
-                      className="kindraw-app-sidebar__breadcrumb-group"
-                      key={folder.id}
-                    >
-                      <span className="kindraw-app-sidebar__breadcrumb-separator">
-                        {chevronRight}
-                      </span>
-                      <button
-                        className={`kindraw-app-sidebar__breadcrumb${
-                          currentFolderId === folder.id
-                            ? " kindraw-app-sidebar__breadcrumb--active"
+            <section className="kindraw-app-sidebar__section kindraw-app-sidebar__section--cards">
+              <div className="kindraw-app-sidebar__section-header">
+                <span className="kindraw-app-sidebar__section-label">
+                  {canvasSectionLabel}
+                </span>
+                <span className="kindraw-app-sidebar__section-count">
+                  {visibleCanvases.length}
+                </span>
+              </div>
+
+              {visibleCanvases.length ? (
+                <ul className="kindraw-app-sidebar__canvas-list">
+                  {visibleCanvases.map((item) => {
+                    const isActive = currentItem?.id === item.id;
+                    const tagColor = item.folderId
+                      ? getTagColor(item.folderId)
+                      : "#C8D1DE";
+                    const showPublic = item.shareLinks.some(
+                      (link) => !link.revokedAt,
+                    );
+                    const showLive = Boolean(item.collaborationRoomId);
+
+                    return (
+                      <li
+                        className={`kindraw-app-sidebar__canvas-card${
+                          isActive
+                            ? " kindraw-app-sidebar__canvas-card--active"
                             : ""
                         }`}
-                        onClick={() =>
-                          navigateKindraw(buildFolderPath(folder.id))
+                        key={item.id}
+                        style={
+                          {
+                            "--kindraw-card-accent": tagColor,
+                          } as CSSProperties
                         }
-                        type="button"
                       >
-                        {folder.name}
-                      </button>
-                    </div>
-                  ))}
-                </div>
-
-                <section className="kindraw-app-sidebar__section">
-                  <div className="kindraw-app-sidebar__section-head">
-                    <div className="kindraw-app-sidebar__section-title">
-                      <span className="kindraw-app-sidebar__section-icon">
-                        {LibraryIcon}
-                      </span>
-                      <h3>{t("kindraw.sidebar.folders")}</h3>
-                    </div>
-                    <div className="kindraw-app-sidebar__section-meta">
-                      <span className="kindraw-app-sidebar__section-count">
-                        {tree.folders.length}
-                      </span>
-                      <button
-                        aria-label={
-                          currentFolder
-                            ? t("kindraw.sidebar.createSubfolderAria", {
-                                name: currentFolder.name,
-                              })
-                            : t("kindraw.sidebar.createFolderAria")
-                        }
-                        className="kindraw-app-sidebar__section-action"
-                        disabled={isMutating}
-                        onClick={() => openComposer("folder")}
-                        type="button"
-                      >
-                        {PlusIcon}
-                      </button>
-                    </div>
-                  </div>
-
-                  {composerMode === "folder" && composerConfig ? (
-                    <form
-                      className="kindraw-app-sidebar__composer"
-                      onSubmit={(event) => {
-                        event.preventDefault();
-                        const value = composerValue.trim();
-                        if (!value) {
-                          return;
-                        }
-
-                        void Promise.resolve(
-                          onCreateFolder(currentFolderId, value),
-                        ).then(closeComposer);
-                      }}
-                    >
-                      <label className="kindraw-app-sidebar__field">
-                        <span>{composerConfig.label}</span>
-                        <input
-                          className="kindraw-app-sidebar__input"
-                          disabled={isMutating}
-                          onChange={(event) =>
-                            setComposerValue(event.target.value)
-                          }
-                          ref={composerInputRef}
-                          type="text"
-                          value={composerValue}
-                        />
-                      </label>
-                      <p className="kindraw-app-sidebar__helper">
-                        {composerConfig.helper}
-                      </p>
-                      <div className="kindraw-app-sidebar__composer-actions">
                         <button
-                          className="kindraw-app-sidebar__button kindraw-app-sidebar__button--primary"
-                          disabled={isMutating || !composerValue.trim()}
-                          type="submit"
-                        >
-                          {composerConfig.submitLabel}
-                        </button>
-                        <button
-                          className="kindraw-app-sidebar__button kindraw-app-sidebar__button--ghost"
-                          onClick={closeComposer}
+                          className="kindraw-app-sidebar__canvas-link"
+                          onClick={() => navigateKindraw(buildItemPath(item))}
                           type="button"
                         >
-                          {t("buttons.cancel")}
-                        </button>
-                      </div>
-                    </form>
-                  ) : null}
-
-                  <button
-                    className={`kindraw-app-sidebar__tree-button${
-                      route.kind === "workspace" && route.folderId === null
-                        ? " kindraw-app-sidebar__tree-button--active"
-                        : ""
-                    }`}
-                    onClick={() => navigateKindraw("/")}
-                    type="button"
-                  >
-                    <span className="kindraw-app-sidebar__tree-entry">
-                      <span className="kindraw-app-sidebar__tree-icon">
-                        {LibraryIcon}
-                      </span>
-                      <span className="kindraw-app-sidebar__tree-label">
-                        {t("kindraw.sidebar.library")}
-                      </span>
-                    </span>
-                  </button>
-
-                  <FolderTree
-                    currentFolderId={currentFolderId}
-                    folders={tree.folders}
-                    parentId={null}
-                  />
-                </section>
-
-                <section className="kindraw-app-sidebar__section">
-                  <div className="kindraw-app-sidebar__section-head">
-                    <div className="kindraw-app-sidebar__section-title">
-                      <span className="kindraw-app-sidebar__section-icon">
-                        {file}
-                      </span>
-                      <h3>{t("kindraw.sidebar.files")}</h3>
-                    </div>
-                    <div className="kindraw-app-sidebar__section-meta">
-                      <span className="kindraw-app-sidebar__section-count">
-                        {visibleItems.length}
-                      </span>
-                      <button
-                        aria-label={
-                          currentFolder
-                            ? t("kindraw.sidebar.createDrawingInFolderAria", {
-                                name: currentFolder.name,
-                              })
-                            : t("kindraw.sidebar.createDrawingAria")
-                        }
-                        className="kindraw-app-sidebar__section-action"
-                        disabled={isMutating}
-                        onClick={() => openComposer("drawing")}
-                        type="button"
-                      >
-                        {PlusIcon}
-                      </button>
-                    </div>
-                  </div>
-
-                  {composerMode === "drawing" && composerConfig ? (
-                    <form
-                      className="kindraw-app-sidebar__composer"
-                      onSubmit={(event) => {
-                        event.preventDefault();
-                        const value = composerValue.trim();
-                        if (!value) {
-                          return;
-                        }
-
-                        void Promise.resolve(
-                          onCreateItem("drawing", currentFolderId, value),
-                        ).then(closeComposer);
-                      }}
-                    >
-                      <label className="kindraw-app-sidebar__field">
-                        <span>{composerConfig.label}</span>
-                        <input
-                          className="kindraw-app-sidebar__input"
-                          disabled={isMutating}
-                          onChange={(event) =>
-                            setComposerValue(event.target.value)
-                          }
-                          ref={composerInputRef}
-                          type="text"
-                          value={composerValue}
-                        />
-                      </label>
-                      <p className="kindraw-app-sidebar__helper">
-                        {composerConfig.helper}
-                      </p>
-                      <div className="kindraw-app-sidebar__composer-actions">
-                        <button
-                          className="kindraw-app-sidebar__button kindraw-app-sidebar__button--primary"
-                          disabled={isMutating || !composerValue.trim()}
-                          type="submit"
-                        >
-                          {composerConfig.submitLabel}
-                        </button>
-                        <button
-                          className="kindraw-app-sidebar__button kindraw-app-sidebar__button--ghost"
-                          onClick={closeComposer}
-                          type="button"
-                        >
-                          {t("buttons.cancel")}
-                        </button>
-                      </div>
-                    </form>
-                  ) : null}
-
-                  {visibleItems.length ? (
-                    <ul className="kindraw-app-sidebar__items">
-                      {visibleItems.map((item) => (
-                        <li
-                          className="kindraw-app-sidebar__item-card"
-                          key={item.id}
-                        >
-                          <button
-                            className={`kindraw-app-sidebar__item${
-                              currentItem?.id === item.id
-                                ? " kindraw-app-sidebar__item--active"
-                                : ""
-                            }`}
-                            onClick={() => navigateKindraw(buildItemPath(item))}
-                            type="button"
-                          >
-                            <span className="kindraw-app-sidebar__item-main">
-                              <span className="kindraw-app-sidebar__item-icon">
-                                {item.kind === "drawing" ? file : TextIcon}
-                              </span>
-                              <span className="kindraw-app-sidebar__item-title">
-                                {item.title}
-                              </span>
+                          <span className="kindraw-app-sidebar__canvas-preview">
+                            <span className="kindraw-app-sidebar__canvas-preview-grid" />
+                            <span className="kindraw-app-sidebar__canvas-preview-mark">
+                              {file}
                             </span>
-                            <small>{getItemKindLabel(item.kind, t)}</small>
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
-                  ) : (
-                    <p className="kindraw-app-sidebar__empty">
-                      {t("kindraw.sidebar.noFilesInFolder")}
-                    </p>
-                  )}
-                </section>
+                          </span>
+                          <span className="kindraw-app-sidebar__canvas-copy">
+                            <strong>{item.title}</strong>
+                            <span>{formatCanvasUpdatedAt(item.updatedAt)}</span>
+                          </span>
+                        </button>
 
-                <EditorActions />
+                        <div className="kindraw-app-sidebar__canvas-meta">
+                          <div className="kindraw-app-sidebar__canvas-flags">
+                            {showPublic ? (
+                              <span className="kindraw-app-sidebar__canvas-flag">
+                                {t("kindraw.sidebar.publicFlag")}
+                              </span>
+                            ) : null}
+                            {showLive ? (
+                              <span className="kindraw-app-sidebar__canvas-flag kindraw-app-sidebar__canvas-flag--live">
+                                {t("kindraw.sidebar.liveFlag")}
+                              </span>
+                            ) : null}
+                            {item.archivedAt ? (
+                              <span className="kindraw-app-sidebar__canvas-flag">
+                                {t("kindraw.sidebar.archivedFlag")}
+                              </span>
+                            ) : null}
+                            {isActive && currentDrawingStatus ? (
+                              <span
+                                className={`kindraw-app-sidebar__status kindraw-app-sidebar__status--${
+                                  drawingSaveState || "idle"
+                                }`}
+                              >
+                                {currentDrawingStatus}
+                              </span>
+                            ) : null}
+                          </div>
 
-                {errorMessage ? (
-                  <p className="kindraw-app-sidebar__error">{errorMessage}</p>
-                ) : null}
-              </div>
-            );
-          })()
+                          <div className="kindraw-app-sidebar__canvas-controls">
+                            <CanvasTagMenu
+                              currentTagId={item.folderId}
+                              disabled={isMutating}
+                              itemId={item.id}
+                              onAssignTag={onAssignTag}
+                              onCreateTag={onCreateTag}
+                              tags={tags}
+                            />
+                            <CanvasActionsMenu
+                              disabled={isMutating}
+                              item={item}
+                              onArchiveItem={onArchiveItem}
+                              onDeleteItem={onDeleteItem}
+                            />
+                          </div>
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              ) : (
+                <p className="kindraw-app-sidebar__empty">{emptyStateLabel}</p>
+              )}
+            </section>
+
+            {errorMessage ? (
+              <p className="kindraw-app-sidebar__error">{errorMessage}</p>
+            ) : null}
+          </div>
         )}
       </Sidebar>
     </>

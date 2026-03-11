@@ -46,6 +46,7 @@ import { t } from "@excalidraw/excalidraw/i18n";
 import {
   GithubIcon,
   LinkIcon,
+  clipboard,
   usersIcon,
 } from "@excalidraw/excalidraw/components/icons";
 import { isElementLink } from "@excalidraw/element";
@@ -140,18 +141,23 @@ import "./index.scss";
 
 import { AppSidebar } from "./components/AppSidebar";
 import {
+  archiveItem,
+  deleteItem,
   createFolder,
   createItem,
   disableCollaborationRoom,
   enableCollaborationRoom,
   createShareLink,
   buildPublicShareUrl,
+  getCollaborationRoomBootstrap,
   getItem,
   getSession,
   getTree,
   logout as logoutKindraw,
   openGithubLogin,
   revokeShareLink,
+  restoreItem,
+  updateItemMeta,
   updateItemContent,
 } from "./kindraw/api";
 import {
@@ -166,17 +172,40 @@ import {
   shouldAutoCreateRootDrawing,
   subscribeToLocation,
 } from "./kindraw/router";
+import { generateKindrawCanvasTitle } from "./kindraw/naming";
 import { getKindrawDraft, setKindrawDraft } from "./kindraw/storage";
 import { getErrorMessage, isDraftNewer } from "./kindraw/utils";
 
 import type { CollabAPI } from "./collab/Collab";
 import type {
   KindrawItem,
+  KindrawCollaborationBootstrapResponse,
   KindrawCollaborationRoom,
   KindrawItemKind,
   KindrawSession,
   KindrawTreeResponse,
 } from "./kindraw/types";
+
+const getNextActiveDrawingPath = (
+  items: KindrawItem[],
+  excludedItemId?: string,
+) => {
+  const nextItem =
+    [...items]
+      .filter(
+        (item) =>
+          item.kind === "drawing" &&
+          !item.archivedAt &&
+          item.id !== excludedItemId,
+      )
+      .sort((a, b) => {
+        const byUpdatedAt =
+          new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
+        return byUpdatedAt || a.title.localeCompare(b.title);
+      })[0] || null;
+
+  return nextItem ? buildItemPath(nextItem) : "/";
+};
 
 polyfill();
 
@@ -506,11 +535,17 @@ const ExcalidrawWrapper = () => {
   const [kindrawDrawingSaveState, setKindrawDrawingSaveState] = useState<
     "idle" | "saving" | "error"
   >("idle");
+  const [kindrawLoadingDrawingId, setKindrawLoadingDrawingId] = useState<
+    string | null
+  >(null);
+  const [kindrawIsEditingTitle, setKindrawIsEditingTitle] = useState(false);
+  const [kindrawDraftTitle, setKindrawDraftTitle] = useState("");
   const kindrawApplyingSceneRef = useRef(false);
   const kindrawAutoCreateRootRef = useRef(false);
   const kindrawAutoJoinCollabRoomRef = useRef<string | null>(null);
   const kindrawLastSavedContentRef = useRef<string | null>(null);
   const kindrawSaveTimeoutRef = useRef<number | null>(null);
+  const kindrawTitleInputRef = useRef<HTMLInputElement | null>(null);
 
   const refreshKindrawTree = useCallback(async () => {
     if (!kindrawSession) {
@@ -558,16 +593,24 @@ const ExcalidrawWrapper = () => {
   }, [loadKindrawSession]);
 
   useEffect(() => {
-    if (!collabAPI || !kindrawSession?.user) {
+    if (!collabAPI) {
       return;
     }
 
-    collabAPI.setUserProfile({
-      userId: kindrawSession.user.id,
-      username: getKindrawUserDisplayName(kindrawSession.user),
-      avatarUrl: kindrawSession.user.avatarUrl,
-      githubLogin: kindrawSession.user.githubLogin,
-    });
+    if (kindrawSession?.user) {
+      collabAPI.setUserProfile({
+        userId: kindrawSession.user.id,
+        username: getKindrawUserDisplayName(kindrawSession.user),
+        avatarUrl: kindrawSession.user.avatarUrl,
+        githubLogin: kindrawSession.user.githubLogin,
+      });
+      return;
+    }
+
+    const currentProfile = collabAPI.getUserProfile();
+    if (currentProfile?.githubLogin || currentProfile?.avatarUrl) {
+      collabAPI.setUserProfile(null);
+    }
   }, [collabAPI, kindrawSession]);
 
   useEffect(() => {
@@ -604,15 +647,169 @@ const ExcalidrawWrapper = () => {
     async (parentId: string | null, name: string) => {
       const nextName = name.trim();
       if (!nextName) {
-        return;
+        return null;
       }
 
+      let createdFolderId: string | null = null;
       await runKindrawMutation(async () => {
-        await createFolder(nextName, parentId);
+        const response = await createFolder(nextName, parentId);
+        createdFolderId = response.folderId;
+        await refreshKindrawTree();
+      });
+
+      return createdFolderId;
+    },
+    [refreshKindrawTree, runKindrawMutation],
+  );
+
+  const handleKindrawAssignTag = useCallback(
+    async (itemId: string, folderId: string | null) => {
+      await runKindrawMutation(async () => {
+        await updateItemMeta(itemId, { folderId });
+
+        startTransition(() => {
+          setKindrawTree((current) =>
+            current
+              ? {
+                  ...current,
+                  items: current.items.map((item) =>
+                    item.id === itemId ? { ...item, folderId } : item,
+                  ),
+                }
+              : current,
+          );
+          setKindrawCurrentItem((current) =>
+            current && current.id === itemId
+              ? {
+                  ...current,
+                  folderId,
+                }
+              : current,
+          );
+        });
+
         await refreshKindrawTree();
       });
     },
     [refreshKindrawTree, runKindrawMutation],
+  );
+
+  const handleKindrawArchiveItem = useCallback(
+    async (itemId: string, archived: boolean) => {
+      const timestamp = new Date().toISOString();
+      const isCurrent = kindrawCurrentItem?.id === itemId;
+      const nextItems =
+        kindrawTree?.items.map((item) =>
+          item.id === itemId
+            ? {
+                ...item,
+                archivedAt: archived ? item.archivedAt || timestamp : null,
+                updatedAt: timestamp,
+              }
+            : item,
+        ) || [];
+
+      await runKindrawMutation(async () => {
+        await (archived ? archiveItem(itemId) : restoreItem(itemId));
+
+        startTransition(() => {
+          setKindrawTree((current) =>
+            current
+              ? {
+                  ...current,
+                  items: current.items.map((item) =>
+                    item.id === itemId
+                      ? {
+                          ...item,
+                          archivedAt: archived
+                            ? item.archivedAt || timestamp
+                            : null,
+                          updatedAt: timestamp,
+                        }
+                      : item,
+                  ),
+                }
+              : current,
+          );
+          setKindrawCurrentItem((current) =>
+            current && current.id === itemId
+              ? {
+                  ...current,
+                  archivedAt: archived ? current.archivedAt || timestamp : null,
+                  updatedAt: timestamp,
+                }
+              : current,
+          );
+          if (archived && isCurrent) {
+            setKindrawCurrentCollaborationRoom(null);
+          }
+        });
+
+        if (archived && isCurrent) {
+          navigateKindraw(getNextActiveDrawingPath(nextItems, itemId), {
+            replace: true,
+          });
+        }
+
+        await refreshKindrawTree();
+      });
+    },
+    [
+      kindrawCurrentItem?.id,
+      kindrawTree?.items,
+      refreshKindrawTree,
+      runKindrawMutation,
+    ],
+  );
+
+  const handleKindrawDeleteItem = useCallback(
+    async (itemId: string) => {
+      const shouldDelete = window.confirm(
+        t("kindraw.sidebar.deleteCanvasConfirm"),
+      );
+      if (!shouldDelete) {
+        return;
+      }
+
+      const isCurrent = kindrawCurrentItem?.id === itemId;
+      const nextItems =
+        kindrawTree?.items.filter((item) => item.id !== itemId) || [];
+
+      await runKindrawMutation(async () => {
+        await deleteItem(itemId);
+
+        startTransition(() => {
+          setKindrawTree((current) =>
+            current
+              ? {
+                  ...current,
+                  items: current.items.filter((item) => item.id !== itemId),
+                }
+              : current,
+          );
+          setKindrawCurrentItem((current) =>
+            current?.id === itemId ? null : current,
+          );
+          if (isCurrent) {
+            setKindrawCurrentCollaborationRoom(null);
+          }
+        });
+
+        if (isCurrent) {
+          navigateKindraw(getNextActiveDrawingPath(nextItems), {
+            replace: true,
+          });
+        }
+
+        await refreshKindrawTree();
+      });
+    },
+    [
+      kindrawCurrentItem?.id,
+      kindrawTree?.items,
+      refreshKindrawTree,
+      runKindrawMutation,
+    ],
   );
 
   const handleKindrawCreateItem = useCallback(
@@ -624,7 +821,7 @@ const ExcalidrawWrapper = () => {
         replace?: boolean;
       },
     ) => {
-      const nextTitle = title.trim();
+      const nextTitle = title.trim() || generateKindrawCanvasTitle();
       if (!nextTitle) {
         return;
       }
@@ -652,6 +849,7 @@ const ExcalidrawWrapper = () => {
                       ownerId: kindrawSession?.user.id || "pending",
                       updatedAt: timestamp,
                       createdAt: timestamp,
+                      archivedAt: null,
                       shareLinks: [],
                       collaborationRoomId: null,
                       collaborationEnabledAt: null,
@@ -690,9 +888,14 @@ const ExcalidrawWrapper = () => {
     }
 
     kindrawAutoCreateRootRef.current = true;
-    void handleKindrawCreateItem("drawing", null, t("labels.untitled"), {
-      replace: true,
-    });
+    void handleKindrawCreateItem(
+      "drawing",
+      null,
+      generateKindrawCanvasTitle(),
+      {
+        replace: true,
+      },
+    );
   }, [
     handleKindrawCreateItem,
     kindrawBusy,
@@ -1029,66 +1232,128 @@ const ExcalidrawWrapper = () => {
       }
       setKindrawDrawingSaveState("idle");
       setKindrawDrawingStatus(null);
+      setKindrawLoadingDrawingId(null);
       setKindrawCurrentCollaborationRoom(null);
       kindrawAutoJoinCollabRoomRef.current = null;
       kindrawLastSavedContentRef.current = null;
       return;
     }
 
-    if (!kindrawSession || !excalidrawAPI) {
+    if (!excalidrawAPI) {
+      return;
+    }
+
+    const roomLinkData = getCollaborationLinkData(window.location.href);
+    const isCollaborationDrawingRoute =
+      roomLinkData?.roomId === kindrawRoute.itemId;
+
+    if (!kindrawSession && !isCollaborationDrawingRoute) {
       return;
     }
 
     let cancelled = false;
+    setKindrawLoadingDrawingId(kindrawRoute.itemId);
 
     const loadKindrawDrawing = async () => {
       try {
-        const response = await getItem(kindrawRoute.itemId);
-        const draft = await getKindrawDraft(kindrawRoute.itemId);
+        let item: KindrawItem;
+        let content: string;
+        let collaborationRoom: KindrawCollaborationRoom | null;
+
+        if (kindrawSession) {
+          const response = await getItem(kindrawRoute.itemId);
+          item = response.item;
+          content = response.content;
+          collaborationRoom = response.collaborationRoom;
+        } else {
+          const response: KindrawCollaborationBootstrapResponse =
+            await getCollaborationRoomBootstrap(
+              kindrawRoute.itemId,
+              roomLinkData!.roomKey,
+            );
+
+          item = {
+            id: response.item.id,
+            kind: response.item.kind,
+            title: response.item.title,
+            folderId: null,
+            ownerId: "shared",
+            updatedAt: response.item.updatedAt,
+            createdAt: response.item.createdAt,
+            archivedAt: null,
+            shareLinks: [],
+            collaborationRoomId: response.collaborationRoom.roomId,
+            collaborationEnabledAt: response.collaborationRoom.enabledAt,
+          };
+          content = response.content;
+          collaborationRoom = response.collaborationRoom;
+        }
+
+        const draft = kindrawSession
+          ? await getKindrawDraft(kindrawRoute.itemId)
+          : null;
         const restoredContent =
-          draft && isDraftNewer(draft.updatedAt, response.item.updatedAt)
+          draft && isDraftNewer(draft.updatedAt, item.updatedAt)
             ? draft.content
-            : response.content;
+            : content;
         const scene = parseDrawingContent(restoredContent);
+        const restoredElements = restoreElements(scene.elements, null, {
+          repairBindings: true,
+        });
+        const shouldHydrateSceneFromSnapshot =
+          !isCollaborationDrawingRoute ||
+          excalidrawAPI.getSceneElementsIncludingDeleted().length === 0;
 
         if (cancelled) {
           return;
         }
 
-        kindrawApplyingSceneRef.current = true;
-        kindrawLastSavedContentRef.current = response.content;
+        kindrawApplyingSceneRef.current = shouldHydrateSceneFromSnapshot;
+        kindrawLastSavedContentRef.current = content;
         startTransition(() => {
-          setKindrawCurrentItem(response.item);
-          setKindrawCurrentCollaborationRoom(response.collaborationRoom);
+          setKindrawCurrentItem(item);
+          setKindrawCurrentCollaborationRoom(collaborationRoom);
+          setKindrawLoadingDrawingId(null);
           setKindrawDrawingSaveState("idle");
           setKindrawDrawingStatus(
-            draft && isDraftNewer(draft.updatedAt, response.item.updatedAt)
+            draft && isDraftNewer(draft.updatedAt, item.updatedAt)
               ? t("kindraw.status.draftRestored")
               : t("kindraw.status.drawingSynced"),
           );
         });
 
-        excalidrawAPI.updateScene({
-          elements: restoreElements(scene.elements, null, {
-            repairBindings: true,
-          }),
-          appState: restoreAppState(
-            scene.appState,
-            excalidrawAPI.getAppState(),
-          ),
-          captureUpdate: CaptureUpdateAction.IMMEDIATELY,
-        });
+        if (shouldHydrateSceneFromSnapshot) {
+          excalidrawAPI.updateScene({
+            elements: restoredElements,
+            appState: restoreAppState(
+              scene.appState,
+              excalidrawAPI.getAppState(),
+            ),
+            captureUpdate: CaptureUpdateAction.IMMEDIATELY,
+          });
 
-        const files = Object.values(scene.files || {});
-        if (files.length) {
-          excalidrawAPI.addFiles(files);
-        }
+          const files = Object.values(scene.files || {});
+          if (files.length) {
+            excalidrawAPI.addFiles(files);
+          }
 
-        window.setTimeout(() => {
+          if (
+            isCollaborationDrawingRoute &&
+            collabAPI?.isCollaborating() &&
+            restoredElements.length
+          ) {
+            collabAPI.seedCollaborationScene(restoredElements);
+          }
+
+          window.setTimeout(() => {
+            kindrawApplyingSceneRef.current = false;
+          }, 0);
+        } else {
           kindrawApplyingSceneRef.current = false;
-        }, 0);
+        }
       } catch (error) {
         if (!cancelled) {
+          setKindrawLoadingDrawingId(null);
           setErrorMessage(
             getErrorMessage(error, t("kindraw.status.drawingLoadFailed")),
           );
@@ -1102,7 +1367,126 @@ const ExcalidrawWrapper = () => {
       cancelled = true;
       kindrawApplyingSceneRef.current = false;
     };
-  }, [excalidrawAPI, kindrawRoute, kindrawSession]);
+  }, [collabAPI, excalidrawAPI, kindrawRoute, kindrawSession]);
+
+  const kindrawActiveCanvasTitle = useMemo(() => {
+    if (kindrawRoute.kind !== "drawing") {
+      return null;
+    }
+
+    return (
+      kindrawTree?.items.find((item) => item.id === kindrawRoute.itemId)
+        ?.title ||
+      kindrawCurrentItem?.title ||
+      null
+    );
+  }, [kindrawCurrentItem?.title, kindrawRoute, kindrawTree?.items]);
+
+  useEffect(() => {
+    setKindrawIsEditingTitle(false);
+    setKindrawDraftTitle(kindrawActiveCanvasTitle || "");
+  }, [kindrawActiveCanvasTitle, pathname]);
+
+  useEffect(() => {
+    if (!kindrawIsEditingTitle) {
+      return;
+    }
+
+    const frame = window.requestAnimationFrame(() => {
+      kindrawTitleInputRef.current?.focus();
+      kindrawTitleInputRef.current?.select();
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [kindrawIsEditingTitle]);
+
+  const handleKindrawTitleEditStart = useCallback(() => {
+    if (
+      kindrawRoute.kind !== "drawing" ||
+      !kindrawCurrentItem ||
+      kindrawLoadingDrawingId === kindrawRoute.itemId
+    ) {
+      return;
+    }
+
+    setKindrawDraftTitle(kindrawActiveCanvasTitle || kindrawCurrentItem.title);
+    setKindrawIsEditingTitle(true);
+  }, [
+    kindrawActiveCanvasTitle,
+    kindrawCurrentItem,
+    kindrawLoadingDrawingId,
+    kindrawRoute,
+  ]);
+
+  const handleKindrawTitleEditCancel = useCallback(() => {
+    setKindrawIsEditingTitle(false);
+    setKindrawDraftTitle(kindrawActiveCanvasTitle || "");
+  }, [kindrawActiveCanvasTitle]);
+
+  const handleKindrawTitleEditCommit = useCallback(async () => {
+    const itemId =
+      kindrawRoute.kind === "drawing"
+        ? kindrawRoute.itemId
+        : kindrawCurrentItem?.id;
+    const nextTitle = kindrawDraftTitle.trim();
+    const previousTitle = kindrawCurrentItem?.title || kindrawActiveCanvasTitle;
+
+    setKindrawIsEditingTitle(false);
+
+    if (!itemId || !previousTitle) {
+      setKindrawDraftTitle(kindrawActiveCanvasTitle || "");
+      return;
+    }
+
+    if (!nextTitle || nextTitle === previousTitle) {
+      setKindrawDraftTitle(previousTitle);
+      return;
+    }
+
+    const updatedAt = new Date().toISOString();
+
+    await runKindrawMutation(async () => {
+      await updateItemMeta(itemId, { title: nextTitle });
+
+      startTransition(() => {
+        setKindrawTree((current) =>
+          current
+            ? {
+                ...current,
+                items: current.items.map((item) =>
+                  item.id === itemId
+                    ? {
+                        ...item,
+                        title: nextTitle,
+                        updatedAt,
+                      }
+                    : item,
+                ),
+              }
+            : current,
+        );
+        setKindrawCurrentItem((current) =>
+          current && current.id === itemId
+            ? {
+                ...current,
+                title: nextTitle,
+                updatedAt,
+              }
+            : current,
+        );
+      });
+
+      await refreshKindrawTree();
+    });
+  }, [
+    kindrawActiveCanvasTitle,
+    kindrawCurrentItem?.id,
+    kindrawCurrentItem?.title,
+    kindrawDraftTitle,
+    kindrawRoute,
+    refreshKindrawTree,
+    runKindrawMutation,
+  ]);
 
   useEffect(() => {
     if (
@@ -1410,13 +1794,14 @@ const ExcalidrawWrapper = () => {
     [setShareDialogState],
   );
 
-  const handleRealtimeAction = useCallback(() => {
+  const handleRealtimeAction = useCallback(async () => {
     if (isCollaborating) {
       onCollabDialogOpen();
       return;
     }
 
-    handleStartRealtimeCollab();
+    await handleStartRealtimeCollab();
+    onCollabDialogOpen();
   }, [handleStartRealtimeCollab, isCollaborating, onCollabDialogOpen]);
 
   // ---------------------------------------------------------------------------
@@ -1525,6 +1910,10 @@ const ExcalidrawWrapper = () => {
 
           const isDrawingRoute = kindrawRoute.kind === "drawing";
           const shouldShowRealtimeAction = isDrawingRoute || isCollaborating;
+          const isSwitchingCanvas =
+            isDrawingRoute && kindrawLoadingDrawingId === kindrawRoute.itemId;
+          const hasActivePublicLink =
+            isDrawingRoute && !!kindrawCurrentItem?.shareLinks[0];
 
           return (
             <div className="excalidraw-ui-top-right kindraw-top-right-actions">
@@ -1570,30 +1959,50 @@ const ExcalidrawWrapper = () => {
               )}
               {isDrawingRoute && kindrawCurrentItem ? (
                 <button
-                  className="kindraw-top-right-actions__button"
+                  aria-label={
+                    hasActivePublicLink
+                      ? t("kindraw.actions.copyPublicLink")
+                      : t("kindraw.actions.publicLink")
+                  }
+                  className={`kindraw-top-right-actions__button kindraw-top-right-actions__button--icon${
+                    hasActivePublicLink
+                      ? " kindraw-top-right-actions__button--active"
+                      : ""
+                  }`}
+                  disabled={isSwitchingCanvas}
                   onClick={() => void handleKindrawPrimaryShareAction()}
+                  title={
+                    hasActivePublicLink
+                      ? t("kindraw.actions.copyPublicLink")
+                      : t("kindraw.actions.publicLink")
+                  }
                   type="button"
                 >
-                  {LinkIcon}
-                  <span>{t("kindraw.actions.publicLink")}</span>
+                  {hasActivePublicLink ? clipboard : LinkIcon}
                 </button>
               ) : null}
               {shouldShowRealtimeAction ? (
                 <button
-                  className={`kindraw-top-right-actions__button${
+                  aria-label={
+                    isCollaborating
+                      ? t("kindraw.actions.manageCollaboration")
+                      : t("kindraw.actions.startCollaboration")
+                  }
+                  className={`kindraw-top-right-actions__button kindraw-top-right-actions__button--icon${
                     isCollaborating
                       ? " kindraw-top-right-actions__button--active"
                       : ""
                   }`}
+                  disabled={isSwitchingCanvas}
                   onClick={handleRealtimeAction}
+                  title={
+                    isCollaborating
+                      ? t("kindraw.actions.manageCollaboration")
+                      : t("kindraw.actions.startCollaboration")
+                  }
                   type="button"
                 >
                   {usersIcon}
-                  <span>
-                    {isCollaborating
-                      ? t("kindraw.actions.manageCollaboration")
-                      : t("kindraw.actions.startCollaboration")}
-                  </span>
                 </button>
               ) : null}
             </div>
@@ -1606,7 +2015,21 @@ const ExcalidrawWrapper = () => {
           }
         }}
       >
-        <AppMainMenu />
+        <AppMainMenu
+          currentCanvasStatus={kindrawDrawingStatus}
+          currentCanvasTitle={kindrawActiveCanvasTitle}
+          draftCanvasTitle={kindrawDraftTitle}
+          isEditingCanvasTitle={kindrawIsEditingTitle}
+          isLoadingCanvas={
+            kindrawRoute.kind === "drawing" &&
+            kindrawLoadingDrawingId === kindrawRoute.itemId
+          }
+          canvasTitleInputRef={kindrawTitleInputRef}
+          onCanvasTitleCancel={handleKindrawTitleEditCancel}
+          onCanvasTitleChange={setKindrawDraftTitle}
+          onCanvasTitleCommit={() => void handleKindrawTitleEditCommit()}
+          onCanvasTitleDoubleClick={handleKindrawTitleEditStart}
+        />
         <AppWelcomeScreen
           currentItemTitle={kindrawCurrentItem?.title || null}
           kindrawSession={kindrawSession}
@@ -1656,11 +2079,12 @@ const ExcalidrawWrapper = () => {
           drawingSaveState={kindrawDrawingSaveState}
           errorMessage={errorMessage}
           isMutating={kindrawBusy}
-          onCreateFolder={handleKindrawCreateFolder}
+          onAssignTag={handleKindrawAssignTag}
+          onArchiveItem={handleKindrawArchiveItem}
           onCreateItem={handleKindrawCreateItem}
-          onCreateShareLink={handleKindrawCreateShareLink}
+          onCreateTag={(name) => handleKindrawCreateFolder(null, name)}
+          onDeleteItem={handleKindrawDeleteItem}
           onLogout={handleKindrawLogout}
-          onRevokeShareLink={handleKindrawRevokeShareLink}
           route={kindrawRoute}
           session={kindrawSession}
           tree={kindrawTree}

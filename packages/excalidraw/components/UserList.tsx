@@ -129,7 +129,10 @@ export const UserList = React.memo(
 
     const uniqueCollaboratorsArray = Array.from(
       uniqueCollaboratorsMap.values(),
-    ).filter((collaborator) => collaborator.username?.trim());
+    ).filter(
+      (collaborator) =>
+        !collaborator.isCurrentUser && collaborator.username?.trim(),
+    );
 
     const [searchTerm, setSearchTerm] = React.useState("");
     const filteredCollaborators = uniqueCollaboratorsArray.filter(
@@ -168,6 +171,10 @@ export const UserList = React.memo(
     }, []);
 
     const [maxAvatars, setMaxAvatars] = React.useState(DEFAULT_MAX_AVATARS);
+
+    if (uniqueCollaboratorsArray.length === 0) {
+      return null;
+    }
 
     const firstNCollaborators = uniqueCollaboratorsArray.slice(
       0,
