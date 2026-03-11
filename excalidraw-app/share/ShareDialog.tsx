@@ -68,7 +68,7 @@ const ActiveRoomDialog = ({
   const { onCopy, copyStatus } = useCopyStatus();
   const userProfile = collabAPI.getUserProfile();
   const isGithubIdentity = Boolean(
-    userProfile?.userId || userProfile?.githubLogin || userProfile?.avatarUrl,
+    userProfile?.githubLogin || userProfile?.avatarUrl,
   );
 
   const copyRoomLink = async () => {

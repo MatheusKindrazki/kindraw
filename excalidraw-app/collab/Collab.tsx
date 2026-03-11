@@ -75,21 +75,20 @@ import {
 } from "../data/FileManager";
 import { FileStatusStore } from "../data/fileStatusStore";
 import { LocalData } from "../data/LocalData";
+import { loadFilesFromFirebase, saveFilesToFirebase } from "../data/firebase";
 import {
-  isSavedToFirebase,
-  loadFilesFromFirebase,
-  loadFromFirebase,
-  saveFilesToFirebase,
-  saveToFirebase,
-} from "../data/firebase";
-import {
+  importGuestIdFromLocalStorage,
   importUsernameFromLocalStorage,
-  saveUsernameToLocalStorage,
+  saveCollaborationIdentityToLocalStorage,
 } from "../data/localStorage";
 import { resetBrowserStateVersions } from "../data/tabSync";
 
 import { collabErrorIndicatorAtom } from "./CollabError";
 import Portal from "./Portal";
+import {
+  KindrawCollabSocket,
+  type KindrawCollabParticipant,
+} from "./KindrawCollabSocket";
 
 import type {
   SocketUpdateDataSource,
@@ -129,6 +128,7 @@ export interface CollabAPI {
   startCollaboration: CollabInstance["startCollaboration"];
   stopCollaboration: CollabInstance["stopCollaboration"];
   syncElements: CollabInstance["syncElements"];
+  seedCollaborationScene: CollabInstance["seedCollaborationScene"];
   fetchImageFilesFromFirebase: CollabInstance["fetchImageFilesFromFirebase"];
   setUsername: CollabInstance["setUsername"];
   getUsername: CollabInstance["getUsername"];
@@ -142,6 +142,12 @@ type CollaborationLinkData = {
   roomId: string;
   roomKey: string;
 };
+
+const createGuestCollaborationId = () =>
+  `guest-${Math.random().toString(36).slice(2, 10)}`;
+
+const createGuestCollaborationName = () =>
+  `Guest ${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
 
 interface CollabProps {
   excalidrawAPI: ExcalidrawImperativeAPI;
@@ -157,6 +163,8 @@ class Collab extends PureComponent<CollabProps, CollabState> {
   private socketInitializationTimer?: number;
   private lastBroadcastedOrReceivedSceneVersion: number = -1;
   private collaborators = new Map<SocketId, Collaborator>();
+  private pendingSeededScene: readonly SyncableExcalidrawElement[] | null =
+    null;
 
   constructor(props: CollabProps) {
     super(props);
@@ -253,6 +261,7 @@ class Collab extends PureComponent<CollabProps, CollabState> {
       onPointerUpdate: this.onPointerUpdate,
       startCollaboration: this.startCollaboration,
       syncElements: this.syncElements,
+      seedCollaborationScene: this.seedCollaborationScene,
       fetchImageFilesFromFirebase: this.fetchImageFilesFromFirebase,
       stopCollaboration: this.stopCollaboration,
       setUsername: this.setUsername,
@@ -319,7 +328,7 @@ class Collab extends PureComponent<CollabProps, CollabState> {
     if (
       this.isCollaborating() &&
       (this.fileManager.shouldPreventUnload(syncableElements) ||
-        !isSavedToFirebase(this.portal, syncableElements))
+        !this.portal.isSceneSaved(syncableElements))
     ) {
       // this won't run in time if user decides to leave the site, but
       //  the purpose is to run in immediately after user decides to stay
@@ -340,21 +349,11 @@ class Collab extends PureComponent<CollabProps, CollabState> {
   ) => {
     syncableElements = cloneJSON(syncableElements);
     try {
-      const storedElements = await saveToFirebase(
-        this.portal,
-        syncableElements,
-        this.excalidrawAPI.getAppState(),
-      );
+      await this.portal.persistSnapshot(syncableElements);
 
       this.resetErrorIndicator();
-
-      if (this.isCollaborating() && storedElements) {
-        this.handleRemoteSceneUpdate(this._reconcileElements(storedElements));
-      }
     } catch (error: any) {
-      const errorMessage = /is longer than.*?bytes/.test(error.message)
-        ? t("errors.collabSaveFailed_sizeExceeded")
-        : t("errors.collabSaveFailed");
+      const errorMessage = t("errors.collabSaveFailed");
 
       if (
         !this.state.dialogNotifiedErrors[errorMessage] ||
@@ -382,6 +381,7 @@ class Collab extends PureComponent<CollabProps, CollabState> {
     this.queueSaveToFirebase.cancel();
     this.loadImageFiles.cancel();
     this.resetErrorIndicator(true);
+    this.pendingSeededScene = null;
 
     this.saveCollabRoomToFirebase(
       getSyncableElements(
@@ -519,7 +519,181 @@ class Collab extends PureComponent<CollabProps, CollabState> {
     );
   };
 
-  private fallbackInitializationHandler: null | (() => any) = null;
+  private ensureCollaborationIdentity = () => {
+    const currentUsername = this.state.username.trim();
+    const persistedGuestId = importGuestIdFromLocalStorage();
+
+    if (currentUsername) {
+      if (
+        !this.state.githubLogin &&
+        !this.state.avatarUrl &&
+        !this.state.userId
+      ) {
+        const guestId = persistedGuestId || createGuestCollaborationId();
+        this.setState({ userId: guestId }, this.broadcastPresence);
+        saveCollaborationIdentityToLocalStorage({
+          username: currentUsername,
+          guestId,
+        });
+      }
+      return;
+    }
+
+    const username =
+      importUsernameFromLocalStorage()?.trim() ||
+      createGuestCollaborationName();
+    const guestId = persistedGuestId || createGuestCollaborationId();
+
+    this.setState(
+      {
+        username,
+        userId: guestId,
+        avatarUrl: null,
+        githubLogin: null,
+      },
+      this.broadcastPresence,
+    );
+    saveCollaborationIdentityToLocalStorage({
+      username,
+      guestId,
+    });
+  };
+
+  private fallbackInitializationHandler: null | ((error?: Error) => void) =
+    null;
+
+  private finalizeRoomInitialization = () => {
+    clearTimeout(this.socketInitializationTimer!);
+    this.portal.socketInitialized = true;
+    this.flushSeededScene();
+    this.broadcastPresence();
+  };
+
+  private syncParticipants = (participants: KindrawCollabParticipant[]) => {
+    for (const participant of participants) {
+      this.updateCollaborator(participant.socketId, {
+        username: participant.username || undefined,
+        avatarUrl: participant.avatarUrl || undefined,
+        id: participant.userId || undefined,
+        userState: participant.userState,
+      });
+    }
+    this.syncCurrentCollaborator();
+  };
+
+  private handleDecryptedData = (
+    decryptedData: ValueOf<SocketUpdateDataSource>,
+    resolveScene: (
+      scene:
+        | (ImportedDataState & {
+            elements: readonly OrderedExcalidrawElement[];
+          })
+        | null,
+    ) => void,
+  ) => {
+    switch (decryptedData.type) {
+      case WS_SUBTYPES.INVALID_RESPONSE:
+        return;
+      case WS_SUBTYPES.INIT: {
+        const remoteElements = toBrandedType<
+          readonly RemoteExcalidrawElement[]
+        >(decryptedData.payload.elements);
+        const reconciledElements = this._reconcileElements(remoteElements);
+        if (!this.portal.socketInitialized) {
+          this.finalizeRoomInitialization();
+          this.handleRemoteSceneUpdate(reconciledElements);
+          resolveScene({
+            elements: reconciledElements,
+            scrollToContent: true,
+          });
+          return;
+        }
+        this.handleRemoteSceneUpdate(reconciledElements);
+        return;
+      }
+      case WS_SUBTYPES.UPDATE:
+        this.handleRemoteSceneUpdate(
+          this._reconcileElements(
+            toBrandedType<readonly RemoteExcalidrawElement[]>(
+              decryptedData.payload.elements,
+            ),
+          ),
+        );
+        return;
+      case WS_SUBTYPES.MOUSE_LOCATION: {
+        const {
+          pointer,
+          button,
+          username,
+          avatarUrl,
+          userId,
+          selectedElementIds,
+        } = decryptedData.payload;
+        const socketId: SocketUpdateDataSource["MOUSE_LOCATION"]["payload"]["socketId"] =
+          decryptedData.payload.socketId ||
+          // @ts-ignore legacy, see #2094 (#2097)
+          decryptedData.payload.socketID;
+
+        this.updateCollaborator(socketId, {
+          pointer,
+          button,
+          selectedElementIds,
+          username,
+          avatarUrl: avatarUrl || undefined,
+          id: userId || undefined,
+        });
+        return;
+      }
+      case WS_SUBTYPES.USER_VISIBLE_SCENE_BOUNDS: {
+        const { sceneBounds, socketId, username, avatarUrl, userId } =
+          decryptedData.payload;
+
+        this.updateCollaborator(socketId, {
+          username,
+          avatarUrl: avatarUrl || undefined,
+          id: userId || undefined,
+        });
+
+        const appState = this.excalidrawAPI.getAppState();
+        if (appState.userToFollow?.socketId !== socketId) {
+          console.warn(
+            `receiving remote client's (from ${socketId}) viewport bounds even though we're not subscribed to it!`,
+          );
+          return;
+        }
+
+        if (
+          appState.userToFollow &&
+          appState.followedBy.has(appState.userToFollow.socketId)
+        ) {
+          return;
+        }
+
+        this.excalidrawAPI.updateScene({
+          appState: zoomToFitBounds({
+            appState,
+            bounds: sceneBounds,
+            fitToViewport: true,
+            viewportZoomFactor: 1,
+          }).appState,
+        });
+        return;
+      }
+      case WS_SUBTYPES.IDLE_STATUS: {
+        const { userState, socketId, username, avatarUrl, userId } =
+          decryptedData.payload;
+        this.updateCollaborator(socketId, {
+          userState,
+          username,
+          avatarUrl: avatarUrl || undefined,
+          id: userId || undefined,
+        });
+        return;
+      }
+      default:
+        assertNever(decryptedData, null);
+    }
+  };
 
   startCollaboration = async (
     existingRoomLinkData: CollaborationLinkData | null,
@@ -527,12 +701,8 @@ class Collab extends PureComponent<CollabProps, CollabState> {
       bootstrapFromCurrentScene?: boolean;
     },
   ) => {
-    if (!this.state.username) {
-      import("@excalidraw/random-username").then(({ getRandomUsername }) => {
-        const username = getRandomUsername();
-        this.setUsername(username);
-      });
-    }
+    this.ensureCollaborationIdentity();
+    this.pendingSeededScene = null;
 
     if (this.portal.socket) {
       return null;
@@ -561,39 +731,33 @@ class Collab extends PureComponent<CollabProps, CollabState> {
       | (ImportedDataState & { elements: readonly OrderedExcalidrawElement[] })
       | null
     >();
+    let sceneResolved = false;
+    const resolveScene = (
+      scene:
+        | (ImportedDataState & {
+            elements: readonly OrderedExcalidrawElement[];
+          })
+        | null,
+    ) => {
+      if (!sceneResolved) {
+        sceneResolved = true;
+        scenePromise.resolve(scene);
+      }
+    };
 
     this.setIsCollaborating(true);
     LocalData.pauseSave("collaboration");
 
-    const { default: socketIOClient } = await import(
-      /* webpackChunkName: "socketIoClient" */ "socket.io-client"
-    );
-
-    const fallbackInitializationHandler = () => {
-      this.initializeRoom({
-        roomLinkData: existingRoomLinkData,
-        fetchScene: true,
-      }).then((scene) => {
-        scenePromise.resolve(scene);
-      });
+    const fallbackInitializationHandler = (error?: Error) => {
+      clearTimeout(this.socketInitializationTimer!);
+      if (error) {
+        console.error(error);
+        this.setErrorDialog(error.message);
+      }
+      this.destroySocketClient();
+      resolveScene(null);
     };
     this.fallbackInitializationHandler = fallbackInitializationHandler;
-
-    try {
-      this.portal.socket = this.portal.open(
-        socketIOClient(import.meta.env.VITE_APP_WS_SERVER_URL, {
-          transports: ["websocket", "polling"],
-        }),
-        roomId,
-        roomKey,
-      );
-
-      this.portal.socket.once("connect_error", fallbackInitializationHandler);
-    } catch (error: any) {
-      console.error(error);
-      this.setErrorDialog(error.message);
-      return null;
-    }
 
     if (existingRoomLinkData && !opts?.bootstrapFromCurrentScene) {
       // when joining existing room, don't merge it with current scene data
@@ -614,17 +778,63 @@ class Collab extends PureComponent<CollabProps, CollabState> {
         captureUpdate: CaptureUpdateAction.NEVER,
       });
 
-      this.saveCollabRoomToFirebase(getSyncableElements(elements));
+      this.seedCollaborationScene(elements);
     }
 
-    // fallback in case you're not alone in the room but still don't receive
-    // initial SCENE_INIT message
+    try {
+      this.portal.socket = this.portal.open(
+        new KindrawCollabSocket({
+          roomId,
+          baseUrl: import.meta.env.VITE_APP_WS_SERVER_URL,
+          profile: {
+            username: this.state.username.trim(),
+            avatarUrl: this.state.avatarUrl,
+            userId: this.state.userId,
+            githubLogin: this.state.githubLogin,
+          },
+        }),
+        roomId,
+        roomKey,
+      );
+
+      this.portal.socket.once("connect_error", fallbackInitializationHandler);
+    } catch (error: any) {
+      console.error(error);
+      this.setErrorDialog(error.message);
+      return null;
+    }
+
     this.socketInitializationTimer = window.setTimeout(
-      fallbackInitializationHandler,
+      () =>
+        fallbackInitializationHandler(
+          new Error("Kindraw collaboration room did not initialize in time."),
+        ),
       INITIAL_SCENE_UPDATE_TIMEOUT,
     );
 
-    // All socket listeners are moving to Portal
+    this.portal.socket.on(
+      "participants",
+      (participants: KindrawCollabParticipant[]) => {
+        this.syncParticipants(participants);
+      },
+    );
+
+    this.portal.socket.on(
+      "snapshot",
+      async (encryptedData: ArrayBuffer, iv: Uint8Array<ArrayBuffer>) => {
+        if (!this.portal.roomKey) {
+          return;
+        }
+
+        const decryptedData = await this.decryptPayload(
+          iv,
+          encryptedData,
+          this.portal.roomKey,
+        );
+        this.handleDecryptedData(decryptedData, resolveScene);
+      },
+    );
+
     this.portal.socket.on(
       "client-broadcast",
       async (encryptedData: ArrayBuffer, iv: Uint8Array<ArrayBuffer>) => {
@@ -637,132 +847,23 @@ class Collab extends PureComponent<CollabProps, CollabState> {
           encryptedData,
           this.portal.roomKey,
         );
-
-        switch (decryptedData.type) {
-          case WS_SUBTYPES.INVALID_RESPONSE:
-            return;
-          case WS_SUBTYPES.INIT: {
-            if (!this.portal.socketInitialized) {
-              this.initializeRoom({ fetchScene: false });
-              const remoteElements = toBrandedType<
-                readonly RemoteExcalidrawElement[]
-              >(decryptedData.payload.elements);
-              const reconciledElements =
-                this._reconcileElements(remoteElements);
-              this.handleRemoteSceneUpdate(reconciledElements);
-              // noop if already resolved via init from firebase
-              scenePromise.resolve({
-                elements: reconciledElements,
-                scrollToContent: true,
-              });
-            }
-            break;
-          }
-          case WS_SUBTYPES.UPDATE:
-            this.handleRemoteSceneUpdate(
-              this._reconcileElements(
-                toBrandedType<readonly RemoteExcalidrawElement[]>(
-                  decryptedData.payload.elements,
-                ),
-              ),
-            );
-            break;
-          case WS_SUBTYPES.MOUSE_LOCATION: {
-            const {
-              pointer,
-              button,
-              username,
-              avatarUrl,
-              userId,
-              selectedElementIds,
-            } = decryptedData.payload;
-
-            const socketId: SocketUpdateDataSource["MOUSE_LOCATION"]["payload"]["socketId"] =
-              decryptedData.payload.socketId ||
-              // @ts-ignore legacy, see #2094 (#2097)
-              decryptedData.payload.socketID;
-
-            this.updateCollaborator(socketId, {
-              pointer,
-              button,
-              selectedElementIds,
-              username,
-              avatarUrl: avatarUrl || undefined,
-              id: userId || undefined,
-            });
-
-            break;
-          }
-
-          case WS_SUBTYPES.USER_VISIBLE_SCENE_BOUNDS: {
-            const { sceneBounds, socketId, username, avatarUrl, userId } =
-              decryptedData.payload;
-
-            this.updateCollaborator(socketId, {
-              username,
-              avatarUrl: avatarUrl || undefined,
-              id: userId || undefined,
-            });
-
-            const appState = this.excalidrawAPI.getAppState();
-
-            // we're not following the user
-            // (shouldn't happen, but could be late message or bug upstream)
-            if (appState.userToFollow?.socketId !== socketId) {
-              console.warn(
-                `receiving remote client's (from ${socketId}) viewport bounds even though we're not subscribed to it!`,
-              );
-              return;
-            }
-
-            // cross-follow case, ignore updates in this case
-            if (
-              appState.userToFollow &&
-              appState.followedBy.has(appState.userToFollow.socketId)
-            ) {
-              return;
-            }
-
-            this.excalidrawAPI.updateScene({
-              appState: zoomToFitBounds({
-                appState,
-                bounds: sceneBounds,
-                fitToViewport: true,
-                viewportZoomFactor: 1,
-              }).appState,
-            });
-
-            break;
-          }
-
-          case WS_SUBTYPES.IDLE_STATUS: {
-            const { userState, socketId, username, avatarUrl, userId } =
-              decryptedData.payload;
-            this.updateCollaborator(socketId, {
-              userState,
-              username,
-              avatarUrl: avatarUrl || undefined,
-              id: userId || undefined,
-            });
-            break;
-          }
-
-          default: {
-            assertNever(decryptedData, null);
-          }
-        }
+        this.handleDecryptedData(decryptedData, resolveScene);
       },
     );
 
-    this.portal.socket.on("first-in-room", async () => {
+    this.portal.socket.on("first-in-room", () => {
       if (this.portal.socket) {
         this.portal.socket.off("first-in-room");
       }
-      const sceneData = await this.initializeRoom({
-        fetchScene: true,
-        roomLinkData: existingRoomLinkData,
-      });
-      scenePromise.resolve(sceneData);
+      this.finalizeRoomInitialization();
+      resolveScene(
+        this.pendingSeededScene?.length
+          ? {
+              elements: this.pendingSeededScene,
+              scrollToContent: true,
+            }
+          : null,
+      );
     });
 
     this.portal.socket.on(
@@ -781,54 +882,6 @@ class Collab extends PureComponent<CollabProps, CollabState> {
     this.setActiveRoomLink(window.location.href);
 
     return scenePromise;
-  };
-
-  private initializeRoom = async ({
-    fetchScene,
-    roomLinkData,
-  }:
-    | {
-        fetchScene: true;
-        roomLinkData: { roomId: string; roomKey: string } | null;
-      }
-    | { fetchScene: false; roomLinkData?: null }) => {
-    clearTimeout(this.socketInitializationTimer!);
-    if (this.portal.socket && this.fallbackInitializationHandler) {
-      this.portal.socket.off(
-        "connect_error",
-        this.fallbackInitializationHandler,
-      );
-    }
-    if (fetchScene && roomLinkData && this.portal.socket) {
-      this.excalidrawAPI.resetScene();
-
-      try {
-        const elements = await loadFromFirebase(
-          roomLinkData.roomId,
-          roomLinkData.roomKey,
-          this.portal.socket,
-        );
-        if (elements) {
-          this.setLastBroadcastedOrReceivedSceneVersion(
-            getSceneVersion(elements),
-          );
-
-          return {
-            elements,
-            scrollToContent: true,
-          };
-        }
-      } catch (error: any) {
-        // log the error and move on. other peers will sync us the scene.
-        console.error(error);
-      } finally {
-        this.portal.socketInitialized = true;
-      }
-    } else {
-      this.portal.socketInitialized = true;
-    }
-    this.broadcastPresence();
-    return null;
   };
 
   private _reconcileElements = (
@@ -1066,10 +1119,40 @@ class Collab extends PureComponent<CollabProps, CollabState> {
     { leading: false },
   );
 
+  seedCollaborationScene = (elements: readonly OrderedExcalidrawElement[]) => {
+    this.pendingSeededScene = getSyncableElements(elements);
+    this.flushSeededScene();
+  };
+
+  private flushSeededScene = () => {
+    if (!this.portal.socketInitialized || !this.pendingSeededScene) {
+      return;
+    }
+
+    const elements = this.pendingSeededScene;
+    this.pendingSeededScene = null;
+    void this.saveCollabRoomToFirebase(elements);
+  };
+
   setUsername = (username: string) => {
     const nextUsername = username.trim();
-    this.setState({ username: nextUsername }, this.broadcastPresence);
-    saveUsernameToLocalStorage(nextUsername);
+    const shouldKeepGuestIdentity =
+      !this.state.githubLogin && !this.state.avatarUrl && !this.state.userId;
+    const guestId = shouldKeepGuestIdentity
+      ? importGuestIdFromLocalStorage() || createGuestCollaborationId()
+      : this.state.userId;
+
+    this.setState(
+      {
+        username: nextUsername,
+        userId: guestId,
+      },
+      this.broadcastPresence,
+    );
+    saveCollaborationIdentityToLocalStorage({
+      username: nextUsername,
+      guestId,
+    });
   };
 
   getUsername = () => this.state.username;
@@ -1085,7 +1168,7 @@ class Collab extends PureComponent<CollabProps, CollabState> {
         },
         this.broadcastPresence,
       );
-      saveUsernameToLocalStorage("");
+      saveCollaborationIdentityToLocalStorage({ username: "" });
       return;
     }
 
@@ -1099,7 +1182,7 @@ class Collab extends PureComponent<CollabProps, CollabState> {
       },
       this.broadcastPresence,
     );
-    saveUsernameToLocalStorage(nextUsername);
+    saveCollaborationIdentityToLocalStorage({ username: nextUsername });
   };
 
   getUserProfile = (): CollabUserProfile | null => {

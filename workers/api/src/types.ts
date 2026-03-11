@@ -40,6 +40,7 @@ export type KindrawItem = {
   ownerId: string;
   updatedAt: string;
   createdAt: string;
+  archivedAt: string | null;
   shareLinks: KindrawShareLink[];
   collaborationRoomId: string | null;
   collaborationEnabledAt: string | null;
@@ -54,6 +55,12 @@ export type KindrawItemResponse = {
   item: KindrawItem;
   content: string;
   collaborationRoom: KindrawCollaborationRoom | null;
+};
+
+export type KindrawCollaborationBootstrapResponse = {
+  item: Pick<KindrawItem, "id" | "kind" | "title" | "updatedAt" | "createdAt">;
+  content: string;
+  collaborationRoom: KindrawCollaborationRoom;
 };
 
 export type KindrawPublicItemResponse = {
@@ -87,13 +94,13 @@ export type ShareLinkRecord = KindrawShareLink & {
 
 export type CreateFolderInput = {
   name: string;
-  parentId: string | null;
+  parentId?: string | null;
 };
 
 export type CreateItemInput = {
   kind: KindrawItemKind;
   title: string;
-  folderId: string | null;
+  folderId?: string | null;
   content: string;
 };
 
@@ -105,6 +112,7 @@ export type PatchFolderInput = {
 export type PatchItemMetaInput = {
   title?: string;
   folderId?: string | null;
+  archived?: boolean;
 };
 
 export interface D1PreparedStatement {
@@ -139,9 +147,32 @@ export interface R2Bucket {
   delete(key: string): Promise<void>;
 }
 
+export interface DurableObjectId {
+  toString(): string;
+}
+
+export interface DurableObjectStub {
+  fetch(request: Request): Promise<Response>;
+}
+
+export interface DurableObjectNamespace {
+  idFromName(name: string): DurableObjectId;
+  get(id: DurableObjectId): DurableObjectStub;
+}
+
+export interface DurableObjectStorage {
+  get<T = unknown>(key: string): Promise<T | undefined>;
+  put<T = unknown>(key: string, value: T): Promise<void>;
+}
+
+export interface DurableObjectState {
+  storage: DurableObjectStorage;
+}
+
 export type Env = {
   KINDRAW_DB: D1Database;
   KINDRAW_BLOBS: R2Bucket;
+  KINDRAW_COLLAB: DurableObjectNamespace;
   GITHUB_CLIENT_ID: string;
   GITHUB_CLIENT_SECRET: string;
   KINDRAW_APP_ORIGIN?: string;

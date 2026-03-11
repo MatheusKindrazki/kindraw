@@ -13,6 +13,7 @@ import { StoreIncrement } from "@excalidraw/element";
 import type { DurableIncrement, EphemeralIncrement } from "@excalidraw/element";
 
 import ExcalidrawApp from "../App";
+import { STORAGE_KEYS } from "../app_constants";
 
 const { h } = window;
 
@@ -69,6 +70,25 @@ vi.mock("socket.io-client", () => {
  * i.e. multiplayer history tests could be a good first candidate, as we could test both history stacks simultaneously.
  */
 describe("collaboration", () => {
+  it("assigns a temporary guest identity before opening a room", async () => {
+    localStorage.removeItem(STORAGE_KEYS.LOCAL_STORAGE_COLLAB);
+
+    await render(<ExcalidrawApp />);
+
+    act(() => {
+      void window.collab.startCollaboration(null);
+    });
+
+    await waitFor(() => {
+      expect(window.collab.getUserProfile()).toEqual(
+        expect.objectContaining({
+          username: expect.stringMatching(/^Guest /),
+          userId: expect.stringMatching(/^guest-/),
+        }),
+      );
+    });
+  });
+
   it("should emit two ephemeral increments even though updates get batched", async () => {
     const durableIncrements: DurableIncrement[] = [];
     const ephemeralIncrements: EphemeralIncrement[] = [];

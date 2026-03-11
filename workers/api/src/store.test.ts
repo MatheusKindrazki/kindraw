@@ -28,6 +28,7 @@ type ItemRow = {
   kind: "drawing" | "doc";
   title: string;
   content_blob_key: string;
+  archived_at: string | null;
   collaboration_room_key: string | null;
   collaboration_enabled_at: string | null;
   created_at: string;
@@ -100,6 +101,19 @@ class FakeStatement implements D1PreparedStatement {
       const [itemId, ownerId] = this.values as [string, string];
       return (this.state.items.find(
         (item) => item.id === itemId && item.owner_id === ownerId,
+      ) || null) as T | null;
+    }
+
+    if (
+      query ===
+      "SELECT * FROM items WHERE id = ? AND collaboration_enabled_at IS NOT NULL AND collaboration_room_key = ?"
+    ) {
+      const [itemId, roomKey] = this.values as [string, string];
+      return (this.state.items.find(
+        (item) =>
+          item.id === itemId &&
+          item.collaboration_enabled_at !== null &&
+          item.collaboration_room_key === roomKey,
       ) || null) as T | null;
     }
 
@@ -297,7 +311,7 @@ class FakeStatement implements D1PreparedStatement {
 
     if (
       query ===
-      "INSERT INTO items ( id, owner_id, folder_id, kind, title, content_blob_key, collaboration_room_key, collaboration_enabled_at, created_at, updated_at ) VALUES (?, ?, ?, ?, ?, ?, NULL, NULL, ?, ?)"
+      "INSERT INTO items ( id, owner_id, folder_id, kind, title, content_blob_key, archived_at, collaboration_room_key, collaboration_enabled_at, created_at, updated_at ) VALUES (?, ?, ?, ?, ?, ?, NULL, NULL, NULL, ?, ?)"
     ) {
       const [
         id,
@@ -325,6 +339,7 @@ class FakeStatement implements D1PreparedStatement {
         kind,
         title,
         content_blob_key: blobKey,
+        archived_at: null,
         collaboration_room_key: null,
         collaboration_enabled_at: null,
         created_at: createdAt,
@@ -335,10 +350,12 @@ class FakeStatement implements D1PreparedStatement {
 
     if (
       query ===
-      "UPDATE items SET title = ?, folder_id = ?, updated_at = ? WHERE id = ? AND owner_id = ?"
+      "UPDATE items SET title = ?, folder_id = ?, archived_at = ?, updated_at = ? WHERE id = ? AND owner_id = ?"
     ) {
-      const [title, folderId, updatedAt, itemId, ownerId] = this.values as [
+      const [title, folderId, archivedAt, updatedAt, itemId, ownerId] = this
+        .values as [
         string,
+        string | null,
         string | null,
         string,
         string,
@@ -350,6 +367,7 @@ class FakeStatement implements D1PreparedStatement {
       if (item) {
         item.title = title;
         item.folder_id = folderId;
+        item.archived_at = archivedAt;
         item.updated_at = updatedAt;
       }
       return {};
@@ -599,6 +617,38 @@ describe("KindrawStore", () => {
     uuidSpy.mockRestore();
   });
 
+  it("aceita criar item sem folderId e persiste NULL no D1", async () => {
+    const uuidSpy = vi
+      .spyOn(crypto, "randomUUID")
+      .mockReturnValueOnce("00000000-0000-0000-0000-000000000010");
+    const { store, state } = createStore();
+
+    await store.createItem("user-1", {
+      kind: "drawing",
+      title: "Loose board",
+      content: '{"type":"excalidraw"}',
+    });
+
+    expect(state.items[0]?.folder_id).toBeNull();
+
+    uuidSpy.mockRestore();
+  });
+
+  it("aceita criar pasta sem parentId e persiste NULL no D1", async () => {
+    const uuidSpy = vi
+      .spyOn(crypto, "randomUUID")
+      .mockReturnValueOnce("00000000-0000-0000-0000-000000000011");
+    const { store, state } = createStore();
+
+    await store.createFolder("user-1", {
+      name: "Root tag",
+    });
+
+    expect(state.folders[0]?.parent_id).toBeNull();
+
+    uuidSpy.mockRestore();
+  });
+
   it("impede deletar pasta que ainda possui itens", async () => {
     const { store } = createStore({
       folders: [
@@ -619,6 +669,7 @@ describe("KindrawStore", () => {
           kind: "doc",
           title: "Notes",
           content_blob_key: "users/user-1/items/item-1/current.md",
+          archived_at: null,
           collaboration_room_key: null,
           collaboration_enabled_at: null,
           created_at: "2026-03-09T10:00:00.000Z",
@@ -635,6 +686,48 @@ describe("KindrawStore", () => {
     } as Partial<HttpError>);
   });
 
+  it("arquiva e restaura um canvas sem apagar o blob", async () => {
+    const { store, state, blobs } = createStore({
+      items: [
+        {
+          id: "item-1",
+          owner_id: "user-1",
+          folder_id: null,
+          kind: "drawing",
+          title: "Board",
+          content_blob_key: "users/user-1/items/item-1/current.excalidraw",
+          archived_at: null,
+          collaboration_room_key: null,
+          collaboration_enabled_at: null,
+          created_at: "2026-03-09T10:00:00.000Z",
+          updated_at: "2026-03-09T10:00:00.000Z",
+        },
+      ],
+    });
+    await blobs.put(
+      "users/user-1/items/item-1/current.excalidraw",
+      '{"type":"excalidraw"}',
+    );
+
+    await store.patchItemMeta("user-1", "item-1", {
+      archived: true,
+    });
+
+    expect(state.items[0]?.archived_at).toBe("2026-03-09T12:00:00.000Z");
+    expect(
+      blobs.objects.get("users/user-1/items/item-1/current.excalidraw"),
+    ).toBe('{"type":"excalidraw"}');
+
+    const archivedItem = await store.getItem("user-1", "item-1");
+    expect(archivedItem.item.archivedAt).toBe("2026-03-09T12:00:00.000Z");
+
+    await store.patchItemMeta("user-1", "item-1", {
+      archived: false,
+    });
+
+    expect(state.items[0]?.archived_at).toBeNull();
+  });
+
   it("cria, revoga e invalida share-link publico", async () => {
     const uuidSpy = vi
       .spyOn(crypto, "randomUUID")
@@ -649,6 +742,7 @@ describe("KindrawStore", () => {
           kind: "doc",
           title: "Spec",
           content_blob_key: "users/user-1/items/item-1/current.md",
+          archived_at: null,
           collaboration_room_key: null,
           collaboration_enabled_at: null,
           created_at: "2026-03-09T10:00:00.000Z",
@@ -712,6 +806,7 @@ describe("KindrawStore", () => {
           kind: "drawing",
           title: "Board",
           content_blob_key: "users/user-1/items/item-1/current.excalidraw",
+          archived_at: null,
           collaboration_room_key: null,
           collaboration_enabled_at: null,
           created_at: "2026-03-09T10:00:00.000Z",
@@ -741,6 +836,51 @@ describe("KindrawStore", () => {
     generateKeySpy.mockRestore();
   });
 
+  it("expoe bootstrap publico do room com a cena do drawing", async () => {
+    const { store, blobs } = createStore({
+      items: [
+        {
+          id: "item-1",
+          owner_id: "user-1",
+          folder_id: null,
+          kind: "drawing",
+          title: "Board",
+          content_blob_key: "users/user-1/items/item-1/current.excalidraw",
+          archived_at: null,
+          collaboration_room_key: "abcdefghijklmnopqrstuv",
+          collaboration_enabled_at: "2026-03-09T12:00:00.000Z",
+          created_at: "2026-03-09T10:00:00.000Z",
+          updated_at: "2026-03-09T10:00:00.000Z",
+        },
+      ],
+    });
+    await blobs.put(
+      "users/user-1/items/item-1/current.excalidraw",
+      '{"elements":[{"id":"el-1"}]}',
+    );
+
+    const bootstrap = await store.getCollaborationRoomBootstrap(
+      "item-1",
+      "abcdefghijklmnopqrstuv",
+    );
+
+    expect(bootstrap).toEqual({
+      item: {
+        id: "item-1",
+        kind: "drawing",
+        title: "Board",
+        updatedAt: "2026-03-09T10:00:00.000Z",
+        createdAt: "2026-03-09T10:00:00.000Z",
+      },
+      content: '{"elements":[{"id":"el-1"}]}',
+      collaborationRoom: {
+        roomId: "item-1",
+        roomKey: "abcdefghijklmnopqrstuv",
+        enabledAt: "2026-03-09T12:00:00.000Z",
+      },
+    });
+  });
+
   it("desativa colaboracao sem perder a room key do drawing", async () => {
     const { store, state } = createStore({
       items: [
@@ -751,6 +891,7 @@ describe("KindrawStore", () => {
           kind: "drawing",
           title: "Board",
           content_blob_key: "users/user-1/items/item-1/current.excalidraw",
+          archived_at: null,
           collaboration_room_key: "abcdefghijklmnopqrstuv",
           collaboration_enabled_at: "2026-03-09T11:00:00.000Z",
           created_at: "2026-03-09T10:00:00.000Z",
@@ -777,6 +918,7 @@ describe("KindrawStore", () => {
           kind: "drawing",
           title: "Mapa",
           content_blob_key: "users/user-1/items/item-1/current.excalidraw",
+          archived_at: null,
           collaboration_room_key: null,
           collaboration_enabled_at: null,
           created_at: "2026-03-09T10:00:00.000Z",

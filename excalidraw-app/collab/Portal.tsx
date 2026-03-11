@@ -4,6 +4,8 @@ import { encryptData } from "@excalidraw/excalidraw/data/encryption";
 import { newElementWith } from "@excalidraw/element";
 import throttle from "lodash.throttle";
 
+import { getSceneVersion } from "@excalidraw/element";
+
 import type { UserIdleState } from "@excalidraw/common";
 import type { OrderedExcalidrawElement } from "@excalidraw/element/types";
 import type {
@@ -20,21 +22,22 @@ import type {
   SyncableExcalidrawElement,
 } from "../data";
 import type { TCollabClass } from "./Collab";
-import type { Socket } from "socket.io-client";
+import type { KindrawCollabTransport } from "./KindrawCollabSocket";
 
 class Portal {
   collab: TCollabClass;
-  socket: Socket | null = null;
+  socket: KindrawCollabTransport | null = null;
   socketInitialized: boolean = false; // we don't want the socket to emit any updates until it is fully initialized
   roomId: string | null = null;
   roomKey: string | null = null;
   broadcastedElementVersions: Map<string, number> = new Map();
+  private persistedSceneVersion = -1;
 
   constructor(collab: TCollabClass) {
     this.collab = collab;
   }
 
-  open(socket: Socket, id: string, key: string) {
+  open(socket: KindrawCollabTransport, id: string, key: string) {
     this.socket = socket;
     this.roomId = id;
     this.roomKey = key;
@@ -73,6 +76,7 @@ class Portal {
     this.roomKey = null;
     this.socketInitialized = false;
     this.broadcastedElementVersions = new Map();
+    this.persistedSceneVersion = -1;
   }
 
   isOpen() {
@@ -82,6 +86,10 @@ class Portal {
       this.roomId &&
       this.roomKey
     );
+  }
+
+  isSceneSaved(elements: readonly SyncableExcalidrawElement[]) {
+    return getSceneVersion(elements) <= this.persistedSceneVersion;
   }
 
   async _broadcastSocketData(
@@ -262,6 +270,24 @@ class Portal {
     if (this.socket?.id) {
       this.socket.emit(WS_EVENTS.USER_FOLLOW_CHANGE, payload);
     }
+  };
+
+  persistSnapshot = async (elements: readonly SyncableExcalidrawElement[]) => {
+    if (!this.socket || !this.roomKey || !this.socketInitialized) {
+      return;
+    }
+
+    const data: SocketUpdateDataSource["SCENE_UPDATE"] = {
+      type: WS_SUBTYPES.UPDATE,
+      payload: {
+        elements,
+      },
+    };
+    const json = JSON.stringify(data);
+    const encoded = new TextEncoder().encode(json);
+    const { encryptedBuffer, iv } = await encryptData(this.roomKey, encoded);
+    this.socket.persistSnapshot(encryptedBuffer, iv);
+    this.persistedSceneVersion = getSceneVersion(elements);
   };
 }
 

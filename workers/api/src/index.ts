@@ -1,4 +1,5 @@
 import { createStore, HttpError } from "./store";
+import { KindrawCollaborationRoom } from "./collab";
 
 import type {
   CreateFolderInput,
@@ -216,6 +217,18 @@ const readJson = async <T>(request: Request): Promise<T> => {
   }
 };
 
+const readGithubOAuthPayload = async (response: Response) => {
+  try {
+    return (await response.json()) as {
+      access_token?: string;
+      error?: string;
+      error_description?: string;
+    };
+  } catch {
+    return null;
+  }
+};
+
 const exchangeGithubCode = async (request: Request, env: Env, code: string) => {
   const redirectUri = new URL(
     "/api/auth/callback/github",
@@ -235,14 +248,24 @@ const exchangeGithubCode = async (request: Request, env: Env, code: string) => {
       redirect_uri: redirectUri,
     }),
   });
+  const data = await readGithubOAuthPayload(response);
 
   if (!response.ok) {
-    throw new HttpError(502, "GitHub token exchange failed.");
+    throw new HttpError(
+      502,
+      `GitHub token exchange failed: ${
+        data?.error_description || data?.error || `status ${response.status}`
+      }.`,
+    );
   }
 
-  const data = (await response.json()) as { access_token?: string };
-  if (!data.access_token) {
-    throw new HttpError(502, "GitHub access token missing.");
+  if (!data?.access_token) {
+    throw new HttpError(
+      502,
+      `GitHub access token missing: ${
+        data?.error_description || data?.error || "unknown GitHub response"
+      }.`,
+    );
   }
 
   return data.access_token;
@@ -527,6 +550,19 @@ export const routeRequest = async (request: Request, env: Env) => {
   }
 
   if (
+    pathname.startsWith("/api/collaboration-room/") &&
+    pathname.endsWith("/bootstrap") &&
+    request.method === "GET"
+  ) {
+    const roomId = pathname
+      .replace("/api/collaboration-room/", "")
+      .replace("/bootstrap", "");
+    const roomKey = new URL(request.url).searchParams.get("key") || "";
+    const store = createStore(env.KINDRAW_DB, env.KINDRAW_BLOBS);
+    return json(await store.getCollaborationRoomBootstrap(roomId, roomKey));
+  }
+
+  if (
     pathname.startsWith("/api/items/") &&
     pathname.endsWith("/collaboration-room")
   ) {
@@ -580,6 +616,14 @@ export const routeRequest = async (request: Request, env: Env) => {
     return json(await store.getPublicItem(token));
   }
 
+  if (pathname.startsWith("/api/collab/rooms/") && pathname.endsWith("/ws")) {
+    const roomId = pathname
+      .replace("/api/collab/rooms/", "")
+      .replace("/ws", "");
+    const stub = env.KINDRAW_COLLAB.get(env.KINDRAW_COLLAB.idFromName(roomId));
+    return stub.fetch(request);
+  }
+
   return errorResponse(404, "Not found.");
 };
 
@@ -596,6 +640,9 @@ const worker: ExportedHandler<Env> = {
   async fetch(request, env) {
     try {
       const response = await routeRequest(request, env);
+      if (response.status === 101) {
+        return response;
+      }
       return withCors(response, request, env);
     } catch (error) {
       return withCors(handleError(error), request, env);
@@ -604,3 +651,4 @@ const worker: ExportedHandler<Env> = {
 };
 
 export default worker;
+export { KindrawCollaborationRoom };

@@ -14,9 +14,17 @@ database_id = "fbaecde8-8e18-4638-ad8f-2ea756225a61"
 binding = "KINDRAW_BLOBS"
 bucket_name = "kindraw-blobs"
 
+[[durable_objects.bindings]]
+name = "KINDRAW_COLLAB"
+class_name = "KindrawCollaborationRoom"
+
 [vars]
 KINDRAW_APP_ORIGIN = "https://kindraw.dev"
 
 [[routes]]
 pattern = "api.kindraw.dev"
 custom_domain = true
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["KindrawCollaborationRoom"]

@@ -8,11 +8,40 @@ import type { AppState } from "@excalidraw/excalidraw/types";
 
 import { STORAGE_KEYS } from "../app_constants";
 
-export const saveUsernameToLocalStorage = (username: string) => {
+type CollaborationIdentityStorage = {
+  username?: string;
+  guestId?: string;
+};
+
+const importCollaborationIdentityFromLocalStorage =
+  (): CollaborationIdentityStorage | null => {
+    try {
+      const data = localStorage.getItem(STORAGE_KEYS.LOCAL_STORAGE_COLLAB);
+      if (data) {
+        return JSON.parse(data) as CollaborationIdentityStorage;
+      }
+    } catch (error: any) {
+      // Unable to access localStorage
+      console.error(error);
+    }
+
+    return null;
+  };
+
+export const saveCollaborationIdentityToLocalStorage = ({
+  username,
+  guestId,
+}: {
+  username: string;
+  guestId?: string | null;
+}) => {
   try {
     localStorage.setItem(
       STORAGE_KEYS.LOCAL_STORAGE_COLLAB,
-      JSON.stringify({ username }),
+      JSON.stringify({
+        username,
+        ...(guestId ? { guestId } : {}),
+      }),
     );
   } catch (error: any) {
     // Unable to access window.localStorage
@@ -20,19 +49,16 @@ export const saveUsernameToLocalStorage = (username: string) => {
   }
 };
 
-export const importUsernameFromLocalStorage = (): string | null => {
-  try {
-    const data = localStorage.getItem(STORAGE_KEYS.LOCAL_STORAGE_COLLAB);
-    if (data) {
-      return JSON.parse(data).username;
-    }
-  } catch (error: any) {
-    // Unable to access localStorage
-    console.error(error);
-  }
-
-  return null;
+export const saveUsernameToLocalStorage = (username: string) => {
+  saveCollaborationIdentityToLocalStorage({ username });
 };
+
+export const importUsernameFromLocalStorage = (): string | null => {
+  return importCollaborationIdentityFromLocalStorage()?.username || null;
+};
+
+export const importGuestIdFromLocalStorage = (): string | null =>
+  importCollaborationIdentityFromLocalStorage()?.guestId || null;
 
 export const importFromLocalStorage = () => {
   let savedElements = null;

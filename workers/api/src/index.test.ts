@@ -20,6 +20,7 @@ const { mockStore } = vi.hoisted(() => ({
     deleteItem: vi.fn(),
     enableItemCollaboration: vi.fn(),
     disableItemCollaboration: vi.fn(),
+    getCollaborationRoomBootstrap: vi.fn(),
     createShareLink: vi.fn(),
     revokeShareLink: vi.fn(),
     getPublicItem: vi.fn(),
@@ -27,6 +28,15 @@ const { mockStore } = vi.hoisted(() => ({
     createSession: vi.fn(),
   },
 }));
+
+const mockCollabStub = {
+  fetch: vi.fn(),
+};
+
+const mockCollabNamespace = {
+  idFromName: vi.fn((name: string) => ({ toString: () => name })),
+  get: vi.fn(() => mockCollabStub),
+};
 
 vi.mock("./store", () => {
   class HttpError extends Error {
@@ -47,6 +57,7 @@ vi.mock("./store", () => {
 const env: Env = {
   KINDRAW_DB: {} as Env["KINDRAW_DB"],
   KINDRAW_BLOBS: {} as Env["KINDRAW_BLOBS"],
+  KINDRAW_COLLAB: mockCollabNamespace as Env["KINDRAW_COLLAB"],
   GITHUB_CLIENT_ID: "github-client",
   GITHUB_CLIENT_SECRET: "github-secret",
   KINDRAW_APP_ORIGIN: "http://localhost:3001",
@@ -70,6 +81,7 @@ describe("worker helpers", () => {
 describe("routeRequest", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockCollabStub.fetch.mockReset();
   });
 
   it("returns null session when cookie is missing", async () => {
@@ -276,6 +288,43 @@ describe("routeRequest", () => {
     fetchMock.mockRestore();
   });
 
+  it("surfaces the GitHub OAuth error description when token exchange fails", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          error: "redirect_uri_mismatch",
+          error_description:
+            "The redirect_uri is not associated with this application.",
+        }),
+        {
+          status: 400,
+          headers: { "Content-Type": "application/json" },
+        },
+      ),
+    );
+
+    const response = await worker.fetch(
+      new Request(
+        "http://localhost:8787/api/auth/callback/github?code=abc&state=oauth-state",
+        {
+          headers: {
+            Cookie: "kindraw_oauth_state=oauth-state",
+          },
+        },
+      ),
+      env,
+    );
+
+    expect(response.status).toBe(502);
+    expect(await response.json()).toEqual({
+      error:
+        "GitHub token exchange failed: The redirect_uri is not associated with this application..",
+      status: 502,
+    });
+
+    fetchMock.mockRestore();
+  });
+
   it("enables item collaboration for an authenticated drawing owner", async () => {
     mockStore.resolveSession.mockResolvedValue({
       session: {
@@ -321,5 +370,74 @@ describe("routeRequest", () => {
       "u-1",
       "item-1",
     );
+  });
+
+  it("returns a public collaboration bootstrap when room key is valid", async () => {
+    mockStore.getCollaborationRoomBootstrap.mockResolvedValue({
+      item: {
+        id: "item-1",
+        kind: "drawing",
+        title: "Realtime board",
+        updatedAt: "2026-03-10T12:00:00.000Z",
+        createdAt: "2026-03-10T11:00:00.000Z",
+      },
+      content: '{"elements":[]}',
+      collaborationRoom: {
+        roomId: "item-1",
+        roomKey: "room-key-1",
+        enabledAt: "2026-03-10T12:00:00.000Z",
+      },
+    });
+
+    const response = await worker.fetch(
+      new Request(
+        "http://localhost:8787/api/collaboration-room/item-1/bootstrap?key=room-key-1",
+        {
+          headers: {
+            Origin: "http://localhost:3001",
+          },
+        },
+      ),
+      env,
+    );
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      item: {
+        id: "item-1",
+        kind: "drawing",
+        title: "Realtime board",
+        updatedAt: "2026-03-10T12:00:00.000Z",
+        createdAt: "2026-03-10T11:00:00.000Z",
+      },
+      content: '{"elements":[]}',
+      collaborationRoom: {
+        roomId: "item-1",
+        roomKey: "room-key-1",
+        enabledAt: "2026-03-10T12:00:00.000Z",
+      },
+    });
+    expect(mockStore.getCollaborationRoomBootstrap).toHaveBeenCalledWith(
+      "item-1",
+      "room-key-1",
+    );
+  });
+
+  it("forwards collaboration websocket upgrades to the durable object room", async () => {
+    mockCollabStub.fetch.mockResolvedValue(new Response(null, { status: 204 }));
+
+    const response = await routeRequest(
+      new Request("http://localhost:8787/api/collab/rooms/room-1/ws", {
+        headers: {
+          Upgrade: "websocket",
+        },
+      }),
+      env,
+    );
+
+    expect(mockCollabNamespace.idFromName).toHaveBeenCalledWith("room-1");
+    expect(mockCollabNamespace.get).toHaveBeenCalled();
+    expect(mockCollabStub.fetch).toHaveBeenCalled();
+    expect(response.status).toBe(204);
   });
 });

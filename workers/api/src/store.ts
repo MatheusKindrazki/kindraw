@@ -4,6 +4,7 @@ import type {
   CreateItemInput,
   D1Database,
   FolderRecord,
+  KindrawCollaborationBootstrapResponse,
   KindrawCollaborationRoom,
   ItemRecord,
   KindrawItem,
@@ -52,6 +53,7 @@ type ItemRow = {
   kind: KindrawItem["kind"];
   title: string;
   content_blob_key: string;
+  archived_at: string | null;
   collaboration_room_key: string | null;
   collaboration_enabled_at: string | null;
   created_at: string;
@@ -110,6 +112,7 @@ const toItem = (row: ItemRow, shareLinks: KindrawShareLink[]): KindrawItem => ({
   ownerId: row.owner_id,
   updatedAt: row.updated_at,
   createdAt: row.created_at,
+  archivedAt: row.archived_at,
   shareLinks,
   collaborationRoomId: row.collaboration_enabled_at ? row.id : null,
   collaborationEnabledAt: row.collaboration_enabled_at,
@@ -123,6 +126,7 @@ const toItemRecord = (row: ItemRow): ItemRecord => ({
   ownerId: row.owner_id,
   updatedAt: row.updated_at,
   createdAt: row.created_at,
+  archivedAt: row.archived_at,
   contentBlobKey: row.content_blob_key,
   collaborationRoomKey: row.collaboration_room_key,
   collaborationRoomId: row.collaboration_enabled_at ? row.id : null,
@@ -421,7 +425,7 @@ export class KindrawStore {
         `INSERT INTO folders (id, owner_id, parent_id, name, created_at, updated_at)
          VALUES (?, ?, ?, ?, ?, ?)`,
       )
-      .bind(folderId, ownerId, input.parentId, name, now, now)
+      .bind(folderId, ownerId, input.parentId ?? null, name, now, now)
       .run();
 
     return folderId;
@@ -526,17 +530,18 @@ export class KindrawStore {
            kind,
            title,
            content_blob_key,
+           archived_at,
            collaboration_room_key,
            collaboration_enabled_at,
            created_at,
            updated_at
          )
-         VALUES (?, ?, ?, ?, ?, ?, NULL, NULL, ?, ?)`,
+         VALUES (?, ?, ?, ?, ?, ?, NULL, NULL, NULL, ?, ?)`,
       )
       .bind(
         itemId,
         ownerId,
-        input.folderId,
+        input.folderId ?? null,
         input.kind,
         title,
         blobKey,
@@ -562,6 +567,7 @@ export class KindrawStore {
           kind: item.kind,
           title: item.title,
           content_blob_key: item.contentBlobKey,
+          archived_at: item.archivedAt,
           collaboration_room_key: item.collaborationRoomKey,
           collaboration_enabled_at: item.collaborationEnabledAt,
           created_at: item.createdAt,
@@ -578,6 +584,45 @@ export class KindrawStore {
               enabledAt: item.collaborationEnabledAt,
             }
           : null,
+    };
+  }
+
+  async getCollaborationRoomBootstrap(
+    roomId: string,
+    roomKey: string,
+  ): Promise<KindrawCollaborationBootstrapResponse> {
+    if (!roomKey.trim()) {
+      throw new HttpError(400, "Collaboration room key is required.");
+    }
+
+    const item = await this.db
+      .prepare(
+        `SELECT * FROM items
+         WHERE id = ? AND collaboration_enabled_at IS NOT NULL AND collaboration_room_key = ?`,
+      )
+      .bind(roomId, roomKey)
+      .first<ItemRow>();
+
+    if (!item || item.kind !== "drawing") {
+      throw new HttpError(404, "Collaboration room not found.");
+    }
+
+    const content = await this.getContent(item.content_blob_key);
+
+    return {
+      item: {
+        id: item.id,
+        kind: item.kind,
+        title: item.title,
+        updatedAt: item.updated_at,
+        createdAt: item.created_at,
+      },
+      content,
+      collaborationRoom: {
+        roomId: item.id,
+        roomKey,
+        enabledAt: item.collaboration_enabled_at!,
+      },
     };
   }
 
@@ -599,13 +644,20 @@ export class KindrawStore {
       await this.requireFolder(ownerId, folderId);
     }
 
+    const archivedAt =
+      "archived" in input
+        ? input.archived
+          ? item.archivedAt || isoNow()
+          : null
+        : item.archivedAt;
+
     await this.db
       .prepare(
         `UPDATE items
-         SET title = ?, folder_id = ?, updated_at = ?
+         SET title = ?, folder_id = ?, archived_at = ?, updated_at = ?
          WHERE id = ? AND owner_id = ?`,
       )
-      .bind(title, folderId, isoNow(), itemId, ownerId)
+      .bind(title, folderId, archivedAt, isoNow(), itemId, ownerId)
       .run();
   }
 
