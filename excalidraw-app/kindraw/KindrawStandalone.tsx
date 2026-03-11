@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState, startTransition } from "react";
 
 import { getPublicItem, getSession, getTree, openGithubLogin } from "./api";
 import { DocEditorPage } from "./DocEditorPage";
-import { parseDrawingContent } from "./content";
+import { createPublicDrawingInitialData } from "./content";
 import { MarkdownPreview } from "./MarkdownPreview";
 import { getErrorMessage } from "./utils";
 import "./kindraw.scss";
@@ -191,7 +191,7 @@ export const KindrawPublicSharePage = ({
       ) : (
         <section className="kindraw-public-view__canvas">
           <Excalidraw
-            initialData={parseDrawingContent(itemResponse.content)}
+            initialData={createPublicDrawingInitialData(itemResponse.content)}
             UIOptions={{
               canvasActions: {
                 clearCanvas: false,

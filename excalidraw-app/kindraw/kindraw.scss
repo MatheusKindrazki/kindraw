@@ -331,6 +331,8 @@
 
 .kindraw-public-view__canvas {
   width: min(1400px, 100%);
+  height: min(72vh, 920px);
+  min-height: 540px;
 }
 
 .kindraw-public-view__canvas .layer-ui__wrapper {
@@ -529,5 +531,10 @@
   .kindraw-share-links__list li {
     flex-direction: column;
     align-items: flex-start;
+  }
+
+  .kindraw-public-view__canvas {
+    height: 62vh;
+    min-height: 420px;
   }
 }

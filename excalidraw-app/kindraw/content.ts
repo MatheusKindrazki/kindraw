@@ -39,3 +39,8 @@ export const parseDrawingContent = (
     return EMPTY_DRAWING_DATA;
   }
 };
+
+export const createPublicDrawingInitialData = (content: string) => ({
+  ...parseDrawingContent(content),
+  scrollToContent: true as const,
+});
