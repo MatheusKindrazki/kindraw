@@ -9,6 +9,7 @@ interface RateLimitInfo {
 
 interface StreamingOptions {
   url: string;
+  credentials?: RequestCredentials;
   messages: readonly LLMMessage[];
   onChunk?: (chunk: string) => void;
   extractRateLimits?: boolean;
@@ -86,6 +87,7 @@ export async function TTDStreamFetch(
 ): Promise<TTTDDialog.OnTextSubmitRetValue> {
   const {
     url,
+    credentials,
     messages,
     onChunk,
     onStreamCreated,
@@ -100,6 +102,7 @@ export async function TTDStreamFetch(
 
     const response = await fetch(url, {
       method: "POST",
+      credentials,
       headers: {
         Accept: "text/event-stream",
         "Content-Type": "application/json",
@@ -124,8 +127,18 @@ export async function TTDStreamFetch(
       }
 
       const text = await response.text();
+      let parsedError: { error?: string; message?: string } | null = null;
+      try {
+        parsedError = text ? JSON.parse(text) : null;
+      } catch {
+        parsedError = null;
+      }
       throw new RequestError({
-        message: text || "Generation failed...",
+        message:
+          parsedError?.error ||
+          parsedError?.message ||
+          text ||
+          "Generation failed...",
         status: response.status,
       });
     }

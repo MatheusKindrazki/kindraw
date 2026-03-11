@@ -13,6 +13,21 @@ import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
 
 import { TTDIndexedDBAdapter } from "../data/TTDStorage";
 
+const getAIBaseUrl = () => {
+  const configuredKindrawApiBaseUrl =
+    import.meta.env.VITE_APP_KINDRAW_API_BASE_URL?.trim();
+  if (configuredKindrawApiBaseUrl) {
+    return configuredKindrawApiBaseUrl.replace(/\/+$/, "");
+  }
+
+  const configuredAIBaseUrl = import.meta.env.VITE_APP_AI_BACKEND?.trim();
+  if (configuredAIBaseUrl) {
+    return configuredAIBaseUrl.replace(/\/+$/, "");
+  }
+
+  return window.location.origin;
+};
+
 export const AIComponents = ({
   excalidrawAPI,
 }: {
@@ -41,11 +56,10 @@ export const AIComponents = ({
           const textFromFrameChildren = getTextFromElements(children);
 
           const response = await fetch(
-            `${
-              import.meta.env.VITE_APP_AI_BACKEND
-            }/v1/ai/diagram-to-code/generate`,
+            `${getAIBaseUrl()}/v1/ai/diagram-to-code/generate`,
             {
               method: "POST",
+              credentials: "include",
               headers: {
                 Accept: "application/json",
                 "Content-Type": "application/json",
@@ -66,7 +80,7 @@ export const AIComponents = ({
               throw new Error(text);
             }
 
-            if (errorJSON.statusCode === 429) {
+            if (errorJSON.statusCode === 429 || errorJSON.status === 429) {
               return {
                 html: `<html>
                 <body style="margin: 0; text-align: center">
@@ -78,7 +92,7 @@ export const AIComponents = ({
               };
             }
 
-            throw new Error(errorJSON.message || text);
+            throw new Error(errorJSON.error || errorJSON.message || text);
           }
 
           try {
@@ -101,9 +115,8 @@ export const AIComponents = ({
           const { onChunk, onStreamCreated, signal, messages } = props;
 
           const result = await TTDStreamFetch({
-            url: `${
-              import.meta.env.VITE_APP_AI_BACKEND
-            }/v1/ai/text-to-diagram/chat-streaming`,
+            url: `${getAIBaseUrl()}/v1/ai/text-to-diagram/chat-streaming`,
+            credentials: "include",
             messages,
             onChunk,
             onStreamCreated,

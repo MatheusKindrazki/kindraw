@@ -1,5 +1,9 @@
 import { createStore, HttpError } from "./store";
 import { KindrawCollaborationRoom } from "./collab";
+import {
+  handleDiagramToCodeGenerate,
+  handleTextToDiagramChatStreaming,
+} from "./ai";
 
 import type {
   CreateFolderInput,
@@ -469,6 +473,22 @@ export const routeRequest = async (request: Request, env: Env) => {
       }),
     );
     return response;
+  }
+
+  if (
+    pathname === "/v1/ai/text-to-diagram/chat-streaming" &&
+    request.method === "POST"
+  ) {
+    const { auth } = await requireAuth(request, env);
+    return handleTextToDiagramChatStreaming(request, env, auth.user.id);
+  }
+
+  if (
+    pathname === "/v1/ai/diagram-to-code/generate" &&
+    request.method === "POST"
+  ) {
+    const { auth } = await requireAuth(request, env);
+    return handleDiagramToCodeGenerate(request, env, auth.user.id);
   }
 
   if (pathname === "/api/tree" && request.method === "GET") {

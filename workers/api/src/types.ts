@@ -176,6 +176,12 @@ export type Env = {
   GITHUB_CLIENT_ID: string;
   GITHUB_CLIENT_SECRET: string;
   KINDRAW_APP_ORIGIN?: string;
+  OPENROUTER_API_KEY?: string;
+  OPENROUTER_BASE_URL?: string;
+  OPENROUTER_TEXT_MODEL?: string;
+  OPENROUTER_VISION_MODEL?: string;
+  OPENROUTER_HTTP_REFERER?: string;
+  OPENROUTER_APP_TITLE?: string;
 };
 
 export type AuthContext = {

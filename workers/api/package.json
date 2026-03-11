@@ -12,5 +12,8 @@
   "devDependencies": {
     "vitest": "3.0.6",
     "wrangler": "4.34.0"
+  },
+  "dependencies": {
+    "openai": "6.27.0"
   }
 }

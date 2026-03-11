@@ -4,28 +4,46 @@ import worker, { buildCookie, parseCookies, routeRequest } from "./index";
 
 import type { Env } from "./types";
 
-const { mockStore } = vi.hoisted(() => ({
-  mockStore: {
-    getSessionPayload: vi.fn(),
-    resolveSession: vi.fn(),
-    deleteSession: vi.fn(),
-    getTree: vi.fn(),
-    createFolder: vi.fn(),
-    patchFolder: vi.fn(),
-    deleteFolder: vi.fn(),
-    createItem: vi.fn(),
-    getItem: vi.fn(),
-    patchItemMeta: vi.fn(),
-    putItemContent: vi.fn(),
-    deleteItem: vi.fn(),
-    enableItemCollaboration: vi.fn(),
-    disableItemCollaboration: vi.fn(),
-    getCollaborationRoomBootstrap: vi.fn(),
-    createShareLink: vi.fn(),
-    revokeShareLink: vi.fn(),
-    getPublicItem: vi.fn(),
-    upsertGithubUser: vi.fn(),
-    createSession: vi.fn(),
+const { mockStore, mockOpenAIChatCreate, mockOpenAIConstructor } = vi.hoisted(
+  () => ({
+    mockStore: {
+      getSessionPayload: vi.fn(),
+      resolveSession: vi.fn(),
+      deleteSession: vi.fn(),
+      getTree: vi.fn(),
+      createFolder: vi.fn(),
+      patchFolder: vi.fn(),
+      deleteFolder: vi.fn(),
+      createItem: vi.fn(),
+      getItem: vi.fn(),
+      patchItemMeta: vi.fn(),
+      putItemContent: vi.fn(),
+      deleteItem: vi.fn(),
+      enableItemCollaboration: vi.fn(),
+      disableItemCollaboration: vi.fn(),
+      getCollaborationRoomBootstrap: vi.fn(),
+      createShareLink: vi.fn(),
+      revokeShareLink: vi.fn(),
+      getPublicItem: vi.fn(),
+      upsertGithubUser: vi.fn(),
+      createSession: vi.fn(),
+    },
+    mockOpenAIChatCreate: vi.fn(),
+    mockOpenAIConstructor: vi.fn(),
+  }),
+);
+
+vi.mock("openai", () => ({
+  default: class OpenAI {
+    chat = {
+      completions: {
+        create: mockOpenAIChatCreate,
+      },
+    };
+
+    constructor(config: unknown) {
+      mockOpenAIConstructor(config);
+    }
   },
 }));
 
@@ -61,12 +79,47 @@ const env: Env = {
   GITHUB_CLIENT_ID: "github-client",
   GITHUB_CLIENT_SECRET: "github-secret",
   KINDRAW_APP_ORIGIN: "http://localhost:3001",
+  OPENROUTER_API_KEY: "openrouter-secret",
 };
 
 const pagesEnv: Env = {
   ...env,
   KINDRAW_APP_ORIGIN: "https://kindraw-web.pages.dev",
 };
+
+const authenticatedSession = () => ({
+  session: {
+    id: "s-1",
+    userId: "u-1",
+    expiresAt: new Date(Date.now() + 60_000).toISOString(),
+    createdAt: new Date().toISOString(),
+    lastSeenAt: new Date().toISOString(),
+  },
+  user: {
+    id: "u-1",
+    githubLogin: "matheus",
+    name: "Matheus",
+    avatarUrl: null,
+  },
+});
+
+type ChatCompletionChunk = {
+  choices: Array<{
+    delta?: {
+      content?: string;
+    };
+    finish_reason?: string | null;
+  }>;
+};
+
+const streamChunks = (...chunks: Array<ChatCompletionChunk>) =>
+  ({
+    async *[Symbol.asyncIterator]() {
+      for (const chunk of chunks) {
+        yield chunk;
+      }
+    },
+  } as AsyncIterable<ChatCompletionChunk>);
 
 describe("worker helpers", () => {
   it("parses cookies", () => {
@@ -110,21 +163,7 @@ describe("routeRequest", () => {
   });
 
   it("returns tree for authenticated user", async () => {
-    mockStore.resolveSession.mockResolvedValue({
-      session: {
-        id: "s-1",
-        userId: "u-1",
-        expiresAt: new Date(Date.now() + 60_000).toISOString(),
-        createdAt: new Date().toISOString(),
-        lastSeenAt: new Date().toISOString(),
-      },
-      user: {
-        id: "u-1",
-        githubLogin: "matheus",
-        name: "Matheus",
-        avatarUrl: null,
-      },
-    });
+    mockStore.resolveSession.mockResolvedValue(authenticatedSession());
     mockStore.getTree.mockResolvedValue({
       folders: [],
       items: [],
@@ -149,6 +188,146 @@ describe("routeRequest", () => {
     expect(response.headers.get("Access-Control-Allow-Origin")).toBe(
       "http://localhost:3001",
     );
+  });
+
+  it("streams Mermaid output from the AI route", async () => {
+    mockStore.resolveSession.mockResolvedValue(authenticatedSession());
+    mockOpenAIChatCreate.mockResolvedValue(
+      streamChunks(
+        {
+          choices: [
+            {
+              delta: {
+                content: "flowchart LR\n",
+              },
+              finish_reason: null,
+            },
+          ],
+        },
+        {
+          choices: [
+            {
+              delta: {
+                content: 'A["Start"] --> B["Finish"]',
+              },
+              finish_reason: "stop",
+            },
+          ],
+        },
+      ),
+    );
+
+    const response = await worker.fetch(
+      new Request(
+        "http://localhost:8787/v1/ai/text-to-diagram/chat-streaming",
+        {
+          method: "POST",
+          headers: {
+            Cookie: "kindraw_session=s-1",
+            Origin: "http://localhost:3001",
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            messages: [{ role: "user", content: "faça um fluxo simples" }],
+          }),
+        },
+      ),
+      env,
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("Content-Type")).toContain("text/event-stream");
+    const body = await response.text();
+    expect(body).toContain('"delta":"flowchart LR\\n"');
+    expect(body).toContain('"delta":"A[\\"Start\\"] --> B[\\"Finish\\"]"');
+    expect(body).toContain('"finishReason":"stop"');
+    expect(body).toContain("data: [DONE]");
+    expect(mockOpenAIConstructor).toHaveBeenCalledWith(
+      expect.objectContaining({
+        apiKey: "openrouter-secret",
+        baseURL: "https://openrouter.ai/api/v1",
+      }),
+    );
+    expect(mockOpenAIChatCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        model: "minimax/minimax-m2.5",
+        stream: true,
+        user: "u-1",
+      }),
+    );
+  });
+
+  it("generates HTML from the AI wireframe route", async () => {
+    mockStore.resolveSession.mockResolvedValue(authenticatedSession());
+    mockOpenAIChatCreate.mockResolvedValue({
+      choices: [
+        {
+          message: {
+            content:
+              "```html\n<html><body><main>Preview</main></body></html>\n```",
+          },
+        },
+      ],
+    });
+
+    const response = await worker.fetch(
+      new Request("http://localhost:8787/v1/ai/diagram-to-code/generate", {
+        method: "POST",
+        headers: {
+          Cookie: "kindraw_session=s-1",
+          Origin: "http://localhost:3001",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          texts: "Hero, CTA",
+          image: "data:image/jpeg;base64,abc123",
+          theme: "dark",
+        }),
+      }),
+      env,
+    );
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      html: "<html><body><main>Preview</main></body></html>",
+    });
+    expect(mockOpenAIChatCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        model: "minimax/minimax-01",
+        user: "u-1",
+      }),
+    );
+  });
+
+  it("returns 503 when OpenRouter is not configured", async () => {
+    mockStore.resolveSession.mockResolvedValue(authenticatedSession());
+
+    const response = await worker.fetch(
+      new Request(
+        "http://localhost:8787/v1/ai/text-to-diagram/chat-streaming",
+        {
+          method: "POST",
+          headers: {
+            Cookie: "kindraw_session=s-1",
+            Origin: "http://localhost:3001",
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            messages: [{ role: "user", content: "faça um fluxo simples" }],
+          }),
+        },
+      ),
+      {
+        ...env,
+        OPENROUTER_API_KEY: undefined,
+      },
+    );
+
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual({
+      error: "OpenRouter is not configured.",
+      status: 503,
+    });
   });
 
   it("creates a session from github callback", async () => {
@@ -326,21 +505,7 @@ describe("routeRequest", () => {
   });
 
   it("enables item collaboration for an authenticated drawing owner", async () => {
-    mockStore.resolveSession.mockResolvedValue({
-      session: {
-        id: "s-1",
-        userId: "u-1",
-        expiresAt: new Date(Date.now() + 60_000).toISOString(),
-        createdAt: new Date().toISOString(),
-        lastSeenAt: new Date().toISOString(),
-      },
-      user: {
-        id: "u-1",
-        githubLogin: "matheus",
-        name: "Matheus",
-        avatarUrl: null,
-      },
-    });
+    mockStore.resolveSession.mockResolvedValue(authenticatedSession());
     mockStore.enableItemCollaboration.mockResolvedValue({
       roomId: "item-1",
       roomKey: "abcdefghijklmnopqrstuv",
