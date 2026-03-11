@@ -15,15 +15,19 @@ import {
 import { ErrorDialog } from "@excalidraw/excalidraw/components/ErrorDialog";
 import { OverwriteConfirmDialog } from "@excalidraw/excalidraw/components/OverwriteConfirm/OverwriteConfirm";
 import { openConfirmModal } from "@excalidraw/excalidraw/components/OverwriteConfirm/OverwriteConfirmState";
+import Spinner from "@excalidraw/excalidraw/components/Spinner";
+import { getShortcutKey } from "@excalidraw/excalidraw/shortcut";
 import Trans from "@excalidraw/excalidraw/components/Trans";
 import {
   APP_NAME,
   EVENT,
+  KEYS,
   THEME,
   VERSION_TIMEOUT,
   debounce,
   getVersion,
   getFrame,
+  isWritableElement,
   isTestEnv,
   preventUnload,
   resolvablePromise,
@@ -45,6 +49,7 @@ import { t } from "@excalidraw/excalidraw/i18n";
 
 import {
   GithubIcon,
+  LibraryIcon,
   LinkIcon,
   clipboard,
   usersIcon,
@@ -206,6 +211,31 @@ const getNextActiveDrawingPath = (
 
   return nextItem ? buildItemPath(nextItem) : "/";
 };
+
+const KINDRAW_SHORTCUTS = {
+  workspace: {
+    code: "KeyM",
+    shortcut: "CtrlOrCmd+Alt+M",
+  },
+  publicLink: {
+    code: "KeyU",
+    shortcut: "CtrlOrCmd+Alt+U",
+  },
+  collaboration: {
+    code: "KeyR",
+    shortcut: "CtrlOrCmd+Alt+R",
+  },
+} as const;
+
+const getShortcutTitle = (label: string, shortcut: string) =>
+  `${label} • ${getShortcutKey(shortcut)}`;
+
+const isKindrawShortcutEvent = (event: KeyboardEvent, code: string) =>
+  event[KEYS.CTRL_OR_CMD] &&
+  event.altKey &&
+  !event.shiftKey &&
+  !event.repeat &&
+  event.code === code;
 
 polyfill();
 
@@ -538,6 +568,10 @@ const ExcalidrawWrapper = () => {
   const [kindrawLoadingDrawingId, setKindrawLoadingDrawingId] = useState<
     string | null
   >(null);
+  const [kindrawCreatingPublicLink, setKindrawCreatingPublicLink] =
+    useState(false);
+  const [kindrawStartingRealtimeCollab, setKindrawStartingRealtimeCollab] =
+    useState(false);
   const [kindrawIsEditingTitle, setKindrawIsEditingTitle] = useState(false);
   const [kindrawDraftTitle, setKindrawDraftTitle] = useState("");
   const kindrawApplyingSceneRef = useRef(false);
@@ -931,21 +965,26 @@ const ExcalidrawWrapper = () => {
   }, [kindrawCurrentItem, refreshKindrawTree]);
 
   const handleKindrawCreateShareLink = useCallback(async () => {
-    await runKindrawMutation(async () => {
-      const shareLink = await createKindrawShareLinkInternal();
-      if (!shareLink) {
-        return;
-      }
+    setKindrawCreatingPublicLink(true);
+    try {
+      await runKindrawMutation(async () => {
+        const shareLink = await createKindrawShareLinkInternal();
+        if (!shareLink) {
+          return;
+        }
 
-      const publicUrl = buildPublicShareUrl(shareLink.token);
-      const copied = await copyToClipboard(publicUrl);
-      const message = copied
-        ? t("kindraw.status.publicLinkCreatedCopied")
-        : t("kindraw.status.publicLinkCreated");
+        const publicUrl = buildPublicShareUrl(shareLink.token);
+        const copied = await copyToClipboard(publicUrl);
+        const message = copied
+          ? t("kindraw.status.publicLinkCreatedCopied")
+          : t("kindraw.status.publicLinkCreated");
 
-      setKindrawDrawingStatus(message);
-      excalidrawAPI?.setToast({ message });
-    });
+        setKindrawDrawingStatus(message);
+        excalidrawAPI?.setToast({ message });
+      });
+    } finally {
+      setKindrawCreatingPublicLink(false);
+    }
   }, [createKindrawShareLinkInternal, excalidrawAPI, runKindrawMutation]);
 
   const handleKindrawPrimaryShareAction = useCallback(async () => {
@@ -953,28 +992,39 @@ const ExcalidrawWrapper = () => {
       return;
     }
 
-    await runKindrawMutation(async () => {
-      const activeShareLink = kindrawCurrentItem.shareLinks[0] || null;
-      const shareLink =
-        activeShareLink || (await createKindrawShareLinkInternal());
+    const activeShareLink = kindrawCurrentItem.shareLinks[0] || null;
 
-      if (!shareLink) {
-        return;
+    if (!activeShareLink) {
+      setKindrawCreatingPublicLink(true);
+    }
+
+    try {
+      await runKindrawMutation(async () => {
+        const shareLink =
+          activeShareLink || (await createKindrawShareLinkInternal());
+
+        if (!shareLink) {
+          return;
+        }
+
+        const publicUrl = buildPublicShareUrl(shareLink.token);
+        const copied = await copyToClipboard(publicUrl);
+        const message = activeShareLink
+          ? copied
+            ? t("kindraw.status.publicLinkCopied")
+            : t("kindraw.status.publicLinkReady")
+          : copied
+          ? t("kindraw.status.publicLinkCreatedCopied")
+          : t("kindraw.status.publicLinkCreated");
+
+        setKindrawDrawingStatus(message);
+        excalidrawAPI?.setToast({ message });
+      });
+    } finally {
+      if (!activeShareLink) {
+        setKindrawCreatingPublicLink(false);
       }
-
-      const publicUrl = buildPublicShareUrl(shareLink.token);
-      const copied = await copyToClipboard(publicUrl);
-      const message = activeShareLink
-        ? copied
-          ? t("kindraw.status.publicLinkCopied")
-          : t("kindraw.status.publicLinkReady")
-        : copied
-        ? t("kindraw.status.publicLinkCreatedCopied")
-        : t("kindraw.status.publicLinkCreated");
-
-      setKindrawDrawingStatus(message);
-      excalidrawAPI?.setToast({ message });
-    });
+    }
   }, [
     createKindrawShareLinkInternal,
     excalidrawAPI,
@@ -1721,28 +1771,33 @@ const ExcalidrawWrapper = () => {
 
     trackEvent("share", "room creation", `ui (${getFrame()})`);
 
-    if (kindrawRoute.kind === "drawing" && kindrawSession) {
-      await runKindrawMutation(async () => {
-        const response = await enableCollaborationRoom(kindrawRoute.itemId);
-        setKindrawCurrentCollaborationRoom(response.collaborationRoom);
-        setKindrawCurrentItem((current) =>
-          current && current.id === kindrawRoute.itemId
-            ? {
-                ...current,
-                collaborationRoomId: response.collaborationRoom.roomId,
-                collaborationEnabledAt: response.collaborationRoom.enabledAt,
-              }
-            : current,
-        );
-        await refreshKindrawTree();
-        await collabAPI.startCollaboration(response.collaborationRoom, {
-          bootstrapFromCurrentScene: true,
+    setKindrawStartingRealtimeCollab(true);
+    try {
+      if (kindrawRoute.kind === "drawing" && kindrawSession) {
+        await runKindrawMutation(async () => {
+          const response = await enableCollaborationRoom(kindrawRoute.itemId);
+          setKindrawCurrentCollaborationRoom(response.collaborationRoom);
+          setKindrawCurrentItem((current) =>
+            current && current.id === kindrawRoute.itemId
+              ? {
+                  ...current,
+                  collaborationRoomId: response.collaborationRoom.roomId,
+                  collaborationEnabledAt: response.collaborationRoom.enabledAt,
+                }
+              : current,
+          );
+          await refreshKindrawTree();
+          await collabAPI.startCollaboration(response.collaborationRoom, {
+            bootstrapFromCurrentScene: true,
+          });
         });
-      });
-      return;
-    }
+        return;
+      }
 
-    await collabAPI.startCollaboration(null);
+      await collabAPI.startCollaboration(null);
+    } finally {
+      setKindrawStartingRealtimeCollab(false);
+    }
   }, [
     collabAPI,
     kindrawRoute,
@@ -1803,6 +1858,82 @@ const ExcalidrawWrapper = () => {
     await handleStartRealtimeCollab();
     onCollabDialogOpen();
   }, [handleStartRealtimeCollab, isCollaborating, onCollabDialogOpen]);
+
+  const toggleKindrawSidebar = useCallback(() => {
+    setAppState((current) => ({
+      openSidebar:
+        current.openSidebar?.name === "kindraw" ? null : { name: "kindraw" },
+      openMenu: null,
+      openPopup: null,
+      openDialog: null,
+    }));
+  }, [setAppState]);
+
+  const kindrawIsDrawingRoute = kindrawRoute.kind === "drawing";
+  const kindrawIsSwitchingCanvas =
+    kindrawIsDrawingRoute && kindrawLoadingDrawingId === kindrawRoute.itemId;
+  const kindrawHasTopRightPublicLink =
+    kindrawIsDrawingRoute && !!kindrawCurrentItem?.shareLinks[0];
+  const shouldShowKindrawRealtimeAction =
+    kindrawIsDrawingRoute || isCollaborating;
+
+  useEffect(() => {
+    const onKindrawShortcut = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || isWritableElement(event.target)) {
+        return;
+      }
+
+      if (isKindrawShortcutEvent(event, KINDRAW_SHORTCUTS.workspace.code)) {
+        event.preventDefault();
+        event.stopPropagation();
+        toggleKindrawSidebar();
+        return;
+      }
+
+      if (
+        kindrawIsDrawingRoute &&
+        kindrawCurrentItem &&
+        !kindrawIsSwitchingCanvas &&
+        !kindrawCreatingPublicLink &&
+        isKindrawShortcutEvent(event, KINDRAW_SHORTCUTS.publicLink.code)
+      ) {
+        event.preventDefault();
+        event.stopPropagation();
+        void handleKindrawPrimaryShareAction();
+        return;
+      }
+
+      if (
+        shouldShowKindrawRealtimeAction &&
+        !kindrawIsSwitchingCanvas &&
+        !kindrawStartingRealtimeCollab &&
+        isKindrawShortcutEvent(event, KINDRAW_SHORTCUTS.collaboration.code)
+      ) {
+        event.preventDefault();
+        event.stopPropagation();
+        void handleRealtimeAction();
+      }
+    };
+
+    window.addEventListener(EVENT.KEYDOWN, onKindrawShortcut, {
+      capture: true,
+    });
+
+    return () =>
+      window.removeEventListener(EVENT.KEYDOWN, onKindrawShortcut, {
+        capture: true,
+      });
+  }, [
+    handleKindrawPrimaryShareAction,
+    handleRealtimeAction,
+    kindrawCreatingPublicLink,
+    kindrawCurrentItem,
+    kindrawIsDrawingRoute,
+    kindrawIsSwitchingCanvas,
+    kindrawStartingRealtimeCollab,
+    shouldShowKindrawRealtimeAction,
+    toggleKindrawSidebar,
+  ]);
 
   // ---------------------------------------------------------------------------
   // onExport — intercepts file save to wait for pending image loads
@@ -1908,13 +2039,6 @@ const ExcalidrawWrapper = () => {
             return null;
           }
 
-          const isDrawingRoute = kindrawRoute.kind === "drawing";
-          const shouldShowRealtimeAction = isDrawingRoute || isCollaborating;
-          const isSwitchingCanvas =
-            isDrawingRoute && kindrawLoadingDrawingId === kindrawRoute.itemId;
-          const hasActivePublicLink =
-            isDrawingRoute && !!kindrawCurrentItem?.shareLinks[0];
-
           return (
             <div className="excalidraw-ui-top-right kindraw-top-right-actions">
               {collabError.message && <CollabError collabError={collabError} />}
@@ -1922,14 +2046,7 @@ const ExcalidrawWrapper = () => {
                 <button
                   aria-label={getKindrawUserDisplayName(kindrawSession.user)}
                   className="kindraw-top-right-actions__avatar-button"
-                  onClick={() =>
-                    setAppState({
-                      openSidebar: { name: "kindraw" },
-                      openMenu: null,
-                      openPopup: null,
-                      openDialog: null,
-                    })
-                  }
+                  onClick={toggleKindrawSidebar}
                   title={getKindrawUserDisplayName(kindrawSession.user)}
                   type="button"
                 >
@@ -1957,31 +2074,48 @@ const ExcalidrawWrapper = () => {
                   {t("kindraw.actions.signInWithGitHub")}
                 </button>
               )}
-              {isDrawingRoute && kindrawCurrentItem ? (
+              {kindrawIsDrawingRoute && kindrawCurrentItem ? (
                 <button
                   aria-label={
-                    hasActivePublicLink
+                    kindrawHasTopRightPublicLink
                       ? t("kindraw.actions.copyPublicLink")
                       : t("kindraw.actions.publicLink")
                   }
                   className={`kindraw-top-right-actions__button kindraw-top-right-actions__button--icon${
-                    hasActivePublicLink
+                    kindrawHasTopRightPublicLink
                       ? " kindraw-top-right-actions__button--active"
                       : ""
                   }`}
-                  disabled={isSwitchingCanvas}
+                  disabled={
+                    kindrawIsSwitchingCanvas || kindrawCreatingPublicLink
+                  }
                   onClick={() => void handleKindrawPrimaryShareAction()}
                   title={
-                    hasActivePublicLink
-                      ? t("kindraw.actions.copyPublicLink")
-                      : t("kindraw.actions.publicLink")
+                    kindrawHasTopRightPublicLink
+                      ? getShortcutTitle(
+                          t("kindraw.actions.copyPublicLink"),
+                          KINDRAW_SHORTCUTS.publicLink.shortcut,
+                        )
+                      : getShortcutTitle(
+                          t("kindraw.actions.publicLink"),
+                          KINDRAW_SHORTCUTS.publicLink.shortcut,
+                        )
                   }
                   type="button"
                 >
-                  {hasActivePublicLink ? clipboard : LinkIcon}
+                  {kindrawCreatingPublicLink ? (
+                    <Spinner
+                      className="kindraw-top-right-actions__spinner"
+                      size="1rem"
+                    />
+                  ) : kindrawHasTopRightPublicLink ? (
+                    clipboard
+                  ) : (
+                    LinkIcon
+                  )}
                 </button>
               ) : null}
-              {shouldShowRealtimeAction ? (
+              {shouldShowKindrawRealtimeAction ? (
                 <button
                   aria-label={
                     isCollaborating
@@ -1993,16 +2127,31 @@ const ExcalidrawWrapper = () => {
                       ? " kindraw-top-right-actions__button--active"
                       : ""
                   }`}
-                  disabled={isSwitchingCanvas}
+                  disabled={
+                    kindrawIsSwitchingCanvas || kindrawStartingRealtimeCollab
+                  }
                   onClick={handleRealtimeAction}
                   title={
                     isCollaborating
-                      ? t("kindraw.actions.manageCollaboration")
-                      : t("kindraw.actions.startCollaboration")
+                      ? getShortcutTitle(
+                          t("kindraw.actions.manageCollaboration"),
+                          KINDRAW_SHORTCUTS.collaboration.shortcut,
+                        )
+                      : getShortcutTitle(
+                          t("kindraw.actions.startCollaboration"),
+                          KINDRAW_SHORTCUTS.collaboration.shortcut,
+                        )
                   }
                   type="button"
                 >
-                  {usersIcon}
+                  {kindrawStartingRealtimeCollab ? (
+                    <Spinner
+                      className="kindraw-top-right-actions__spinner"
+                      size="1rem"
+                    />
+                  ) : (
+                    usersIcon
+                  )}
                 </button>
               ) : null}
             </div>
@@ -2018,6 +2167,9 @@ const ExcalidrawWrapper = () => {
         <AppMainMenu
           currentCanvasStatus={kindrawDrawingStatus}
           currentCanvasTitle={kindrawActiveCanvasTitle}
+          workspaceShortcutLabel={getShortcutKey(
+            KINDRAW_SHORTCUTS.workspace.shortcut,
+          )}
           draftCanvasTitle={kindrawDraftTitle}
           isEditingCanvasTitle={kindrawIsEditingTitle}
           isLoadingCanvas={
@@ -2101,6 +2253,7 @@ const ExcalidrawWrapper = () => {
             {
               label: t("labels.liveCollaboration"),
               category: DEFAULT_CATEGORIES.app,
+              shortcut: KINDRAW_SHORTCUTS.collaboration.shortcut,
               keywords: [
                 "team",
                 "multiplayer",
@@ -2139,6 +2292,7 @@ const ExcalidrawWrapper = () => {
             {
               label: t("kindraw.commandPalette.publicLink"),
               category: DEFAULT_CATEGORIES.app,
+              shortcut: KINDRAW_SHORTCUTS.publicLink.shortcut,
               predicate: () =>
                 kindrawRoute.kind === "drawing" && !!kindrawCurrentItem,
               icon: LinkIcon,
@@ -2152,6 +2306,23 @@ const ExcalidrawWrapper = () => {
               ],
               perform: async () => {
                 await handleKindrawPrimaryShareAction();
+              },
+            },
+            {
+              label: t("kindraw.actions.openWorkspace"),
+              category: DEFAULT_CATEGORIES.app,
+              shortcut: KINDRAW_SHORTCUTS.workspace.shortcut,
+              predicate: true,
+              icon: LibraryIcon,
+              keywords: [
+                "workspace",
+                "sidebar",
+                "menu",
+                "navigation",
+                "canvases",
+              ],
+              perform: () => {
+                toggleKindrawSidebar();
               },
             },
             {

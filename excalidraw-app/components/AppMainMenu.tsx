@@ -10,6 +10,7 @@ import { useI18n } from "@excalidraw/excalidraw/i18n";
 type AppMainMenuProps = {
   currentCanvasTitle?: string | null;
   currentCanvasStatus?: string | null;
+  workspaceShortcutLabel?: string;
   isLoadingCanvas?: boolean;
   isEditingCanvasTitle?: boolean;
   draftCanvasTitle?: string;
@@ -24,6 +25,7 @@ export const AppMainMenu: React.FC<AppMainMenuProps> = React.memo(
   ({
     currentCanvasTitle,
     currentCanvasStatus,
+    workspaceShortcutLabel,
     isLoadingCanvas = false,
     isEditingCanvasTitle = false,
     draftCanvasTitle = "",
@@ -58,7 +60,13 @@ export const AppMainMenu: React.FC<AppMainMenuProps> = React.memo(
               )}
               aria-label={t("kindraw.actions.openWorkspace")}
               aria-expanded={isKindrawSidebarOpen}
-              title={t("kindraw.sidebar.workspace")}
+              title={
+                workspaceShortcutLabel
+                  ? `${t(
+                      "kindraw.sidebar.workspace",
+                    )} • ${workspaceShortcutLabel}`
+                  : t("kindraw.sidebar.workspace")
+              }
               onClick={() => {
                 setAppState({
                   openSidebar: isKindrawSidebarOpen
