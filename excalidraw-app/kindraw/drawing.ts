@@ -26,13 +26,20 @@ export const parseDrawingContent = async (
   }
 
   try {
-    return await loadFromBlob(
+    const data = await loadFromBlob(
       new Blob([content], {
         type: "application/vnd.excalidraw+json",
       }),
       null,
       null,
     );
+
+    return data
+      ? {
+          ...data,
+          fitToContent: true,
+        }
+      : null;
   } catch {
     return null;
   }

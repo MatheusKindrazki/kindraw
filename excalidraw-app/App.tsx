@@ -1408,6 +1408,9 @@ const ExcalidrawWrapper = () => {
         const restoredElements = restoreElements(scene.elements, null, {
           repairBindings: true,
         });
+        const hasVisibleRestoredElements = restoredElements.some(
+          (element) => !element.isDeleted,
+        );
         const shouldHydrateSceneFromSnapshot =
           !isCollaborationDrawingRoute ||
           excalidrawAPI.getSceneElementsIncludingDeleted().length === 0;
@@ -1443,6 +1446,13 @@ const ExcalidrawWrapper = () => {
           const files = Object.values(scene.files || {});
           if (files.length) {
             excalidrawAPI.addFiles(files);
+          }
+
+          if (scene.fitToContent && hasVisibleRestoredElements) {
+            excalidrawAPI.scrollToContent(restoredElements, {
+              fitToContent: true,
+              animate: false,
+            });
           }
 
           if (

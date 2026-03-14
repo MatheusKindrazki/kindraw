@@ -2890,7 +2890,23 @@ class App extends React.Component<AppProps, AppState> {
       toast: this.state.toast,
     };
 
-    if (initialData?.scrollToContent) {
+    const hasVisibleRestoredElements = restoredElements.some(
+      (element) => !element.isDeleted,
+    );
+
+    if (initialData?.fitToContent && hasVisibleRestoredElements) {
+      restoredAppState = zoomToFit({
+        targetElements: restoredElements,
+        appState: {
+          ...restoredAppState,
+          width: this.state.width,
+          height: this.state.height,
+          offsetTop: this.state.offsetTop,
+          offsetLeft: this.state.offsetLeft,
+        },
+        fitToViewport: false,
+      }).appState;
+    } else if (initialData?.scrollToContent) {
       restoredAppState = {
         ...restoredAppState,
         ...calculateScrollCenter(restoredElements, {

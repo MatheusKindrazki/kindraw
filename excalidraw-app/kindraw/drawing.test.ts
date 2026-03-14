@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { createPublicDrawingInitialData } from "./content";
+import { parseDrawingContent } from "./drawing";
 
-describe("createPublicDrawingInitialData", () => {
-  it("marca o viewer publico para enquadrar o desenho ao abrir", () => {
-    const initialData = createPublicDrawingInitialData(
+describe("parseDrawingContent", () => {
+  it("marca drawings carregados para abrir enquadrados", async () => {
+    const initialData = await parseDrawingContent(
       JSON.stringify({
         type: "excalidraw",
         version: 2,
@@ -46,8 +46,7 @@ describe("createPublicDrawingInitialData", () => {
       }),
     );
 
-    expect(initialData.fitToContent).toBe(true);
-    expect(initialData.scrollToContent).toBe(true);
-    expect(initialData.elements).toHaveLength(1);
+    expect(initialData?.fitToContent).toBe(true);
+    expect(initialData?.elements).toHaveLength(1);
   });
 });

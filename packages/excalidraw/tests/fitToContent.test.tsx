@@ -4,7 +4,13 @@ import { vi } from "vitest";
 import { Excalidraw } from "../index";
 
 import { API } from "./helpers/api";
-import { act, render } from "./test-utils";
+import {
+  act,
+  mockBoundingClientRect,
+  render,
+  restoreOriginalGetBoundingClientRect,
+  waitFor,
+} from "./test-utils";
 
 const { h } = window;
 
@@ -20,6 +26,32 @@ const waitForNextAnimationFrame = () => {
 };
 
 describe("fitToContent", () => {
+  it("should fit initialData content on first render", async () => {
+    mockBoundingClientRect();
+
+    await render(
+      <Excalidraw
+        initialData={{
+          fitToContent: true,
+          elements: [
+            API.createElement({
+              x: 0,
+              y: 0,
+              width: 1200,
+              height: 800,
+            }),
+          ],
+        }}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(h.state.zoom.value).toBeLessThan(1);
+    });
+
+    restoreOriginalGetBoundingClientRect();
+  });
+
   it("should zoom to fit the selected element", async () => {
     await render(<Excalidraw />);
 
@@ -114,6 +146,7 @@ describe("fitToContent animated", () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+    restoreOriginalGetBoundingClientRect();
   });
 
   it("should ease scroll the viewport to the selected element", async () => {

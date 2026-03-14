@@ -246,6 +246,38 @@ describe("TTDStreamFetch", () => {
   });
 
   describe("error handling", () => {
+    it("should keep partial streamed content when the stream ends with an error", async () => {
+      const errorChunk = createDataChunk(
+        JSON.stringify({
+          type: "error",
+          error: {
+            message: "Internal server error.",
+            status: 500,
+          },
+        } satisfies StreamChunk),
+      );
+
+      global.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        headers: new Headers(),
+        body: createMockStream([
+          createContentChunk('flowchart LR\nA["Start"] --> B["Done"]'),
+          errorChunk,
+          DONE_CHUNK,
+        ]),
+      });
+
+      const result = await TTDStreamFetch({
+        url: "https://api.example.com/stream",
+        messages: [],
+      });
+
+      expect(result.generatedResponse).toBe(
+        'flowchart LR\nA["Start"] --> B["Done"]',
+      );
+      expect(result.error).toBeNull();
+    });
+
     it("should handle non-ok response with text", async () => {
       global.fetch = vi.fn().mockResolvedValue({
         ok: false,

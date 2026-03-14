@@ -45,6 +45,7 @@ export interface ImportedDataState {
     >
   > | null;
   scrollToContent?: boolean;
+  fitToContent?: boolean;
   libraryItems?: LibraryItems_anyVersion;
   files?: BinaryFiles;
 }

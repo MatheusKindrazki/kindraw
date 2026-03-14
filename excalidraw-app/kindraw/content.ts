@@ -32,6 +32,7 @@ export const parseDrawingContent = (
     return {
       elements: parsed.elements || EMPTY_DRAWING_DATA.elements,
       appState: parsed.appState || EMPTY_DRAWING_DATA.appState,
+      fitToContent: true,
       files: parsed.files || {},
     };
   } catch (error) {
@@ -42,5 +43,6 @@ export const parseDrawingContent = (
 
 export const createPublicDrawingInitialData = (content: string) => ({
   ...parseDrawingContent(content),
+  fitToContent: true as const,
   scrollToContent: true as const,
 });

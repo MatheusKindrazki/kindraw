@@ -200,14 +200,19 @@ export async function TTDStreamFetch(
       }
     }
 
-    if (error) {
+    const hasUsableResponse = fullResponse.trim().length > 0;
+
+    // Upstream providers may fail after already streaming useful Mermaid.
+    // Preserve that output so the UI can still render/validate it instead of
+    // replacing it with a generic transport error.
+    if (error && !hasUsableResponse) {
       return {
         ...rateLimitInfo,
         error,
       };
     }
 
-    if (!fullResponse) {
+    if (!hasUsableResponse) {
       return {
         ...rateLimitInfo,
         error: new RequestError({
