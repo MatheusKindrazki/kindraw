@@ -389,12 +389,7 @@ class Collab extends PureComponent<CollabProps, CollabState> {
       ),
     );
 
-    if (this.portal.socket && this.fallbackInitializationHandler) {
-      this.portal.socket.off(
-        "connect_error",
-        this.fallbackInitializationHandler,
-      );
-    }
+    this.clearBootstrapErrorHandler();
 
     if (!keepRemoteState) {
       LocalData.fileStorage.reset();
@@ -428,6 +423,7 @@ class Collab extends PureComponent<CollabProps, CollabState> {
 
   private destroySocketClient = (opts?: { isUnload: boolean }) => {
     this.lastBroadcastedOrReceivedSceneVersion = -1;
+    this.clearBootstrapErrorHandler();
     this.portal.close();
     this.fileManager.reset();
     if (!opts?.isUnload) {
@@ -562,8 +558,16 @@ class Collab extends PureComponent<CollabProps, CollabState> {
   private fallbackInitializationHandler: null | ((error?: Error) => void) =
     null;
 
+  private clearBootstrapErrorHandler = (socket = this.portal.socket) => {
+    if (socket && this.fallbackInitializationHandler) {
+      socket.off("connect_error", this.fallbackInitializationHandler);
+    }
+    this.fallbackInitializationHandler = null;
+  };
+
   private finalizeRoomInitialization = () => {
     clearTimeout(this.socketInitializationTimer!);
+    this.clearBootstrapErrorHandler();
     this.portal.socketInitialized = true;
     this.flushSeededScene();
     this.broadcastPresence();
@@ -750,6 +754,7 @@ class Collab extends PureComponent<CollabProps, CollabState> {
 
     const fallbackInitializationHandler = (error?: Error) => {
       clearTimeout(this.socketInitializationTimer!);
+      this.clearBootstrapErrorHandler();
       if (error) {
         console.error(error);
         this.setErrorDialog(error.message);
@@ -782,23 +787,89 @@ class Collab extends PureComponent<CollabProps, CollabState> {
     }
 
     try {
-      this.portal.socket = this.portal.open(
-        new KindrawCollabSocket({
-          roomId,
-          baseUrl: import.meta.env.VITE_APP_WS_SERVER_URL,
-          profile: {
-            username: this.state.username.trim(),
-            avatarUrl: this.state.avatarUrl,
-            userId: this.state.userId,
-            githubLogin: this.state.githubLogin,
-          },
-        }),
+      // Fast room joins can dispatch the first server events before the rest of
+      // the startup listeners are registered, so wire them before opening.
+      const socket = new KindrawCollabSocket({
         roomId,
-        roomKey,
+        baseUrl: import.meta.env.VITE_APP_WS_SERVER_URL,
+        profile: {
+          username: this.state.username.trim(),
+          avatarUrl: this.state.avatarUrl,
+          userId: this.state.userId,
+          githubLogin: this.state.githubLogin,
+        },
+      });
+
+      socket.once("connect_error", fallbackInitializationHandler);
+
+      socket.on(
+        "participants",
+        (participants: KindrawCollabParticipant[]) => {
+          this.syncParticipants(participants);
+        },
       );
 
-      this.portal.socket.once("connect_error", fallbackInitializationHandler);
+      socket.on(
+        "snapshot",
+        async (encryptedData: ArrayBuffer, iv: Uint8Array<ArrayBuffer>) => {
+          if (!this.portal.roomKey) {
+            return;
+          }
+
+          const decryptedData = await this.decryptPayload(
+            iv,
+            encryptedData,
+            this.portal.roomKey,
+          );
+          this.handleDecryptedData(decryptedData, resolveScene);
+        },
+      );
+
+      socket.on(
+        "client-broadcast",
+        async (encryptedData: ArrayBuffer, iv: Uint8Array<ArrayBuffer>) => {
+          if (!this.portal.roomKey) {
+            return;
+          }
+
+          const decryptedData = await this.decryptPayload(
+            iv,
+            encryptedData,
+            this.portal.roomKey,
+          );
+          this.handleDecryptedData(decryptedData, resolveScene);
+        },
+      );
+
+      socket.on("first-in-room", () => {
+        if (this.portal.socket) {
+          this.portal.socket.off("first-in-room");
+        }
+        this.finalizeRoomInitialization();
+        resolveScene(
+          this.pendingSeededScene?.length
+            ? {
+                elements: this.pendingSeededScene,
+                scrollToContent: true,
+              }
+            : null,
+        );
+      });
+
+      socket.on(
+        WS_EVENTS.USER_FOLLOW_ROOM_CHANGE,
+        (followedBy: SocketId[]) => {
+          this.excalidrawAPI.updateScene({
+            appState: { followedBy: new Set(followedBy) },
+          });
+
+          this.relayVisibleSceneBounds({ force: true });
+        },
+      );
+
+      this.portal.socket = this.portal.open(socket, roomId, roomKey);
     } catch (error: any) {
+      this.clearBootstrapErrorHandler();
       console.error(error);
       this.setErrorDialog(error.message);
       return null;
@@ -810,71 +881,6 @@ class Collab extends PureComponent<CollabProps, CollabState> {
           new Error("Kindraw collaboration room did not initialize in time."),
         ),
       INITIAL_SCENE_UPDATE_TIMEOUT,
-    );
-
-    this.portal.socket.on(
-      "participants",
-      (participants: KindrawCollabParticipant[]) => {
-        this.syncParticipants(participants);
-      },
-    );
-
-    this.portal.socket.on(
-      "snapshot",
-      async (encryptedData: ArrayBuffer, iv: Uint8Array<ArrayBuffer>) => {
-        if (!this.portal.roomKey) {
-          return;
-        }
-
-        const decryptedData = await this.decryptPayload(
-          iv,
-          encryptedData,
-          this.portal.roomKey,
-        );
-        this.handleDecryptedData(decryptedData, resolveScene);
-      },
-    );
-
-    this.portal.socket.on(
-      "client-broadcast",
-      async (encryptedData: ArrayBuffer, iv: Uint8Array<ArrayBuffer>) => {
-        if (!this.portal.roomKey) {
-          return;
-        }
-
-        const decryptedData = await this.decryptPayload(
-          iv,
-          encryptedData,
-          this.portal.roomKey,
-        );
-        this.handleDecryptedData(decryptedData, resolveScene);
-      },
-    );
-
-    this.portal.socket.on("first-in-room", () => {
-      if (this.portal.socket) {
-        this.portal.socket.off("first-in-room");
-      }
-      this.finalizeRoomInitialization();
-      resolveScene(
-        this.pendingSeededScene?.length
-          ? {
-              elements: this.pendingSeededScene,
-              scrollToContent: true,
-            }
-          : null,
-      );
-    });
-
-    this.portal.socket.on(
-      WS_EVENTS.USER_FOLLOW_ROOM_CHANGE,
-      (followedBy: SocketId[]) => {
-        this.excalidrawAPI.updateScene({
-          appState: { followedBy: new Set(followedBy) },
-        });
-
-        this.relayVisibleSceneBounds({ force: true });
-      },
     );
 
     this.initializeIdleDetector();
