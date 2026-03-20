@@ -64,7 +64,7 @@ type ClientMessage =
   | SnapshotMessage
   | FollowChangeMessage;
 
-const STALE_PARTICIPANT_TTL_MS = 2 * 60_000;
+const STALE_PARTICIPANT_TTL_MS = 5 * 60_000;
 
 type ServerMessage =
   | {
@@ -205,6 +205,20 @@ export class KindrawCollaborationRoom {
 
   private async handleJoin(socketId: string, payload: JoinMessage["payload"]) {
     this.pruneStaleParticipants();
+
+    // If a participant with the same userId already exists (reconnection),
+    // remove the old socket to prevent duplicate participants.
+    if (payload.userId) {
+      for (const [existingSocketId, existing] of this.participants.entries()) {
+        if (
+          existing.userId === payload.userId &&
+          existingSocketId !== socketId
+        ) {
+          this.removeParticipant(existingSocketId, { closeSocket: true });
+          break;
+        }
+      }
+    }
 
     const now = new Date().toISOString();
     const participant: Participant = {

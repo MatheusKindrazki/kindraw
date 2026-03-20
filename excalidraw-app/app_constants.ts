@@ -1,6 +1,6 @@
 // time constants (ms)
 export const SAVE_TO_LOCAL_STORAGE_TIMEOUT = 300;
-export const INITIAL_SCENE_UPDATE_TIMEOUT = 5000;
+export const INITIAL_SCENE_UPDATE_TIMEOUT = 15000;
 export const FILE_UPLOAD_TIMEOUT = 300;
 export const LOAD_IMAGES_TIMEOUT = 500;
 export const SYNC_FULL_SCENE_INTERVAL_MS = 20000;

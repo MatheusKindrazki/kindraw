@@ -88,6 +88,7 @@ type ClientMessage =
 type EventMap = {
   "init-room": [];
   connect_error: [Error];
+  reconnected: [];
   "new-user": [SocketId];
   "room-user-change": [SocketId[]];
   participants: [KindrawCollabParticipant[]];
@@ -155,13 +156,18 @@ export interface KindrawCollabTransport {
 
 export class KindrawCollabSocket implements KindrawCollabTransport {
   private static readonly HEARTBEAT_INTERVAL_MS = 30_000;
+  private static readonly MAX_RECONNECT_ATTEMPTS = 10;
+  private static readonly RECONNECT_BASE_MS = 1_000;
+  private static readonly RECONNECT_MAX_MS = 30_000;
+  private static readonly RECONNECT_JITTER_MS = 1_000;
 
   public id?: SocketId;
   public connected = false;
 
   private readonly roomId: string;
+  private readonly baseUrl: string;
   private readonly profile: KindrawCollabProfile;
-  private readonly socket: WebSocket;
+  private socket: WebSocket;
   private readonly listeners = new Map<
     string,
     Set<(...args: unknown[]) => void>
@@ -172,6 +178,10 @@ export class KindrawCollabSocket implements KindrawCollabTransport {
   >();
   private hasJoined = false;
   private heartbeatTimer: number | null = null;
+  private intentionalClose = false;
+  private reconnectAttempts = 0;
+  private reconnectTimer: number | null = null;
+  private visibilityHandler: (() => void) | null = null;
 
   constructor(opts: {
     roomId: string;
@@ -179,31 +189,55 @@ export class KindrawCollabSocket implements KindrawCollabTransport {
     baseUrl: string;
   }) {
     this.roomId = opts.roomId;
+    this.baseUrl = opts.baseUrl;
     this.profile = opts.profile;
-    this.socket = new WebSocket(buildWebSocketUrl(opts.baseUrl, opts.roomId));
+    this.socket = this.connect();
+    this.setupVisibilityHandler();
+  }
 
-    this.socket.addEventListener("open", () => {
+  private connect(): WebSocket {
+    const ws = new WebSocket(buildWebSocketUrl(this.baseUrl, this.roomId));
+
+    ws.addEventListener("open", () => {
       this.connected = true;
-      this.dispatch("init-room");
+      if (this.reconnectAttempts > 0) {
+        // This is a reconnection – re-join the room automatically
+        this.reconnectAttempts = 0;
+        this.send({
+          type: "join",
+          payload: this.profile,
+        });
+      } else {
+        this.dispatch("init-room");
+      }
     });
 
-    this.socket.addEventListener("message", (event) => {
+    ws.addEventListener("message", (event) => {
       this.handleMessage(event);
     });
 
-    this.socket.addEventListener("error", () => {
-      this.dispatch(
-        "connect_error",
-        new Error("Kindraw collaboration connection failed."),
-      );
+    ws.addEventListener("error", () => {
+      if (!this.intentionalClose) {
+        this.dispatch(
+          "connect_error",
+          new Error("Kindraw collaboration connection failed."),
+        );
+      }
     });
 
-    this.socket.addEventListener("close", () => {
+    ws.addEventListener("close", () => {
       const wasJoined = this.hasJoined;
       this.connected = false;
       this.id = undefined;
       this.stopHeartbeat();
-      if (!wasJoined) {
+
+      if (this.intentionalClose) {
+        return;
+      }
+
+      if (wasJoined) {
+        this.scheduleReconnect();
+      } else {
         this.dispatch(
           "connect_error",
           new Error(
@@ -212,6 +246,55 @@ export class KindrawCollabSocket implements KindrawCollabTransport {
         );
       }
     });
+
+    return ws;
+  }
+
+  private scheduleReconnect() {
+    if (this.reconnectAttempts >= KindrawCollabSocket.MAX_RECONNECT_ATTEMPTS) {
+      this.dispatch(
+        "connect_error",
+        new Error(
+          "Kindraw collaboration connection lost after maximum reconnect attempts.",
+        ),
+      );
+      return;
+    }
+
+    const delay = Math.min(
+      KindrawCollabSocket.RECONNECT_BASE_MS *
+        Math.pow(2, this.reconnectAttempts),
+      KindrawCollabSocket.RECONNECT_MAX_MS,
+    ) + Math.random() * KindrawCollabSocket.RECONNECT_JITTER_MS;
+
+    this.reconnectAttempts += 1;
+
+    this.reconnectTimer = window.setTimeout(() => {
+      this.reconnectTimer = null;
+      this.socket = this.connect();
+    }, delay);
+  }
+
+  private setupVisibilityHandler() {
+    this.visibilityHandler = () => {
+      if (document.visibilityState === "visible") {
+        // Tab became visible again – send heartbeat or reconnect
+        if (
+          this.connected &&
+          this.socket.readyState === WebSocket.OPEN
+        ) {
+          this.emit("heartbeat");
+        } else if (
+          !this.intentionalClose &&
+          this.hasJoined &&
+          this.reconnectTimer === null
+        ) {
+          // Socket died while hidden and no reconnect is pending
+          this.scheduleReconnect();
+        }
+      }
+    };
+    document.addEventListener("visibilitychange", this.visibilityHandler);
   }
 
   on<K extends EventName>(event: K, handler: EventHandler<K>) {
@@ -296,7 +379,16 @@ export class KindrawCollabSocket implements KindrawCollabTransport {
   }
 
   close() {
+    this.intentionalClose = true;
     this.stopHeartbeat();
+    if (this.reconnectTimer !== null) {
+      window.clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+    if (this.visibilityHandler) {
+      document.removeEventListener("visibilitychange", this.visibilityHandler);
+      this.visibilityHandler = null;
+    }
     this.socket.close();
   }
 
@@ -326,6 +418,7 @@ export class KindrawCollabSocket implements KindrawCollabTransport {
 
     switch (message.type) {
       case "joined": {
+        const wasAlreadyJoined = this.hasJoined;
         this.id = message.payload.socketId;
         this.hasJoined = true;
         this.startHeartbeat();
@@ -336,17 +429,22 @@ export class KindrawCollabSocket implements KindrawCollabTransport {
           ),
         );
         this.dispatch("participants", message.payload.participants);
-        if (message.payload.isFirstParticipant) {
-          this.dispatch("first-in-room");
-        }
-        if (message.payload.snapshot) {
-          this.dispatch(
-            "snapshot",
-            base64ToArrayBuffer(message.payload.snapshot.data),
-            base64ToUint8Array(
-              message.payload.snapshot.iv,
-            ) as Uint8Array<ArrayBuffer>,
-          );
+        if (wasAlreadyJoined) {
+          // This is a re-join after reconnection
+          this.dispatch("reconnected");
+        } else {
+          if (message.payload.isFirstParticipant) {
+            this.dispatch("first-in-room");
+          }
+          if (message.payload.snapshot) {
+            this.dispatch(
+              "snapshot",
+              base64ToArrayBuffer(message.payload.snapshot.data),
+              base64ToUint8Array(
+                message.payload.snapshot.iv,
+              ) as Uint8Array<ArrayBuffer>,
+            );
+          }
         }
         return;
       }

@@ -867,6 +867,24 @@ class Collab extends PureComponent<CollabProps, CollabState> {
         },
       );
 
+      socket.on("reconnected", () => {
+        this.portal.socketInitialized = true;
+        this.broadcastPresence();
+        this.portal.broadcastScene(
+          WS_SUBTYPES.INIT,
+          this.excalidrawAPI.getSceneElementsIncludingDeleted(),
+          true,
+        );
+        this.queueSaveToFirebase();
+        this.resetErrorIndicator();
+      });
+
+      socket.on("connect_error", (error: Error) => {
+        if (this.portal.socketInitialized) {
+          this.setErrorIndicator(error.message);
+        }
+      });
+
       this.portal.socket = this.portal.open(socket, roomId, roomKey);
     } catch (error: any) {
       this.clearBootstrapErrorHandler();
