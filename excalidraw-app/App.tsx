@@ -555,7 +555,7 @@ const ExcalidrawWrapper = () => {
       return;
     }
 
-    const bootstrapKey = "kindraw-curated-libraries-v1";
+    const bootstrapKey = "kindraw-curated-libraries-v2";
     if (window.localStorage.getItem(bootstrapKey) === "ready") {
       kindrawCuratedLibrariesBootstrappedRef.current = true;
       return;
@@ -2351,6 +2351,7 @@ const ExcalidrawWrapper = () => {
           currentItem={kindrawCurrentItem}
           drawingSaveState={kindrawDrawingSaveState}
           errorMessage={errorMessage}
+          excalidrawAPI={excalidrawAPI}
           isMutating={kindrawBusy}
           onAssignTag={handleKindrawAssignTag}
           onArchiveItem={handleKindrawArchiveItem}

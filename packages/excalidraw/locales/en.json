@@ -748,6 +748,23 @@
       "github": "GitHub",
       "homepage": "Homepage"
     },
+    "iconLibrary": {
+      "sectionTitle": "Icons",
+      "searchPlaceholder": "Search icons…",
+      "empty": "Search for icons to add to your canvas.",
+      "loading": "Searching icons…",
+      "noResults": "No icons found.",
+      "error": "Failed to load icons. Please try again.",
+      "insertError": "Failed to insert icon."
+    },
+    "templateLibrary": {
+      "sectionTitle": "Templates",
+      "loading": "Loading templates…",
+      "empty": "No templates available.",
+      "error": "Failed to load templates. Please try again.",
+      "insertError": "Failed to insert template.",
+      "insert": "Insert template"
+    },
     "presence": {
       "activeWith": "In realtime with {{names}}"
     },
