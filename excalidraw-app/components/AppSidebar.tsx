@@ -80,6 +80,7 @@ type AppSidebarProps = {
 
 type ComposerMode = "drawing" | "tag";
 type SidebarView = "all" | "recent" | "shared" | "archived";
+type SidebarTab = "workspace" | "insert";
 
 const TAG_FILTER_ALL = "__all__";
 const TAG_FILTER_UNTAGGED = "__untagged__";
@@ -408,8 +409,7 @@ export const AppSidebar = ({
   const [selectedTagFilter, setSelectedTagFilter] =
     useState<string>(TAG_FILTER_ALL);
   const [selectedView, setSelectedView] = useState<SidebarView>("all");
-  const [iconsExpanded, setIconsExpanded] = useState(true);
-  const [templatesExpanded, setTemplatesExpanded] = useState(true);
+  const [activeTab, setActiveTab] = useState<SidebarTab>("workspace");
 
   const tags = useMemo(
     () =>
@@ -583,62 +583,60 @@ export const AppSidebar = ({
     },
   ];
 
-  const iconLibrarySection = (
-    <section className="kindraw-app-sidebar__section kindraw-app-sidebar__section--icons">
-      <div className="kindraw-app-sidebar__section-header">
-        <span className="kindraw-app-sidebar__section-label">
-          {t("kindraw.iconLibrary.sectionTitle")}
-        </span>
+  const sidebarTabs = [
+    { id: "workspace" as const, label: t("kindraw.sidebar.tabWorkspace") },
+    { id: "insert" as const, label: t("kindraw.sidebar.tabInsert") },
+  ];
+
+  const tabBar = (
+    <div
+      aria-label={t("kindraw.sidebar.tabsAria")}
+      className="kindraw-app-sidebar__tabs"
+      role="tablist"
+    >
+      {sidebarTabs.map((tab) => (
         <button
-          aria-expanded={iconsExpanded}
-          className={`kindraw-app-sidebar__section-toggle${
-            iconsExpanded
-              ? " kindraw-app-sidebar__section-toggle--expanded"
-              : ""
+          aria-selected={activeTab === tab.id}
+          className={`kindraw-app-sidebar__tab${
+            activeTab === tab.id ? " kindraw-app-sidebar__tab--active" : ""
           }`}
-          onClick={() => setIconsExpanded((current) => !current)}
+          key={tab.id}
+          onClick={() => setActiveTab(tab.id)}
+          role="tab"
           type="button"
         >
-          <span className="kindraw-app-sidebar__section-mark">{ImageIcon}</span>
-          <span className="kindraw-app-sidebar__section-caret">
-            {chevronRight}
-          </span>
+          {tab.label}
         </button>
-      </div>
-
-      {iconsExpanded ? (
-        <IconLibraryPanel excalidrawAPI={excalidrawAPI ?? null} />
-      ) : null}
-    </section>
+      ))}
+    </div>
   );
 
-  const templatesSection = (
-    <section className="kindraw-app-sidebar__section kindraw-app-sidebar__section--templates">
-      <div className="kindraw-app-sidebar__section-header">
-        <span className="kindraw-app-sidebar__section-label">
-          {t("kindraw.templateLibrary.sectionTitle")}
-        </span>
-        <button
-          aria-expanded={templatesExpanded}
-          className={`kindraw-app-sidebar__section-toggle${
-            templatesExpanded
-              ? " kindraw-app-sidebar__section-toggle--expanded"
-              : ""
-          }`}
-          onClick={() => setTemplatesExpanded((current) => !current)}
-          type="button"
-        >
-          <span className="kindraw-app-sidebar__section-mark">{gridIcon}</span>
-          <span className="kindraw-app-sidebar__section-caret">
-            {chevronRight}
+  const insertTabContent = (
+    <div className="kindraw-app-sidebar__panel">
+      <section className="kindraw-app-sidebar__section">
+        <div className="kindraw-app-sidebar__section-header">
+          <span className="kindraw-app-sidebar__section-label">
+            <span className="kindraw-app-sidebar__section-mark">
+              {ImageIcon}
+            </span>
+            {t("kindraw.iconLibrary.sectionTitle")}
           </span>
-        </button>
-      </div>
+        </div>
+        <IconLibraryPanel excalidrawAPI={excalidrawAPI ?? null} />
+      </section>
 
-      {templatesExpanded ? (
+      <section className="kindraw-app-sidebar__section">
+        <div className="kindraw-app-sidebar__section-header">
+          <span className="kindraw-app-sidebar__section-label">
+            <span className="kindraw-app-sidebar__section-mark">
+              {gridIcon}
+            </span>
+            {t("kindraw.templateLibrary.sectionTitle")}
+          </span>
+        </div>
         <TemplateLibraryPanel excalidrawAPI={excalidrawAPI ?? null} />
-      ) : null}
-    </section>
+      </section>
+    </div>
   );
 
   return (
@@ -653,16 +651,19 @@ export const AppSidebar = ({
           <div className="kindraw-app-sidebar__brand">
             <ExcalidrawLogo size="xs" withText />
           </div>
+          {tabBar}
         </Sidebar.Header>
 
-        {typeof session === "undefined" ? (
+        {activeTab === "insert" ? (
+          insertTabContent
+        ) : typeof session === "undefined" ? (
           <div className="kindraw-app-sidebar__panel">
             <p className="kindraw-app-sidebar__empty">
               {t("kindraw.sidebar.loadingWorkspace")}
             </p>
           </div>
         ) : !session ? (
-          <div className="kindraw-app-sidebar__panel">
+          <div className="kindraw-app-sidebar__panel kindraw-app-sidebar__panel--centered">
             <section className="kindraw-app-sidebar__guest-card">
               <div className="kindraw-app-sidebar__guest-mark">
                 {LibraryIcon}
@@ -682,10 +683,6 @@ export const AppSidebar = ({
                 {t("kindraw.actions.signInWithGitHub")}
               </button>
             </section>
-
-            {iconLibrarySection}
-
-            {templatesSection}
           </div>
         ) : !tree ? (
           <div className="kindraw-app-sidebar__panel">
@@ -808,10 +805,6 @@ export const AppSidebar = ({
                 ))}
               </nav>
             </section>
-
-            {iconLibrarySection}
-
-            {templatesSection}
 
             <section className="kindraw-app-sidebar__section">
               <div className="kindraw-app-sidebar__section-header">

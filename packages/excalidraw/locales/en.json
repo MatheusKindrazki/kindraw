@@ -303,6 +303,7 @@
     "lasso": "Lasso selection",
     "image": "Insert image",
     "rectangle": "Rectangle",
+    "stickyNote": "Sticky note",
     "diamond": "Diamond",
     "ellipse": "Ellipse",
     "arrow": "Arrow",
@@ -751,6 +752,7 @@
     "iconLibrary": {
       "sectionTitle": "Icons",
       "searchPlaceholder": "Search icons…",
+      "searchExamples": "database, user, cloud, server, lock, arrow",
       "empty": "Search for icons to add to your canvas.",
       "loading": "Searching icons…",
       "noResults": "No icons found.",
@@ -796,6 +798,9 @@
     },
     "sidebar": {
       "workspace": "Workspace",
+      "tabWorkspace": "Workspace",
+      "tabInsert": "Insert",
+      "tabsAria": "Sidebar sections",
       "loadingWorkspace": "Loading workspace...",
       "loadingWorkspaceTree": "Loading workspace tree...",
       "guestTitle": "Sign in to sync your canvases",

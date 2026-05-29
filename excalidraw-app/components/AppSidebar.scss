@@ -62,6 +62,9 @@
   }
 
   .kindraw-app-sidebar__shell-header {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
     padding: 1.15rem 1.25rem 1rem;
     border-bottom: 1px solid var(--kindraw-sidebar-border);
   }
@@ -71,6 +74,52 @@
     align-items: center;
     gap: 0.9rem;
     min-width: 0;
+  }
+
+  .kindraw-app-sidebar__tabs {
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: 1fr;
+    gap: 0.25rem;
+    padding: 0.25rem;
+    border-radius: 0.85rem;
+    border: 1px solid var(--kindraw-sidebar-border);
+    background: color-mix(in srgb, var(--color-surface-low) 70%, white);
+  }
+
+  .kindraw-app-sidebar__tab {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 2.15rem;
+    padding: 0 0.7rem;
+    border: 1px solid transparent;
+    border-radius: 0.65rem;
+    background: transparent;
+    color: var(--kindraw-sidebar-muted);
+    font: inherit;
+    font-size: 0.86rem;
+    font-weight: 600;
+    letter-spacing: -0.005em;
+    cursor: pointer;
+    transition: background 160ms ease, color 160ms ease, border-color 160ms ease,
+      box-shadow 160ms ease;
+  }
+
+  .kindraw-app-sidebar__tab:hover {
+    color: var(--text-primary-color);
+  }
+
+  .kindraw-app-sidebar__tab--active {
+    background: #ffffff;
+    color: var(--color-primary-darker);
+    border-color: color-mix(in srgb, var(--color-primary) 22%, white);
+    box-shadow: 0 1px 2px
+      color-mix(in srgb, var(--text-primary-color) 8%, transparent);
+  }
+
+  .kindraw-app-sidebar__tab--active:hover {
+    color: var(--color-primary-darker);
   }
 
   .kindraw-app-sidebar__brand .ExcalidrawLogo {
@@ -316,6 +365,11 @@
     flex-direction: column;
     gap: 1.45rem;
     padding: 1.25rem;
+  }
+
+  .kindraw-app-sidebar__panel--centered {
+    justify-content: center;
+    gap: 1.1rem;
   }
 
   .kindraw-app-sidebar__guest-card {
@@ -605,11 +659,19 @@
   }
 
   .kindraw-app-sidebar__section-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
     color: color-mix(in srgb, var(--text-primary-color) 48%, white);
     font-size: 0.74rem;
     font-weight: 700;
     letter-spacing: 0.1em;
     text-transform: uppercase;
+  }
+
+  .kindraw-app-sidebar__section-label .kindraw-app-sidebar__section-mark {
+    color: var(--color-primary-darker);
+    opacity: 0.85;
   }
 
   .kindraw-app-sidebar__section-count,
@@ -628,22 +690,6 @@
     font-weight: 600;
   }
 
-  .kindraw-app-sidebar__section-toggle {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.4rem;
-    padding: 0;
-    border: 0;
-    background: transparent;
-    color: var(--kindraw-sidebar-muted);
-    cursor: pointer;
-    transition: color 160ms ease;
-  }
-
-  .kindraw-app-sidebar__section-toggle:hover {
-    color: var(--text-primary-color);
-  }
-
   .kindraw-app-sidebar__section-mark {
     display: inline-flex;
     align-items: center;
@@ -653,23 +699,6 @@
   .kindraw-app-sidebar__section-mark svg {
     width: 0.95rem;
     height: 0.95rem;
-  }
-
-  .kindraw-app-sidebar__section-caret {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    transition: transform 160ms ease;
-  }
-
-  .kindraw-app-sidebar__section-caret svg {
-    width: 0.9rem;
-    height: 0.9rem;
-  }
-
-  .kindraw-app-sidebar__section-toggle--expanded
-    .kindraw-app-sidebar__section-caret {
-    transform: rotate(90deg);
   }
 
   .kindraw-app-sidebar__menu-list {
@@ -1203,7 +1232,13 @@
     }
 
     .kindraw-app-sidebar__shell-header {
+      gap: 0.85rem;
       padding: 1rem 1rem 0.85rem;
+    }
+
+    .kindraw-app-sidebar__tab {
+      min-height: 2rem;
+      font-size: 0.84rem;
     }
 
     .kindraw-app-sidebar__panel {

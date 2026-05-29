@@ -18,6 +18,8 @@ type TextFieldProps = {
   onChange?: (value: string) => void;
   onClick?: () => void;
   onKeyDown?: (event: KeyboardEvent<HTMLInputElement>) => void;
+  onFocus?: () => void;
+  onBlur?: () => void;
 
   readonly?: boolean;
   fullWidth?: boolean;
@@ -41,6 +43,8 @@ export const TextField = forwardRef<HTMLInputElement, TextFieldProps>(
       readonly,
       selectOnRender,
       onKeyDown,
+      onFocus,
+      onBlur,
       isRedacted = false,
       icon,
       className,
@@ -98,6 +102,8 @@ export const TextField = forwardRef<HTMLInputElement, TextFieldProps>(
             ref={innerRef}
             onChange={(event) => onChange?.(event.target.value)}
             onKeyDown={onKeyDown}
+            onFocus={onFocus}
+            onBlur={onBlur}
             type={type}
           />
           {isRedacted && (

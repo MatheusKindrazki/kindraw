@@ -399,7 +399,27 @@ const drawElementOnCanvas = (
       context.lineJoin = "round";
       context.lineCap = "round";
 
+      // Kindraw: sticky notes get a soft drop shadow so they read as a piece of
+      // paper resting on the canvas. The note is a plain rectangle tagged via
+      // customData, so this is purely a render-time touch — nothing extra is
+      // persisted and stock Excalidraw still renders it as a normal rectangle.
+      const isStickyNote = element.customData?.kindrawStickyNote === true;
+      if (isStickyNote) {
+        context.save();
+        context.shadowColor =
+          renderConfig.theme === THEME.DARK
+            ? "rgba(0, 0, 0, 0.55)"
+            : "rgba(31, 41, 55, 0.22)";
+        context.shadowBlur = 11;
+        context.shadowOffsetX = 1.5;
+        context.shadowOffsetY = 5;
+      }
+
       rc.draw(ShapeCache.generateElementShape(element, renderConfig));
+
+      if (isStickyNote) {
+        context.restore();
+      }
       break;
     }
     case "arrow":

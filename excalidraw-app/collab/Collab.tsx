@@ -802,12 +802,9 @@ class Collab extends PureComponent<CollabProps, CollabState> {
 
       socket.once("connect_error", fallbackInitializationHandler);
 
-      socket.on(
-        "participants",
-        (participants: KindrawCollabParticipant[]) => {
-          this.syncParticipants(participants);
-        },
-      );
+      socket.on("participants", (participants: KindrawCollabParticipant[]) => {
+        this.syncParticipants(participants);
+      });
 
       socket.on(
         "snapshot",
@@ -856,16 +853,13 @@ class Collab extends PureComponent<CollabProps, CollabState> {
         );
       });
 
-      socket.on(
-        WS_EVENTS.USER_FOLLOW_ROOM_CHANGE,
-        (followedBy: SocketId[]) => {
-          this.excalidrawAPI.updateScene({
-            appState: { followedBy: new Set(followedBy) },
-          });
+      socket.on(WS_EVENTS.USER_FOLLOW_ROOM_CHANGE, (followedBy: SocketId[]) => {
+        this.excalidrawAPI.updateScene({
+          appState: { followedBy: new Set(followedBy) },
+        });
 
-          this.relayVisibleSceneBounds({ force: true });
-        },
-      );
+        this.relayVisibleSceneBounds({ force: true });
+      });
 
       socket.on("reconnected", () => {
         this.portal.socketInitialized = true;

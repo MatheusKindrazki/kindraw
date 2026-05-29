@@ -499,6 +499,11 @@ import type { Action, ActionResult } from "../actions/types";
 const AppContext = React.createContext<AppClassProperties>(null!);
 const AppPropsContext = React.createContext<AppProps>(null!);
 
+// Kindraw: the sticky-note tool drops a fixed-size square post-it (no
+// drag-to-size) filled with a warm post-it yellow.
+const STICKY_NOTE_BACKGROUND = "#ffec99";
+const STICKY_NOTE_SIZE = 180;
+
 const editorInterfaceContextInitialValue: EditorInterface = {
   formFactor: "desktop",
   desktopUIMode: "full",
@@ -7602,6 +7607,10 @@ class App extends React.Component<AppProps, AppState> {
         pointerDownState.lastCoords.x,
         pointerDownState.lastCoords.y,
       );
+    } else if (this.state.activeTool.type === "stickyNote") {
+      // Kindraw: a single click drops a fixed-size square post-it that goes
+      // straight into text editing (no drag-to-size). See the method docstring.
+      this.createStickyNoteOnPointerDown(pointerDownState);
     } else if (
       this.state.activeTool.type !== "eraser" &&
       this.state.activeTool.type !== "hand" &&
@@ -9073,6 +9082,75 @@ class App extends React.Component<AppProps, AppState> {
       this.setState({
         multiElement: null,
         newElement: element,
+      });
+    }
+  };
+
+  /**
+   * Kindraw: the sticky-note tool drops a fixed-size square post-it with a
+   * single click (no drag-to-size), then jumps straight into text editing —
+   * matching Miro/FigJam. The note is a plain rectangle with post-it defaults
+   * (solid yellow fill, no visible border, rounded corners), so the scene stays
+   * fully compatible with stock Excalidraw — there is no new element type.
+   */
+  private createStickyNoteOnPointerDown = (
+    pointerDownState: PointerDownState,
+  ): void => {
+    const [gridX, gridY] = getGridPoint(
+      pointerDownState.origin.x,
+      pointerDownState.origin.y,
+      this.lastPointerDownEvent?.[KEYS.CTRL_OR_CMD]
+        ? null
+        : this.getEffectiveGridSize(),
+    );
+
+    // center the note on the click point
+    const x = gridX - STICKY_NOTE_SIZE / 2;
+    const y = gridY - STICKY_NOTE_SIZE / 2;
+
+    const topLayerFrame = this.getTopLayerFrameAtSceneCoords({ x, y });
+
+    const element = newElement({
+      type: "rectangle",
+      x,
+      y,
+      width: STICKY_NOTE_SIZE,
+      height: STICKY_NOTE_SIZE,
+      strokeColor: "transparent",
+      backgroundColor: STICKY_NOTE_BACKGROUND,
+      fillStyle: "solid",
+      strokeWidth: this.state.currentItemStrokeWidth,
+      strokeStyle: this.state.currentItemStrokeStyle,
+      roughness: this.state.currentItemRoughness,
+      opacity: this.state.currentItemOpacity,
+      roundness: { type: ROUNDNESS.ADAPTIVE_RADIUS },
+      locked: false,
+      frameId: topLayerFrame ? topLayerFrame.id : null,
+      // tag so the renderer paints a soft post-it drop shadow
+      customData: { kindrawStickyNote: true },
+    });
+
+    this.scene.insertElement(element);
+    this.setState({
+      multiElement: null,
+      // not a pending drag-resize element — the note is already sized
+      newElement: null,
+    });
+
+    // drop straight into text editing, bound to the note as its container
+    // (a rectangle is always a valid text container)
+    this.startTextEditing({
+      sceneX: x + STICKY_NOTE_SIZE / 2,
+      sceneY: y + STICKY_NOTE_SIZE / 2,
+      container: element as ExcalidrawTextContainer,
+    });
+
+    resetCursor(this.interactiveCanvas);
+    if (!this.state.activeTool.locked) {
+      this.setState({
+        activeTool: updateActiveTool(this.state, {
+          type: this.state.preferredSelectionTool.type,
+        }),
       });
     }
   };

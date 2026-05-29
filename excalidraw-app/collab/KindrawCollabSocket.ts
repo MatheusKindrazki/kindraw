@@ -261,11 +261,13 @@ export class KindrawCollabSocket implements KindrawCollabTransport {
       return;
     }
 
-    const delay = Math.min(
-      KindrawCollabSocket.RECONNECT_BASE_MS *
-        Math.pow(2, this.reconnectAttempts),
-      KindrawCollabSocket.RECONNECT_MAX_MS,
-    ) + Math.random() * KindrawCollabSocket.RECONNECT_JITTER_MS;
+    const delay =
+      Math.min(
+        KindrawCollabSocket.RECONNECT_BASE_MS *
+          Math.pow(2, this.reconnectAttempts),
+        KindrawCollabSocket.RECONNECT_MAX_MS,
+      ) +
+      Math.random() * KindrawCollabSocket.RECONNECT_JITTER_MS;
 
     this.reconnectAttempts += 1;
 
@@ -279,10 +281,7 @@ export class KindrawCollabSocket implements KindrawCollabTransport {
     this.visibilityHandler = () => {
       if (document.visibilityState === "visible") {
         // Tab became visible again – send heartbeat or reconnect
-        if (
-          this.connected &&
-          this.socket.readyState === WebSocket.OPEN
-        ) {
+        if (this.connected && this.socket.readyState === WebSocket.OPEN) {
           this.emit("heartbeat");
         } else if (
           !this.intentionalClose &&

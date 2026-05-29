@@ -40,10 +40,12 @@ const TEMPLATES: KindrawTemplate[] = [
   {
     id: "login-flow",
     title: "Login Flow",
-    description: "Credential entry with a validation branch back to the form.",
+    description:
+      "Credential entry with validation, a retry loop, password recovery and a locked-account branch.",
     category: "Flowchart",
     elements: [
-      // Vertical flow centered on x = 300 (shape center).
+      // Vertical happy-path centered on x = 300 (shape center). A recovery
+      // branch sits to the right (x = 640) and an error/lock branch to the left.
       {
         type: "ellipse",
         id: "login-start",
@@ -75,20 +77,61 @@ const TEMPLATES: KindrawTemplate[] = [
         label: { text: "Valid?" },
       },
       {
+        type: "diamond",
+        id: "login-attempts",
+        x: 200,
+        y: 560,
+        width: 200,
+        height: 120,
+        backgroundColor: "#ffe8cc",
+        label: { text: "Attempts < 3?" },
+      },
+      {
         type: "rectangle",
         id: "login-dashboard",
         x: 200,
-        y: 540,
+        y: 800,
         width: 200,
         height: 80,
         backgroundColor: "#b2f2bb",
         label: { text: "Dashboard" },
       },
+      // Recovery branch (right column, x center = 740).
+      {
+        type: "rectangle",
+        id: "login-forgot",
+        x: 640,
+        y: 175,
+        width: 200,
+        height: 80,
+        backgroundColor: "#d0bfff",
+        label: { text: "Forgot password" },
+      },
+      {
+        type: "rectangle",
+        id: "login-reset",
+        x: 640,
+        y: 330,
+        width: 200,
+        height: 80,
+        backgroundColor: "#eebefa",
+        label: { text: "Send reset email" },
+      },
+      // Lock branch (left, x center = -40).
+      {
+        type: "rectangle",
+        id: "login-locked",
+        x: -140,
+        y: 580,
+        width: 200,
+        height: 80,
+        backgroundColor: "#ffc9c9",
+        label: { text: "Lock account" },
+      },
       // Connectors use explicit absolute geometry (x/y + relative points) and
-      // are intentionally UNBOUND. The insertion path inserts converted
-      // elements via updateScene without a binding re-route, so a bound arrow
-      // would render its raw points only — explicit points render predictably
-      // and visibly span each shape edge-to-edge.
+      // are intentionally UNBOUND (see file note): the insertion path commits
+      // converted elements via updateScene without a binding re-route, so a
+      // bound arrow would render its raw points only.
       // Start bottom (y=70) -> credentials top (y=160), centered on x=300.
       {
         type: "arrow",
@@ -109,30 +152,93 @@ const TEMPLATES: KindrawTemplate[] = [
           [0, 90],
         ],
       },
-      // Valid? bottom (y=450) -> Dashboard top (y=540), labeled "Yes".
+      // Valid? bottom (y=450) -> Dashboard... actually goes to Attempts check on
+      // failure; the "Yes" path skips straight to Dashboard via the right inner
+      // rail. Valid? bottom (y=450) -> Attempts top (y=560), labeled "No".
       {
         type: "arrow",
         x: 300,
         y: 450,
         points: [
           [0, 0],
-          [0, 90],
+          [0, 110],
         ],
-        label: { text: "Yes" },
+        label: { text: "No" },
       },
-      // "No" loop: Valid? right edge (x=400, y=390) routes out, up and back to
-      // the credentials right edge (x=400, y=200).
+      // Valid? "Yes": right edge (x=400,y=390) down the inner rail to Dashboard
+      // top (x=300,y=800).
       {
         type: "arrow",
         x: 400,
         y: 390,
         points: [
+          [60, 0],
+          [60, 410],
+          [-100, 410],
+        ],
+        label: { text: "Yes" },
+      },
+      // Attempts "Yes" (retry): left edge (x=200,y=620) loops back up to the
+      // credentials left edge (x=200,y=200).
+      {
+        type: "arrow",
+        x: 200,
+        y: 620,
+        points: [
           [0, 0],
-          [70, 0],
-          [70, -190],
-          [0, -190],
+          [-80, 0],
+          [-80, -420],
+          [0, -420],
+        ],
+        label: { text: "retry" },
+      },
+      // Attempts "No": bottom of attempts is occupied; route from left edge
+      // (x=200,y=650) further left to Lock account right edge (x=60,y=620).
+      {
+        type: "arrow",
+        x: 200,
+        y: 655,
+        points: [
+          [0, 0],
+          [-140, -35],
         ],
         label: { text: "No" },
+      },
+      // Credentials right (x=400,y=200) -> Forgot password left (x=640,y=215).
+      {
+        type: "arrow",
+        x: 400,
+        y: 200,
+        points: [
+          [0, 0],
+          [240, 15],
+        ],
+        label: { text: "link" },
+      },
+      // Forgot password bottom (x=740,y=255) -> Send reset email top (y=330).
+      {
+        type: "arrow",
+        x: 740,
+        y: 255,
+        points: [
+          [0, 0],
+          [0, 75],
+        ],
+      },
+      // Send reset email left (x=640,y=370) -> back to credentials right
+      // (x=400,y=200).
+      {
+        type: "arrow",
+        x: 640,
+        y: 370,
+        points: [
+          [0, 0],
+          [-120, 0],
+          [-120, -170],
+          [-120, -170],
+        ],
+        startArrowhead: null,
+        endArrowhead: "arrow",
       },
     ],
   },
@@ -448,38 +554,50 @@ const TEMPLATES: KindrawTemplate[] = [
   {
     id: "kanban",
     title: "Kanban Board",
-    description: "To Do, In Progress and Done columns with sample cards.",
+    description:
+      "Backlog, To Do, In Progress and Done lanes with colour-coded task cards.",
     category: "Planning",
     elements: [
-      // Columns: 240 wide, 40px gutter, 60px top band for the header label.
+      // Four columns: 240 wide, 40px gutter, 60px top band for the header label.
       {
         type: "rectangle",
         x: 0,
         y: 0,
         width: 240,
-        height: 420,
-        backgroundColor: "#e7f5ff",
-        label: { text: "To Do", verticalAlign: "top" },
+        height: 560,
+        backgroundColor: "#f1f3f5",
+        label: { text: "Backlog", verticalAlign: "top" },
       },
       {
         type: "rectangle",
         x: 280,
         y: 0,
         width: 240,
-        height: 420,
-        backgroundColor: "#fff9db",
-        label: { text: "In Progress", verticalAlign: "top" },
+        height: 560,
+        backgroundColor: "#e7f5ff",
+        label: { text: "To Do", verticalAlign: "top" },
       },
       {
         type: "rectangle",
         x: 560,
         y: 0,
         width: 240,
-        height: 420,
+        height: 560,
+        backgroundColor: "#fff9db",
+        label: { text: "In Progress", verticalAlign: "top" },
+      },
+      {
+        type: "rectangle",
+        x: 840,
+        y: 0,
+        width: 240,
+        height: 560,
         backgroundColor: "#ebfbee",
         label: { text: "Done", verticalAlign: "top" },
       },
-      // Cards inset 25px from column sides, below the header band.
+      // Cards inset 25px from column sides, below the header band. Left stroke
+      // accent is conveyed by the card background tint (priority colour).
+      // Backlog
       {
         type: "rectangle",
         x: 25,
@@ -487,34 +605,603 @@ const TEMPLATES: KindrawTemplate[] = [
         width: 190,
         height: 70,
         backgroundColor: "#ffffff",
-        label: { text: "Task 1" },
+        label: { text: "Research spike" },
       },
       {
         type: "rectangle",
         x: 25,
-        y: 190,
+        y: 180,
         width: 190,
         height: 70,
         backgroundColor: "#ffffff",
-        label: { text: "Task 2" },
+        label: { text: "Design review" },
       },
+      // To Do
       {
         type: "rectangle",
         x: 305,
         y: 90,
         width: 190,
         height: 70,
-        backgroundColor: "#ffffff",
-        label: { text: "Task 3" },
+        backgroundColor: "#fff3bf",
+        label: { text: "Build API endpoint" },
       },
+      {
+        type: "rectangle",
+        x: 305,
+        y: 180,
+        width: 190,
+        height: 70,
+        backgroundColor: "#ffffff",
+        label: { text: "Write tests" },
+      },
+      {
+        type: "rectangle",
+        x: 305,
+        y: 270,
+        width: 190,
+        height: 70,
+        backgroundColor: "#ffec99",
+        label: { text: "Wire up auth" },
+      },
+      // In Progress
       {
         type: "rectangle",
         x: 585,
         y: 90,
         width: 190,
         height: 70,
+        backgroundColor: "#d3f9d8",
+        label: { text: "Sidebar tabs" },
+      },
+      {
+        type: "rectangle",
+        x: 585,
+        y: 180,
+        width: 190,
+        height: 70,
+        backgroundColor: "#ffc9c9",
+        label: { text: "Fix flaky test" },
+      },
+      // Done
+      {
+        type: "rectangle",
+        x: 865,
+        y: 90,
+        width: 190,
+        height: 70,
         backgroundColor: "#ffffff",
-        label: { text: "Task 4" },
+        label: { text: "Project setup" },
+      },
+      {
+        type: "rectangle",
+        x: 865,
+        y: 180,
+        width: 190,
+        height: 70,
+        backgroundColor: "#ffffff",
+        label: { text: "CI pipeline" },
+      },
+    ],
+  },
+  {
+    id: "retrospective",
+    title: "Retrospective",
+    description:
+      "Start, Stop, Continue post-it board for a team retro, with sample sticky notes.",
+    category: "Post-it",
+    elements: [
+      // Three columns of sticky notes. Column headers are plain text; notes are
+      // small square-ish rectangles with handdrawn labels for a sticky feel.
+      // Column x-centers: Start=120, Stop=420, Continue=720.
+      {
+        type: "rectangle",
+        x: 20,
+        y: 0,
+        width: 200,
+        height: 56,
+        backgroundColor: "#b2f2bb",
+        label: { text: "Start", fontFamily: 5 },
+      },
+      {
+        type: "rectangle",
+        x: 320,
+        y: 0,
+        width: 200,
+        height: 56,
+        backgroundColor: "#ffc9c9",
+        label: { text: "Stop", fontFamily: 5 },
+      },
+      {
+        type: "rectangle",
+        x: 620,
+        y: 0,
+        width: 200,
+        height: 56,
+        backgroundColor: "#a5d8ff",
+        label: { text: "Continue", fontFamily: 5 },
+      },
+      // Start notes (greenish).
+      {
+        type: "rectangle",
+        x: 30,
+        y: 90,
+        width: 180,
+        height: 120,
+        backgroundColor: "#d8f5a2",
+        label: { text: "Pair on tricky tickets", fontFamily: 5, fontSize: 16 },
+      },
+      {
+        type: "rectangle",
+        x: 30,
+        y: 240,
+        width: 180,
+        height: 120,
+        backgroundColor: "#d8f5a2",
+        label: { text: "Demo every Friday", fontFamily: 5, fontSize: 16 },
+      },
+      // Stop notes (reddish).
+      {
+        type: "rectangle",
+        x: 330,
+        y: 90,
+        width: 180,
+        height: 120,
+        backgroundColor: "#ffd8a8",
+        label: { text: "Last-minute scope", fontFamily: 5, fontSize: 16 },
+      },
+      {
+        type: "rectangle",
+        x: 330,
+        y: 240,
+        width: 180,
+        height: 120,
+        backgroundColor: "#ffd8a8",
+        label: { text: "Meetings with no agenda", fontFamily: 5, fontSize: 16 },
+      },
+      // Continue notes (blueish).
+      {
+        type: "rectangle",
+        x: 630,
+        y: 90,
+        width: 180,
+        height: 120,
+        backgroundColor: "#d0ebff",
+        label: { text: "Async standups", fontFamily: 5, fontSize: 16 },
+      },
+      {
+        type: "rectangle",
+        x: 630,
+        y: 240,
+        width: 180,
+        height: 120,
+        backgroundColor: "#d0ebff",
+        label: { text: "Clear PR descriptions", fontFamily: 5, fontSize: 16 },
+      },
+    ],
+  },
+  {
+    id: "brainstorm-grid",
+    title: "Brainstorm Wall",
+    description:
+      "A grid of colourful post-it notes for ideation — drop your ideas in.",
+    category: "Post-it",
+    elements: [
+      // 4x2 grid of sticky notes, 180x140 with a 30px gutter. Rotated slightly
+      // is not supported in skeletons reliably, so we keep them upright but vary
+      // the colours for a lively wall.
+      {
+        type: "rectangle",
+        x: 0,
+        y: 0,
+        width: 180,
+        height: 140,
+        backgroundColor: "#fff3bf",
+        label: { text: "Idea", fontFamily: 5, fontSize: 16 },
+      },
+      {
+        type: "rectangle",
+        x: 210,
+        y: 0,
+        width: 180,
+        height: 140,
+        backgroundColor: "#ffd8a8",
+        label: { text: "Idea", fontFamily: 5, fontSize: 16 },
+      },
+      {
+        type: "rectangle",
+        x: 420,
+        y: 0,
+        width: 180,
+        height: 140,
+        backgroundColor: "#d8f5a2",
+        label: { text: "Idea", fontFamily: 5, fontSize: 16 },
+      },
+      {
+        type: "rectangle",
+        x: 630,
+        y: 0,
+        width: 180,
+        height: 140,
+        backgroundColor: "#d0ebff",
+        label: { text: "Idea", fontFamily: 5, fontSize: 16 },
+      },
+      {
+        type: "rectangle",
+        x: 0,
+        y: 170,
+        width: 180,
+        height: 140,
+        backgroundColor: "#eebefa",
+        label: { text: "Idea", fontFamily: 5, fontSize: 16 },
+      },
+      {
+        type: "rectangle",
+        x: 210,
+        y: 170,
+        width: 180,
+        height: 140,
+        backgroundColor: "#ffc9c9",
+        label: { text: "Idea", fontFamily: 5, fontSize: 16 },
+      },
+      {
+        type: "rectangle",
+        x: 420,
+        y: 170,
+        width: 180,
+        height: 140,
+        backgroundColor: "#c3fae8",
+        label: { text: "Idea", fontFamily: 5, fontSize: 16 },
+      },
+      {
+        type: "rectangle",
+        x: 630,
+        y: 170,
+        width: 180,
+        height: 140,
+        backgroundColor: "#bac8ff",
+        label: { text: "Idea", fontFamily: 5, fontSize: 16 },
+      },
+    ],
+  },
+  {
+    id: "priority-matrix",
+    title: "Priority Matrix",
+    description:
+      "Impact vs effort 2x2 with post-it notes in each quadrant (do, plan, quick wins, drop).",
+    category: "Post-it",
+    elements: [
+      // Four quadrants, 360x300 each, sharing center lines at x=360, y=300.
+      {
+        type: "rectangle",
+        x: 0,
+        y: 0,
+        width: 360,
+        height: 300,
+        backgroundColor: "#ebfbee",
+        label: { text: "Quick wins", verticalAlign: "top", fontFamily: 5 },
+      },
+      {
+        type: "rectangle",
+        x: 360,
+        y: 0,
+        width: 360,
+        height: 300,
+        backgroundColor: "#e7f5ff",
+        label: { text: "Major projects", verticalAlign: "top", fontFamily: 5 },
+      },
+      {
+        type: "rectangle",
+        x: 0,
+        y: 300,
+        width: 360,
+        height: 300,
+        backgroundColor: "#fff9db",
+        label: { text: "Fill-ins", verticalAlign: "top", fontFamily: 5 },
+      },
+      {
+        type: "rectangle",
+        x: 360,
+        y: 300,
+        width: 360,
+        height: 300,
+        backgroundColor: "#fff0f6",
+        label: { text: "Thankless tasks", verticalAlign: "top", fontFamily: 5 },
+      },
+      // A couple of sample notes.
+      {
+        type: "rectangle",
+        x: 60,
+        y: 110,
+        width: 150,
+        height: 110,
+        backgroundColor: "#d8f5a2",
+        label: { text: "Tooltip copy", fontFamily: 5, fontSize: 16 },
+      },
+      {
+        type: "rectangle",
+        x: 420,
+        y: 110,
+        width: 150,
+        height: 110,
+        backgroundColor: "#a5d8ff",
+        label: { text: "New onboarding", fontFamily: 5, fontSize: 16 },
+      },
+    ],
+  },
+  {
+    id: "user-journey",
+    title: "User Journey",
+    description:
+      "Five-stage journey map with action and emotion rows for each phase.",
+    category: "Planning",
+    elements: [
+      // Stage headers across the top, 200 wide with 20px gutters.
+      {
+        type: "rectangle",
+        x: 0,
+        y: 0,
+        width: 200,
+        height: 60,
+        backgroundColor: "#d0bfff",
+        label: { text: "Discover" },
+      },
+      {
+        type: "rectangle",
+        x: 220,
+        y: 0,
+        width: 200,
+        height: 60,
+        backgroundColor: "#bac8ff",
+        label: { text: "Sign up" },
+      },
+      {
+        type: "rectangle",
+        x: 440,
+        y: 0,
+        width: 200,
+        height: 60,
+        backgroundColor: "#a5d8ff",
+        label: { text: "First use" },
+      },
+      {
+        type: "rectangle",
+        x: 660,
+        y: 0,
+        width: 200,
+        height: 60,
+        backgroundColor: "#99e9f2",
+        label: { text: "Habit" },
+      },
+      {
+        type: "rectangle",
+        x: 880,
+        y: 0,
+        width: 200,
+        height: 60,
+        backgroundColor: "#96f2d7",
+        label: { text: "Advocate" },
+      },
+      // Action row.
+      {
+        type: "rectangle",
+        x: 0,
+        y: 90,
+        width: 200,
+        height: 90,
+        backgroundColor: "#f8f9fa",
+        label: { text: "Find via search", fontSize: 16 },
+      },
+      {
+        type: "rectangle",
+        x: 220,
+        y: 90,
+        width: 200,
+        height: 90,
+        backgroundColor: "#f8f9fa",
+        label: { text: "Create account", fontSize: 16 },
+      },
+      {
+        type: "rectangle",
+        x: 440,
+        y: 90,
+        width: 200,
+        height: 90,
+        backgroundColor: "#f8f9fa",
+        label: { text: "Draw first canvas", fontSize: 16 },
+      },
+      {
+        type: "rectangle",
+        x: 660,
+        y: 90,
+        width: 200,
+        height: 90,
+        backgroundColor: "#f8f9fa",
+        label: { text: "Daily diagrams", fontSize: 16 },
+      },
+      {
+        type: "rectangle",
+        x: 880,
+        y: 90,
+        width: 200,
+        height: 90,
+        backgroundColor: "#f8f9fa",
+        label: { text: "Share & invite", fontSize: 16 },
+      },
+      // Emotion row (post-it style faces via text).
+      {
+        type: "rectangle",
+        x: 0,
+        y: 200,
+        width: 200,
+        height: 70,
+        backgroundColor: "#ffec99",
+        label: { text: "curious", fontFamily: 5, fontSize: 16 },
+      },
+      {
+        type: "rectangle",
+        x: 220,
+        y: 200,
+        width: 200,
+        height: 70,
+        backgroundColor: "#ffd8a8",
+        label: { text: "hesitant", fontFamily: 5, fontSize: 16 },
+      },
+      {
+        type: "rectangle",
+        x: 440,
+        y: 200,
+        width: 200,
+        height: 70,
+        backgroundColor: "#b2f2bb",
+        label: { text: "delighted", fontFamily: 5, fontSize: 16 },
+      },
+      {
+        type: "rectangle",
+        x: 660,
+        y: 200,
+        width: 200,
+        height: 70,
+        backgroundColor: "#a5d8ff",
+        label: { text: "confident", fontFamily: 5, fontSize: 16 },
+      },
+      {
+        type: "rectangle",
+        x: 880,
+        y: 200,
+        width: 200,
+        height: 70,
+        backgroundColor: "#96f2d7",
+        label: { text: "proud", fontFamily: 5, fontSize: 16 },
+      },
+    ],
+  },
+  {
+    id: "org-chart",
+    title: "Org Chart",
+    description: "A three-level organisation chart with a CEO, leads and reports.",
+    category: "Architecture",
+    elements: [
+      // Level 1 (x center = 400).
+      {
+        type: "rectangle",
+        id: "org-ceo",
+        x: 320,
+        y: 0,
+        width: 160,
+        height: 70,
+        backgroundColor: "#d0bfff",
+        label: { text: "CEO" },
+      },
+      // Level 2 (x centers = 200 and 600).
+      {
+        type: "rectangle",
+        id: "org-eng",
+        x: 120,
+        y: 180,
+        width: 160,
+        height: 70,
+        backgroundColor: "#a5d8ff",
+        label: { text: "Eng Lead" },
+      },
+      {
+        type: "rectangle",
+        id: "org-design",
+        x: 520,
+        y: 180,
+        width: 160,
+        height: 70,
+        backgroundColor: "#a5d8ff",
+        label: { text: "Design Lead" },
+      },
+      // Level 3 (reports).
+      {
+        type: "rectangle",
+        x: 20,
+        y: 360,
+        width: 160,
+        height: 70,
+        backgroundColor: "#b2f2bb",
+        label: { text: "Backend" },
+      },
+      {
+        type: "rectangle",
+        x: 220,
+        y: 360,
+        width: 160,
+        height: 70,
+        backgroundColor: "#b2f2bb",
+        label: { text: "Frontend" },
+      },
+      {
+        type: "rectangle",
+        x: 520,
+        y: 360,
+        width: 160,
+        height: 70,
+        backgroundColor: "#b2f2bb",
+        label: { text: "Product" },
+      },
+      // Connectors, unbound with explicit geometry. CEO bottom (400,70).
+      {
+        type: "arrow",
+        x: 400,
+        y: 70,
+        points: [
+          [0, 0],
+          [0, 55],
+          [-200, 55],
+          [-200, 110],
+        ],
+        endArrowhead: "arrow",
+      },
+      {
+        type: "arrow",
+        x: 400,
+        y: 70,
+        points: [
+          [0, 0],
+          [0, 55],
+          [200, 55],
+          [200, 110],
+        ],
+        endArrowhead: "arrow",
+      },
+      // Eng Lead bottom (200,250) -> Backend & Frontend.
+      {
+        type: "arrow",
+        x: 200,
+        y: 250,
+        points: [
+          [0, 0],
+          [0, 55],
+          [-100, 55],
+          [-100, 110],
+        ],
+        endArrowhead: "arrow",
+      },
+      {
+        type: "arrow",
+        x: 200,
+        y: 250,
+        points: [
+          [0, 0],
+          [0, 55],
+          [100, 55],
+          [100, 110],
+        ],
+        endArrowhead: "arrow",
+      },
+      // Design Lead bottom (600,250) -> Product (x center 600).
+      {
+        type: "arrow",
+        x: 600,
+        y: 250,
+        points: [
+          [0, 0],
+          [0, 110],
+        ],
+        endArrowhead: "arrow",
       },
     ],
   },
