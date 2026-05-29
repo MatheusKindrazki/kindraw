@@ -231,6 +231,15 @@ export interface DurableObjectState {
   storage: DurableObjectStorage;
 }
 
+export interface WorkerCache {
+  match(request: Request | string): Promise<Response | undefined>;
+  put(request: Request | string, response: Response): Promise<void>;
+}
+
+export interface WorkerCacheStorage {
+  readonly default: WorkerCache;
+}
+
 export type Env = {
   KINDRAW_DB: D1Database;
   KINDRAW_BLOBS: R2Bucket;

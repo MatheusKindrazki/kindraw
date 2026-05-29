@@ -628,6 +628,50 @@
     font-weight: 600;
   }
 
+  .kindraw-app-sidebar__section-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--kindraw-sidebar-muted);
+    cursor: pointer;
+    transition: color 160ms ease;
+  }
+
+  .kindraw-app-sidebar__section-toggle:hover {
+    color: var(--text-primary-color);
+  }
+
+  .kindraw-app-sidebar__section-mark {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .kindraw-app-sidebar__section-mark svg {
+    width: 0.95rem;
+    height: 0.95rem;
+  }
+
+  .kindraw-app-sidebar__section-caret {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 160ms ease;
+  }
+
+  .kindraw-app-sidebar__section-caret svg {
+    width: 0.9rem;
+    height: 0.9rem;
+  }
+
+  .kindraw-app-sidebar__section-toggle--expanded
+    .kindraw-app-sidebar__section-caret {
+    transform: rotate(90deg);
+  }
+
   .kindraw-app-sidebar__menu-list {
     display: flex;
     flex-direction: column;

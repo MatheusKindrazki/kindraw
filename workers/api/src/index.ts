@@ -4,6 +4,9 @@ import {
   handleDiagramToCodeGenerate,
   handleTextToDiagramChatStreaming,
 } from "./ai";
+import { handleIconSearch, handleIconSvg } from "./icons";
+import { handleTemplateList, handleTemplateById } from "./templates";
+import { handleLibraryList, handleLibraryBlob } from "./libraries";
 
 import type {
   CreateFolderInput,
@@ -676,6 +679,32 @@ export const routeRequest = async (request: Request, env: Env) => {
     const token = pathname.replace("/api/public/", "");
     const store = createStore(env.KINDRAW_DB, env.KINDRAW_BLOBS);
     return json(await store.getPublicItem(token));
+  }
+
+  if (pathname === "/api/icons/search" && request.method === "GET") {
+    return handleIconSearch(request, env);
+  }
+
+  if (pathname === "/api/icons/svg" && request.method === "GET") {
+    return handleIconSvg(request, env);
+  }
+
+  if (pathname === "/api/templates" && request.method === "GET") {
+    return handleTemplateList(request, env);
+  }
+
+  if (pathname.startsWith("/api/templates/") && request.method === "GET") {
+    const id = pathname.replace("/api/templates/", "");
+    return handleTemplateById(request, env, id);
+  }
+
+  if (pathname === "/api/libraries" && request.method === "GET") {
+    return handleLibraryList(request, env);
+  }
+
+  if (pathname.startsWith("/api/libraries/") && request.method === "GET") {
+    const id = pathname.replace("/api/libraries/", "");
+    return handleLibraryBlob(request, env, id);
   }
 
   if (pathname.startsWith("/api/collab/rooms/") && pathname.endsWith("/ws")) {

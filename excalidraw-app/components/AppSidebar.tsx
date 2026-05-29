@@ -16,6 +16,7 @@ import {
 } from "@excalidraw/excalidraw/components/App";
 import {
   DotsHorizontalIcon,
+  ImageIcon,
   LibraryIcon,
   PlusIcon,
   archiveIcon,
@@ -31,9 +32,14 @@ import {
 import { useI18n } from "@excalidraw/excalidraw/i18n";
 import { useUIAppState } from "@excalidraw/excalidraw/context/ui-appState";
 
+import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
+
 import { openGithubLogin } from "../kindraw/api";
 import { generateKindrawCanvasTitle } from "../kindraw/naming";
 import { buildItemPath, navigateKindraw } from "../kindraw/router";
+
+import { IconLibraryPanel } from "./IconLibraryPanel";
+import { TemplateLibraryPanel } from "./TemplateLibraryPanel";
 
 import "./AppSidebar.scss";
 
@@ -55,6 +61,7 @@ type AppSidebarProps = {
   currentItem: KindrawItem | null;
   drawingSaveState?: "idle" | "saving" | "error";
   errorMessage?: string | null;
+  excalidrawAPI?: ExcalidrawImperativeAPI | null;
   isMutating?: boolean;
   onAssignTag: (itemId: string, tagId: string | null) => Promise<void> | void;
   onArchiveItem: (itemId: string, archived: boolean) => Promise<void> | void;
@@ -378,6 +385,7 @@ export const AppSidebar = ({
   currentItem,
   drawingSaveState,
   errorMessage,
+  excalidrawAPI,
   isMutating,
   onAssignTag,
   onArchiveItem,
@@ -400,6 +408,8 @@ export const AppSidebar = ({
   const [selectedTagFilter, setSelectedTagFilter] =
     useState<string>(TAG_FILTER_ALL);
   const [selectedView, setSelectedView] = useState<SidebarView>("all");
+  const [iconsExpanded, setIconsExpanded] = useState(true);
+  const [templatesExpanded, setTemplatesExpanded] = useState(true);
 
   const tags = useMemo(
     () =>
@@ -573,6 +583,64 @@ export const AppSidebar = ({
     },
   ];
 
+  const iconLibrarySection = (
+    <section className="kindraw-app-sidebar__section kindraw-app-sidebar__section--icons">
+      <div className="kindraw-app-sidebar__section-header">
+        <span className="kindraw-app-sidebar__section-label">
+          {t("kindraw.iconLibrary.sectionTitle")}
+        </span>
+        <button
+          aria-expanded={iconsExpanded}
+          className={`kindraw-app-sidebar__section-toggle${
+            iconsExpanded
+              ? " kindraw-app-sidebar__section-toggle--expanded"
+              : ""
+          }`}
+          onClick={() => setIconsExpanded((current) => !current)}
+          type="button"
+        >
+          <span className="kindraw-app-sidebar__section-mark">{ImageIcon}</span>
+          <span className="kindraw-app-sidebar__section-caret">
+            {chevronRight}
+          </span>
+        </button>
+      </div>
+
+      {iconsExpanded ? (
+        <IconLibraryPanel excalidrawAPI={excalidrawAPI ?? null} />
+      ) : null}
+    </section>
+  );
+
+  const templatesSection = (
+    <section className="kindraw-app-sidebar__section kindraw-app-sidebar__section--templates">
+      <div className="kindraw-app-sidebar__section-header">
+        <span className="kindraw-app-sidebar__section-label">
+          {t("kindraw.templateLibrary.sectionTitle")}
+        </span>
+        <button
+          aria-expanded={templatesExpanded}
+          className={`kindraw-app-sidebar__section-toggle${
+            templatesExpanded
+              ? " kindraw-app-sidebar__section-toggle--expanded"
+              : ""
+          }`}
+          onClick={() => setTemplatesExpanded((current) => !current)}
+          type="button"
+        >
+          <span className="kindraw-app-sidebar__section-mark">{gridIcon}</span>
+          <span className="kindraw-app-sidebar__section-caret">
+            {chevronRight}
+          </span>
+        </button>
+      </div>
+
+      {templatesExpanded ? (
+        <TemplateLibraryPanel excalidrawAPI={excalidrawAPI ?? null} />
+      ) : null}
+    </section>
+  );
+
   return (
     <>
       <DefaultSidebar className="kindraw-app-sidebar__fallback-suppress" />
@@ -614,6 +682,10 @@ export const AppSidebar = ({
                 {t("kindraw.actions.signInWithGitHub")}
               </button>
             </section>
+
+            {iconLibrarySection}
+
+            {templatesSection}
           </div>
         ) : !tree ? (
           <div className="kindraw-app-sidebar__panel">
@@ -736,6 +808,10 @@ export const AppSidebar = ({
                 ))}
               </nav>
             </section>
+
+            {iconLibrarySection}
+
+            {templatesSection}
 
             <section className="kindraw-app-sidebar__section">
               <div className="kindraw-app-sidebar__section-header">
