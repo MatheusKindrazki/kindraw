@@ -34,9 +34,9 @@
   --popup-text-color: #000;
   --popup-text-inverted-color: #fff;
   --select-highlight-color: #{$color-blue-5};
-  --shadow-island: 0px 0px 0.9310142993927002px 0px rgba(0, 0, 0, 0.17),
-    0px 0px 3.1270833015441895px 0px rgba(0, 0, 0, 0.08),
-    0px 7px 14px 0px rgba(0, 0, 0, 0.05);
+  /* playful "sticker" elevation: warm hairline + soft offset drop */
+  --shadow-island: 0 0 0 1.5px #e7ddca, 0 4px 0 -1px #efe6d4,
+    0 10px 22px -6px rgba(74, 55, 30, 0.18);
 
   --button-hover-bg: var(--color-surface-high);
   --button-active-bg: var(--color-surface-high);
@@ -213,9 +213,8 @@
     --popup-text-color: #{$color-gray-4};
     --popup-text-inverted-color: #2c2c2c;
     --select-highlight-color: #{$color-blue-4};
-    --shadow-island: 0px 0px 0.9310142993927002px 0px rgba(0, 0, 0, 0.17),
-      0px 0px 3.1270833015441895px 0px rgba(0, 0, 0, 0.08),
-      0px 7px 14px 0px rgba(0, 0, 0, 0.05);
+    --shadow-island: 0 0 0 1.5px rgba(0, 0, 0, 0.12),
+      0 4px 0 -1px rgba(0, 0, 0, 0.06), 0 10px 22px -6px rgba(0, 0, 0, 0.16);
 
     --modal-shadow: 0px 100px 80px rgba(0, 0, 0, 0.07),
       0px 41.7776px 33.4221px rgba(0, 0, 0, 0.0503198),
