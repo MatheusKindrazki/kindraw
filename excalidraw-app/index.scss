@@ -5,6 +5,8 @@
   --color-primary-contrast-offset: #f4583a; // coral, offsets Chubb illusion
   --ui-font: "Bricolage Grotesque", system-ui, BlinkMacSystemFont, -apple-system,
     "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  // display font for logo + headings (characterful, not hand-drawn)
+  --display-font: "Fraunces", Georgia, "Times New Roman", serif;
 
   button[data-testid="main-menu-trigger"]:not([aria-label]) {
     display: none !important;

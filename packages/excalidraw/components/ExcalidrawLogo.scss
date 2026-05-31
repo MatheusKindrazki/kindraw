@@ -31,9 +31,10 @@
 
     .ExcalidrawLogo-text {
       color: var(--color-logo-text);
-      font-family: "Assistant", "Inter", "Segoe UI", sans-serif;
-      font-weight: 700;
-      letter-spacing: -0.045em;
+      // Kindraw: characterful display font (Fraunces via --display-font, set by app)
+      font-family: var(--display-font, "Fraunces", Georgia, serif);
+      font-weight: 600;
+      letter-spacing: -0.01em;
       line-height: 1;
     }
 
