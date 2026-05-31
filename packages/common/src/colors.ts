@@ -199,16 +199,17 @@ export const DEFAULT_ELEMENT_BACKGROUND_PICKS = [
 ] as ColorTuple;
 
 // ORDER matters for positioning in quick picker
+// Kindraw playful: warm cream paper as the lead background + soft playful tints
 export const DEFAULT_CANVAS_BACKGROUND_PICKS = [
+  // warm paper (matches the Kindraw shell)
+  "#fbf7ef",
   COLOR_PALETTE.white,
-  // radix slate2
-  "#f8f9fa",
-  // radix blue2
-  "#f5faff",
-  // radix yellow2
-  "#fffce8",
-  // radix bronze2
-  "#fdf8f6",
+  // soft mint
+  "#eefcf5",
+  // soft sky
+  "#eef6ff",
+  // soft peach
+  "#fff3ee",
 ] as ColorTuple;
 
 // palette defaults
