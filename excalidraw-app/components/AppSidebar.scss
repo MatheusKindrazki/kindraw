@@ -10,26 +10,25 @@
     var(--text-primary-color) 58%,
     transparent
   );
+  // Kindraw: theme-aware — mix toward surface tokens (which flip warm-dark in
+  // dark mode) instead of hardcoded white, so the sidebar follows the theme.
+  --kindraw-sidebar-surface: var(--color-surface-low);
   --kindraw-sidebar-panel: linear-gradient(
     180deg,
-    color-mix(in srgb, var(--color-surface-highest) 98%, #ffffff),
-    color-mix(in srgb, var(--color-surface-lowest) 94%, #f5f7fb)
+    color-mix(in srgb, var(--color-surface-high) 60%, var(--color-surface-low)),
+    var(--color-surface-low)
   );
-  --kindraw-sidebar-card: color-mix(
-    in srgb,
-    var(--color-surface-highest) 95%,
-    #ffffff
-  );
+  --kindraw-sidebar-card: var(--color-surface-lowest);
   --kindraw-sidebar-shadow: none;
   --kindraw-sidebar-accent-soft: color-mix(
     in srgb,
-    var(--color-primary) 10%,
-    white
+    var(--color-primary) 12%,
+    var(--color-surface-lowest)
   );
   --kindraw-sidebar-accent-strong: color-mix(
     in srgb,
-    var(--color-primary) 16%,
-    white
+    var(--color-primary) 20%,
+    var(--color-surface-lowest)
   );
 
   &.kindraw-sidebar-open-left {
@@ -56,7 +55,7 @@
     z-index: 2000;
     border-right: 1px solid var(--kindraw-sidebar-border);
     border-left: 0;
-    background: #ffffff;
+    background: var(--color-surface-lowest);
     box-shadow: var(--kindraw-sidebar-shadow);
     isolation: isolate;
   }
@@ -84,7 +83,7 @@
     padding: 0.25rem;
     border-radius: 0.85rem;
     border: 1px solid var(--kindraw-sidebar-border);
-    background: color-mix(in srgb, var(--color-surface-low) 70%, white);
+    background: color-mix(in srgb, var(--color-surface-low) 70%, var(--color-surface-lowest));
   }
 
   .kindraw-app-sidebar__tab {
@@ -111,9 +110,9 @@
   }
 
   .kindraw-app-sidebar__tab--active {
-    background: #ffffff;
+    background: var(--color-surface-lowest);
     color: var(--color-primary-darker);
-    border-color: color-mix(in srgb, var(--color-primary) 22%, white);
+    border-color: color-mix(in srgb, var(--color-primary) 22%, var(--color-surface-lowest));
     box-shadow: 0 1px 2px
       color-mix(in srgb, var(--text-primary-color) 8%, transparent);
   }
@@ -131,7 +130,7 @@
     min-height: 2.75rem;
     border-radius: 0.95rem;
     border: 1px solid var(--kindraw-sidebar-border);
-    background: color-mix(in srgb, var(--color-surface-highest) 90%, white);
+    background: color-mix(in srgb, var(--color-surface-high) 90%, var(--color-surface-lowest));
     transition: opacity 160ms ease, transform 160ms ease, background 160ms ease;
   }
 
@@ -218,7 +217,7 @@
   }
 
   .kindraw-main-menu-shell__canvas-input::selection {
-    background: color-mix(in srgb, var(--color-primary) 18%, white);
+    background: color-mix(in srgb, var(--color-primary) 18%, var(--color-surface-lowest));
   }
 
   .kindraw-top-right-actions {
@@ -240,7 +239,7 @@
     gap: 0.45rem;
     border: 1px solid var(--kindraw-sidebar-border);
     border-radius: 999px;
-    background: color-mix(in srgb, var(--color-surface-highest) 92%, white);
+    background: color-mix(in srgb, var(--color-surface-high) 92%, var(--color-surface-lowest));
     padding: 0.48rem 0.78rem;
     cursor: pointer;
     font: inherit;
@@ -273,7 +272,7 @@
     height: 2.72rem;
     padding: 0;
     gap: 0;
-    background: color-mix(in srgb, var(--color-surface-low) 84%, white);
+    background: color-mix(in srgb, var(--color-surface-low) 84%, var(--color-surface-lowest));
   }
 
   .kindraw-top-right-actions__button--icon svg {
@@ -291,19 +290,19 @@
   .kindraw-top-right-actions__button--active {
     background: var(--kindraw-sidebar-accent-soft);
     color: var(--color-primary-darker);
-    border-color: color-mix(in srgb, var(--color-primary) 40%, white);
+    border-color: color-mix(in srgb, var(--color-primary) 40%, var(--color-surface-lowest));
   }
 
   .kindraw-top-right-actions__button--public.kindraw-top-right-actions__button--active {
-    background: color-mix(in srgb, #1d4ed8 10%, white);
+    background: color-mix(in srgb, #1d4ed8 10%, var(--color-surface-lowest));
     color: #1d4ed8;
-    border-color: color-mix(in srgb, #1d4ed8 28%, white);
+    border-color: color-mix(in srgb, #1d4ed8 28%, var(--color-surface-lowest));
   }
 
   .kindraw-top-right-actions__button--collaboration.kindraw-top-right-actions__button--active {
     background: var(--kindraw-sidebar-accent-soft);
     color: var(--color-primary-darker);
-    border-color: color-mix(in srgb, var(--color-primary) 40%, white);
+    border-color: color-mix(in srgb, var(--color-primary) 40%, var(--color-surface-lowest));
   }
 
   .kindraw-top-right-actions__avatar-button {
@@ -315,7 +314,7 @@
     padding: 0;
     border: 1px solid var(--kindraw-sidebar-border);
     border-radius: 999px;
-    background: color-mix(in srgb, var(--color-surface-highest) 92%, white);
+    background: color-mix(in srgb, var(--color-surface-high) 92%, var(--color-surface-lowest));
     cursor: pointer;
     transition: background 160ms ease, border-color 160ms ease,
       transform 160ms ease;
@@ -447,7 +446,7 @@
     color: var(--color-primary-darker);
     font-size: 0.92rem;
     font-weight: 700;
-    border: 1px solid color-mix(in srgb, var(--color-primary) 16%, white);
+    border: 1px solid color-mix(in srgb, var(--color-primary) 16%, var(--color-surface-lowest));
   }
 
   .kindraw-app-sidebar__avatar img {
@@ -530,6 +529,9 @@
     min-height: 3rem;
     border: 0;
     border-radius: 0.95rem;
+    // Primary CTA stays a vivid coral fill in both themes: --color-primary
+    // already flips to a lighter coral in dark, so we keep white/black anchors
+    // (and white label) rather than darkening toward the surface token.
     background: linear-gradient(
       135deg,
       color-mix(in srgb, var(--color-primary) 92%, white),
@@ -567,7 +569,7 @@
     padding: 0.4rem;
     border-radius: 1rem;
     border: 1px solid var(--kindraw-sidebar-border);
-    background: color-mix(in srgb, var(--color-surface-highest) 96%, white);
+    background: color-mix(in srgb, var(--color-surface-high) 96%, var(--color-surface-lowest));
   }
 
   .kindraw-app-sidebar__inline-composer--compact {
@@ -607,7 +609,7 @@
     padding: 0 0.7rem;
     border-radius: 0.8rem;
     border: 1px solid var(--kindraw-sidebar-border);
-    background: color-mix(in srgb, var(--color-surface-highest) 92%, white);
+    background: color-mix(in srgb, var(--color-surface-high) 92%, var(--color-surface-lowest));
     color: inherit;
     font: inherit;
     font-size: 0.74rem;
@@ -662,7 +664,7 @@
     display: inline-flex;
     align-items: center;
     gap: 0.5rem;
-    color: color-mix(in srgb, var(--text-primary-color) 48%, white);
+    color: color-mix(in srgb, var(--text-primary-color) 48%, var(--color-surface-lowest));
     font-size: 0.74rem;
     font-weight: 700;
     letter-spacing: 0.1em;
@@ -684,7 +686,7 @@
     padding: 0 0.48rem;
     border-radius: 999px;
     border: 1px solid var(--kindraw-sidebar-border);
-    background: color-mix(in srgb, var(--color-surface-highest) 95%, white);
+    background: color-mix(in srgb, var(--color-surface-high) 95%, var(--color-surface-lowest));
     color: var(--kindraw-sidebar-muted);
     font-size: 0.72rem;
     font-weight: 600;
@@ -725,13 +727,13 @@
   }
 
   .kindraw-app-sidebar__menu-item:hover {
-    background: color-mix(in srgb, var(--color-surface-highest) 86%, white);
+    background: color-mix(in srgb, var(--color-surface-high) 86%, var(--color-surface-lowest));
     transform: translateX(2px);
   }
 
   .kindraw-app-sidebar__menu-item--active {
     background: var(--kindraw-sidebar-accent-soft);
-    border-color: color-mix(in srgb, var(--color-primary) 24%, white);
+    border-color: color-mix(in srgb, var(--color-primary) 24%, var(--color-surface-lowest));
     color: var(--color-primary-darker);
   }
 
@@ -797,7 +799,7 @@
     border-radius: 999px;
     background: var(--kindraw-tag-accent);
     box-shadow: 0 0 0 4px
-      color-mix(in srgb, var(--kindraw-tag-accent) 18%, white);
+      color-mix(in srgb, var(--kindraw-tag-accent) 18%, var(--color-surface-lowest));
   }
 
   .kindraw-app-sidebar__tag-filter-dot--neutral {
@@ -831,8 +833,8 @@
   .kindraw-app-sidebar__canvas-card:hover {
     z-index: 2;
     transform: translateY(-1px);
-    border-color: color-mix(in srgb, var(--kindraw-card-accent) 36%, white);
-    background: color-mix(in srgb, var(--kindraw-sidebar-card) 86%, white);
+    border-color: color-mix(in srgb, var(--kindraw-card-accent) 36%, var(--color-surface-lowest));
+    background: color-mix(in srgb, var(--kindraw-sidebar-card) 86%, var(--color-surface-lowest));
   }
 
   .kindraw-app-sidebar__canvas-card--active {
@@ -840,10 +842,10 @@
     border-color: #6965db;
     background: linear-gradient(
       180deg,
-      color-mix(in srgb, var(--color-primary) 7%, white),
-      color-mix(in srgb, var(--color-surface-highest) 95%, white)
+      color-mix(in srgb, var(--color-primary) 7%, var(--color-surface-lowest)),
+      color-mix(in srgb, var(--color-surface-high) 95%, var(--color-surface-lowest))
     );
-    box-shadow: 0 0 0 2px color-mix(in srgb, #6965db 14%, white);
+    box-shadow: 0 0 0 2px color-mix(in srgb, #6965db 14%, var(--color-surface-lowest));
   }
 
   .kindraw-app-sidebar__canvas-card:has(.kindraw-app-sidebar__canvas-actions-trigger[data-open="true"]),
@@ -875,10 +877,10 @@
     overflow: hidden;
     background: linear-gradient(
       135deg,
-      color-mix(in srgb, var(--kindraw-card-accent) 18%, white),
-      color-mix(in srgb, var(--kindraw-card-accent) 5%, white)
+      color-mix(in srgb, var(--kindraw-card-accent) 18%, var(--color-surface-lowest)),
+      color-mix(in srgb, var(--kindraw-card-accent) 5%, var(--color-surface-lowest))
     );
-    border: 1px solid color-mix(in srgb, var(--kindraw-card-accent) 24%, white);
+    border: 1px solid color-mix(in srgb, var(--kindraw-card-accent) 24%, var(--color-surface-lowest));
   }
 
   .kindraw-app-sidebar__canvas-preview-grid {
@@ -906,8 +908,8 @@
     width: 2.4rem;
     height: 2.4rem;
     border-radius: 0.8rem;
-    background: color-mix(in srgb, var(--kindraw-card-accent) 18%, white);
-    color: color-mix(in srgb, var(--text-primary-color) 74%, white);
+    background: color-mix(in srgb, var(--kindraw-card-accent) 18%, var(--color-surface-lowest));
+    color: color-mix(in srgb, var(--text-primary-color) 74%, var(--color-surface-lowest));
   }
 
   .kindraw-app-sidebar__canvas-preview-mark svg {
@@ -960,8 +962,8 @@
     min-height: 1.25rem;
     padding: 0.1rem 0.45rem;
     border-radius: 999px;
-    background: color-mix(in srgb, #6965db 12%, white);
-    border: 1px solid color-mix(in srgb, #6965db 28%, white);
+    background: color-mix(in srgb, #6965db 12%, var(--color-surface-lowest));
+    border: 1px solid color-mix(in srgb, #6965db 28%, var(--color-surface-lowest));
     color: #6965db;
     font-size: 0.66rem;
     font-weight: 700;
@@ -1006,32 +1008,32 @@
   }
 
   .kindraw-app-sidebar__canvas-flag {
-    background: color-mix(in srgb, var(--color-surface-low) 86%, white);
-    border-color: color-mix(in srgb, var(--kindraw-sidebar-border) 72%, white);
+    background: color-mix(in srgb, var(--color-surface-low) 86%, var(--color-surface-lowest));
+    border-color: color-mix(in srgb, var(--kindraw-sidebar-border) 72%, var(--color-surface-lowest));
     color: var(--kindraw-sidebar-muted);
   }
 
   .kindraw-app-sidebar__canvas-flag--live {
-    background: color-mix(in srgb, #10b981 10%, white);
-    border-color: color-mix(in srgb, #10b981 18%, white);
+    background: color-mix(in srgb, #10b981 10%, var(--color-surface-lowest));
+    border-color: color-mix(in srgb, #10b981 18%, var(--color-surface-lowest));
     color: #0f766e;
   }
 
   .kindraw-app-sidebar__status {
-    background: color-mix(in srgb, var(--color-primary) 7%, white);
-    border-color: color-mix(in srgb, var(--color-primary) 14%, white);
-    color: color-mix(in srgb, var(--color-primary-darker) 78%, white);
+    background: color-mix(in srgb, var(--color-primary) 7%, var(--color-surface-lowest));
+    border-color: color-mix(in srgb, var(--color-primary) 14%, var(--color-surface-lowest));
+    color: color-mix(in srgb, var(--color-primary-darker) 78%, var(--color-surface-lowest));
   }
 
   .kindraw-app-sidebar__status--saving {
-    background: color-mix(in srgb, var(--color-warning) 12%, white);
-    border-color: color-mix(in srgb, var(--color-warning) 20%, white);
+    background: color-mix(in srgb, var(--color-warning) 12%, var(--color-surface-lowest));
+    border-color: color-mix(in srgb, var(--color-warning) 20%, var(--color-surface-lowest));
     color: color-mix(in srgb, var(--color-warning) 84%, black);
   }
 
   .kindraw-app-sidebar__status--error {
-    background: color-mix(in srgb, var(--color-danger) 11%, white);
-    border-color: color-mix(in srgb, var(--color-danger) 18%, white);
+    background: color-mix(in srgb, var(--color-danger) 11%, var(--color-surface-lowest));
+    border-color: color-mix(in srgb, var(--color-danger) 18%, var(--color-surface-lowest));
     color: var(--color-danger);
   }
 
@@ -1062,7 +1064,7 @@
   .kindraw-app-sidebar__canvas-actions-trigger.dropdown-menu-button:active,
   .kindraw-app-sidebar__canvas-actions-trigger[data-open="true"] {
     border-color: var(--kindraw-sidebar-border);
-    background: color-mix(in srgb, var(--color-surface-low) 92%, white);
+    background: color-mix(in srgb, var(--color-surface-low) 92%, var(--color-surface-lowest));
     box-shadow: none;
     color: var(--text-primary-color);
   }
@@ -1080,8 +1082,8 @@
 
   .kindraw-app-sidebar__tag-dropdown-trigger[data-open="true"] {
     .kindraw-app-sidebar__tag-pill {
-      border-color: color-mix(in srgb, var(--kindraw-tag-accent) 24%, white);
-      background: color-mix(in srgb, var(--kindraw-tag-accent) 12%, white);
+      border-color: color-mix(in srgb, var(--kindraw-tag-accent) 24%, var(--color-surface-lowest));
+      background: color-mix(in srgb, var(--kindraw-tag-accent) 12%, var(--color-surface-lowest));
     }
 
     .kindraw-app-sidebar__tag-dropdown-caret {
@@ -1103,8 +1105,8 @@
         var(--kindraw-tag-accent) 14%,
         var(--kindraw-sidebar-border)
       );
-    background: color-mix(in srgb, var(--kindraw-tag-accent) 6%, white);
-    color: color-mix(in srgb, var(--text-primary-color) 66%, white);
+    background: color-mix(in srgb, var(--kindraw-tag-accent) 6%, var(--color-surface-lowest));
+    color: color-mix(in srgb, var(--text-primary-color) 66%, var(--color-surface-lowest));
     font-size: 0.68rem;
     font-weight: 550;
     line-height: 1;
@@ -1122,7 +1124,7 @@
     border-radius: 999px;
     background: var(--kindraw-tag-accent);
     box-shadow: 0 0 0 2px
-      color-mix(in srgb, var(--kindraw-tag-accent) 10%, white);
+      color-mix(in srgb, var(--kindraw-tag-accent) 10%, var(--color-surface-lowest));
     flex: 0 0 auto;
   }
 
@@ -1185,7 +1187,7 @@
     font-size: 0.82rem;
     border-radius: 0.8rem;
     border: 1px solid var(--kindraw-sidebar-border);
-    background: color-mix(in srgb, var(--color-surface-highest) 94%, white);
+    background: color-mix(in srgb, var(--color-surface-high) 94%, var(--color-surface-lowest));
   }
 
   .kindraw-technical-export__details {
@@ -1258,6 +1260,39 @@
     .kindraw-app-sidebar__canvas-meta {
       align-items: flex-start;
       flex-direction: column;
+    }
+  }
+
+  // Kindraw dark mode: the surface tokens above already flip warm-dark, so the
+  // sidebar darkens with the editor. These overrides only lift the few
+  // hardcoded *semantic* colors (blue/purple/teal/olive) that would otherwise
+  // sit as dark-on-dark text/borders. Light mode is untouched.
+  &.theme--dark {
+    // "Public" pill: deep blue -> lighter blue for contrast on the dark fill.
+    .kindraw-top-right-actions__button--public.kindraw-top-right-actions__button--active {
+      color: #93b4ff;
+      border-color: color-mix(in srgb, #93b4ff 38%, transparent);
+    }
+
+    // Active canvas card / selected badge: deep indigo -> lighter lavender.
+    .kindraw-app-sidebar__canvas-card--active {
+      border-color: color-mix(in srgb, #a6a2ff 60%, transparent);
+      box-shadow: 0 0 0 2px color-mix(in srgb, #a6a2ff 24%, transparent);
+    }
+
+    .kindraw-app-sidebar__canvas-selected-badge {
+      border-color: color-mix(in srgb, #a6a2ff 40%, transparent);
+      color: #a6a2ff;
+    }
+
+    // "Live" flag: dark teal text -> light emerald for contrast.
+    .kindraw-app-sidebar__canvas-flag--live {
+      color: #6ee7b7;
+    }
+
+    // "Saving" status: dark olive text -> warm amber for contrast.
+    .kindraw-app-sidebar__status--saving {
+      color: var(--color-warning-dark);
     }
   }
 }

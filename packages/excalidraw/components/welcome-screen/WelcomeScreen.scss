@@ -1,6 +1,8 @@
 .excalidraw {
+  // Kindraw: break the hand-drawn font in chrome — UI text uses the UI font,
+  // logo + main heading get the characterful display font (Fraunces).
   .excalifont {
-    font-family: "Excalifont", "Xiaolai";
+    font-family: var(--ui-font);
   }
 
   // WelcomeSreen common
@@ -142,13 +144,16 @@
     display: flex;
     align-items: center;
     column-gap: 0.75rem;
-    font-size: 2.25rem;
+    font-size: 2.5rem;
+    font-family: var(--display-font);
+    font-weight: 600;
+    letter-spacing: -0.01em;
   }
 
   .welcome-screen-center__heading {
     font-size: 1.125rem;
     text-align: center;
-    line-height: 1.35rem;
+    line-height: 1.4rem;
   }
 
   .welcome-screen-menu {

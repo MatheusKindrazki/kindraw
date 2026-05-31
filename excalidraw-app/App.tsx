@@ -52,6 +52,8 @@ import {
   GithubIcon,
   LibraryIcon,
   LinkIcon,
+  MoonIcon,
+  SunIcon,
   clipboard,
   eyeIcon,
   usersIcon,
@@ -2135,6 +2137,27 @@ const ExcalidrawWrapper = () => {
           return (
             <div className="excalidraw-ui-top-right kindraw-top-right-actions">
               {collabError.message && <CollabError collabError={collabError} />}
+              <button
+                aria-label={
+                  editorTheme === THEME.DARK
+                    ? t("buttons.lightMode")
+                    : t("buttons.darkMode")
+                }
+                className="kindraw-top-right-actions__button kindraw-top-right-actions__button--icon kindraw-top-right-actions__button--theme"
+                onClick={() =>
+                  setAppTheme(
+                    editorTheme === THEME.DARK ? THEME.LIGHT : THEME.DARK,
+                  )
+                }
+                title={
+                  editorTheme === THEME.DARK
+                    ? t("buttons.lightMode")
+                    : t("buttons.darkMode")
+                }
+                type="button"
+              >
+                {editorTheme === THEME.DARK ? SunIcon : MoonIcon}
+              </button>
               {kindrawSession ? (
                 <button
                   aria-label={getKindrawUserDisplayName(kindrawSession.user)}

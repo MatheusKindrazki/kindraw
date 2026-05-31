@@ -1,7 +1,12 @@
 @import "../packages/excalidraw/css/variables.module.scss";
 
 .excalidraw {
-  --color-primary-contrast-offset: #625ee0; // to offset Chubb illusion
+  // Kindraw playful identity: warm coral, Bricolage Grotesque UI font
+  --color-primary-contrast-offset: #f4583a; // coral, offsets Chubb illusion
+  --ui-font: "Bricolage Grotesque", system-ui, BlinkMacSystemFont, -apple-system,
+    "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  // display font for logo + headings (characterful, not hand-drawn)
+  --display-font: "Fraunces", Georgia, "Times New Roman", serif;
 
   button[data-testid="main-menu-trigger"]:not([aria-label]) {
     display: none !important;
@@ -12,7 +17,7 @@
   }
 
   &.theme--dark {
-    --color-primary-contrast-offset: #726dff; // to offset Chubb illusion
+    --color-primary-contrast-offset: #ff8a6e; // coral light for dark mode
   }
 
   .footer-center {
