@@ -229,17 +229,19 @@
 
     --color-slider-track: hsl(244, 23%, 39%);
 
-    // will be inverted to a lighter color.
-    --color-selection: #3530c4;
+    // Kindraw playful: coral accent for dark mode (NOT purple).
+    // The chrome (toolbar/panels) does NOT get the invert filter, so these
+    // values render as authored — keep them coral, not the old purple.
+    --color-selection: #ff7a59;
 
     --color-icon-white: var(--color-gray-90);
 
-    --color-primary: #a8a5ff;
-    --color-primary-darker: #b2aeff;
-    --color-primary-darkest: #beb9ff;
-    --color-primary-light: #4f4d6f;
-    --color-primary-light-darker: #43415e;
-    --color-primary-hover: #bbb8ff;
+    --color-primary: #ff8a6e;
+    --color-primary-darker: #ff9c84;
+    --color-primary-darkest: #ffb09b;
+    --color-primary-light: #4a342c;
+    --color-primary-light-darker: #3d2b24;
+    --color-primary-hover: #ff9c84;
 
     --color-disabled: var(--color-gray-70);
 
@@ -267,20 +269,19 @@
     --color-muted-background: var(--color-gray-40);
     --color-muted-background-darker: var(--color-gray-20);
 
-    --color-logo-surface: #2d2751;
-    --color-logo-text: #e2dfff;
+    --color-logo-surface: #ff6b4a;
+    --color-logo-text: #fff4ee;
 
-    --color-surface-high: #2e2d39;
-    --color-surface-low: hsl(240, 8%, 15%);
-    --color-surface-mid: hsl(240 6% 10%);
-    --color-surface-lowest: hsl(0, 0%, 7%);
-    --color-on-surface: #e3e3e8;
-    --color-brand-hover: #bbb8ff;
-    --color-on-primary-container: #e0dfff;
-    --color-surface-primary-container: #403e6a;
-    --color-brand-active: #d0ccff;
-    --color-border-outline: #8e8d9c;
-    --color-border-outline-variant: #46464f;
-    --color-surface-primary-container: #403e6a;
+    --color-surface-high: #2c2926;
+    --color-surface-low: hsl(28, 8%, 14%);
+    --color-surface-mid: hsl(28, 7%, 10%);
+    --color-surface-lowest: hsl(28, 9%, 7%);
+    --color-on-surface: #ece8e2;
+    --color-brand-hover: #ff9c84;
+    --color-on-primary-container: #ffe2d9;
+    --color-surface-primary-container: #4a342c;
+    --color-brand-active: #ffb09b;
+    --color-border-outline: #9c8e7e;
+    --color-border-outline-variant: #46423c;
   }
 }
