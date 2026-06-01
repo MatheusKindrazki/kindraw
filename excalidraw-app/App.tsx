@@ -172,12 +172,15 @@ import {
   updateItemContent,
 } from "./kindraw/api";
 import {
+  EMPTY_DRAWING_CONTENT,
   createInitialItemContent,
   parseDrawingContent,
 } from "./kindraw/content";
 import {
+  buildDraftDrawingPath,
   buildItemPath,
   getLocationPathname,
+  isKindrawDraftDrawing,
   matchKindrawRoute,
   navigateKindraw,
   shouldAutoCreateRootDrawing,
@@ -636,6 +639,12 @@ const ExcalidrawWrapper = () => {
   const kindrawApplyingSceneRef = useRef(false);
   const kindrawCuratedLibrariesBootstrappedRef = useRef(false);
   const kindrawAutoCreateRootRef = useRef(false);
+  // Guards the one-time promotion of a local draft into a backend item on the
+  // first real edit, so a burst of onChange events can't create duplicates.
+  const kindrawPromotingDraftRef = useRef(false);
+  // Item id just promoted from a draft; its scene is already on canvas, so the
+  // load effect must skip re-hydration (which would interrupt the user drawing).
+  const kindrawJustPromotedItemIdRef = useRef<string | null>(null);
   const kindrawAutoJoinCollabRoomRef = useRef<string | null>(null);
   const kindrawLastSavedContentRef = useRef<string | null>(null);
   const kindrawSaveTimeoutRef = useRef<number | null>(null);
@@ -708,6 +717,13 @@ const ExcalidrawWrapper = () => {
   }, [collabAPI, kindrawSession]);
 
   useEffect(() => {
+    // A local draft (/draw/new) has no backend item yet, so don't look it up
+    // in the tree and don't redirect it away — it's an intentional empty canvas.
+    if (isKindrawDraftDrawing(kindrawRoute)) {
+      setKindrawCurrentItem(null);
+      return;
+    }
+
     if (kindrawRoute.kind === "drawing" || kindrawRoute.kind === "doc") {
       const nextItem =
         kindrawTree?.items.find((item) => item.id === kindrawRoute.itemId) ||
@@ -981,22 +997,12 @@ const ExcalidrawWrapper = () => {
       return;
     }
 
+    // Open a local draft canvas instead of creating a backend item. The item
+    // is only persisted once the user makes the first real edit (see onChange),
+    // so opening/refreshing the root no longer leaves empty canvases behind.
     kindrawAutoCreateRootRef.current = true;
-    void handleKindrawCreateItem(
-      "drawing",
-      null,
-      generateKindrawCanvasTitle(),
-      {
-        replace: true,
-      },
-    );
-  }, [
-    handleKindrawCreateItem,
-    kindrawBusy,
-    kindrawRoute,
-    kindrawSession,
-    pathname,
-  ]);
+    navigateKindraw(buildDraftDrawingPath(), { replace: true });
+  }, [kindrawBusy, kindrawRoute, kindrawSession, pathname]);
 
   const handleKindrawLogout = useCallback(async () => {
     await runKindrawMutation(async () => {
@@ -1358,6 +1364,34 @@ const ExcalidrawWrapper = () => {
       roomLinkData?.roomId === kindrawRoute.itemId;
 
     if (!kindrawSession && !isCollaborationDrawingRoute) {
+      return;
+    }
+
+    // Just promoted from a draft: the scene is already on canvas and saved.
+    // Skip the load entirely so we don't re-hydrate over the user's drawing.
+    if (kindrawJustPromotedItemIdRef.current === kindrawRoute.itemId) {
+      kindrawJustPromotedItemIdRef.current = null;
+      setKindrawLoadingDrawingId(null);
+      return;
+    }
+
+    // Local draft: no backend item yet. Present an empty canvas without
+    // fetching or persisting anything. The item is created on first real edit.
+    if (isKindrawDraftDrawing(kindrawRoute)) {
+      kindrawApplyingSceneRef.current = true;
+      kindrawLastSavedContentRef.current = EMPTY_DRAWING_CONTENT;
+      setKindrawCurrentItem(null);
+      setKindrawCurrentCollaborationRoom(null);
+      setKindrawLoadingDrawingId(null);
+      setKindrawDrawingSaveState("idle");
+      setKindrawDrawingStatus(null);
+      excalidrawAPI.updateScene({
+        elements: [],
+        captureUpdate: CaptureUpdateAction.IMMEDIATELY,
+      });
+      window.setTimeout(() => {
+        kindrawApplyingSceneRef.current = false;
+      }, 0);
       return;
     }
 
@@ -1732,6 +1766,79 @@ const ExcalidrawWrapper = () => {
     [refreshKindrawTree],
   );
 
+  // Materialize a local draft (/draw/new) into a real backend item once the
+  // user has drawn something, then swap the URL to the persisted drawing.
+  const promoteKindrawDraft = useCallback(
+    async (content: string) => {
+      const title = generateKindrawCanvasTitle();
+      try {
+        setKindrawDrawingSaveState("saving");
+        setKindrawDrawingStatus(t("kindraw.status.drawingSaving"));
+
+        const response = await createItem({
+          kind: "drawing",
+          title,
+          folderId: null,
+          content,
+        });
+        const timestamp = new Date().toISOString();
+        const createdItem: KindrawItem = {
+          id: response.itemId,
+          kind: "drawing",
+          title,
+          folderId: null,
+          ownerId: kindrawSession?.user.id || "pending",
+          updatedAt: timestamp,
+          createdAt: timestamp,
+          archivedAt: null,
+          shareLinks: [],
+          collaborationRoomId: null,
+          collaborationEnabledAt: null,
+        };
+
+        kindrawLastSavedContentRef.current = content;
+        // Swap the URL to the real drawing. The load effect will re-run for the
+        // new id, but the scene the user is drawing on is already correct, so we
+        // flag it to skip re-hydration (avoids flicker / losing undo history).
+        kindrawJustPromotedItemIdRef.current = response.itemId;
+        setKindrawCurrentItem(createdItem);
+        navigateKindraw(buildItemPath(createdItem), { replace: true });
+
+        setKindrawDrawingSaveState("idle");
+        setKindrawDrawingStatus(t("kindraw.status.drawingSaved"));
+        await refreshKindrawTree();
+
+        // Reconcile any edits made during the create round-trip: if the live
+        // scene moved past what we POSTed, persist it now instead of relying on
+        // a trailing onChange (which may never fire if the user stopped drawing).
+        if (excalidrawAPI) {
+          const latest = serializeAsJSON(
+            excalidrawAPI.getSceneElementsIncludingDeleted(),
+            excalidrawAPI.getAppState(),
+            excalidrawAPI.getFiles(),
+            "local",
+          );
+          if (latest !== content) {
+            void persistKindrawDrawing(response.itemId, latest, createdItem);
+          }
+        }
+      } catch (error) {
+        setKindrawDrawingSaveState("error");
+        setKindrawDrawingStatus(
+          getErrorMessage(error, t("kindraw.status.drawingSaveFailed")),
+        );
+      } finally {
+        kindrawPromotingDraftRef.current = false;
+      }
+    },
+    [
+      excalidrawAPI,
+      kindrawSession?.user.id,
+      persistKindrawDrawing,
+      refreshKindrawTree,
+    ],
+  );
+
   useEffect(() => {
     const unloadHandler = (event: BeforeUnloadEvent) => {
       LocalData.flushSave();
@@ -1804,8 +1911,19 @@ const ExcalidrawWrapper = () => {
       !kindrawApplyingSceneRef.current
     ) {
       const serialized = serializeAsJSON(elements, appState, files, "local");
+      const hasVisibleElements = elements.some(
+        (element) => !element.isDeleted,
+      );
 
-      if (serialized !== kindrawLastSavedContentRef.current) {
+      if (isKindrawDraftDrawing(kindrawRoute)) {
+        // Local draft: only materialize a backend item once the user has
+        // actually drawn something. An empty draft never touches the backend,
+        // so opening/refreshing the root leaves no empty canvases behind.
+        if (hasVisibleElements && !kindrawPromotingDraftRef.current) {
+          kindrawPromotingDraftRef.current = true;
+          void promoteKindrawDraft(serialized);
+        }
+      } else if (serialized !== kindrawLastSavedContentRef.current) {
         if (kindrawSaveTimeoutRef.current) {
           window.clearTimeout(kindrawSaveTimeoutRef.current);
         }

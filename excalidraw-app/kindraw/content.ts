@@ -5,7 +5,7 @@ import type { ExcalidrawInitialDataState } from "@excalidraw/excalidraw/types";
 
 import type { KindrawItemKind } from "./types";
 
-const EMPTY_DRAWING_CONTENT = serializeAsJSON(
+export const EMPTY_DRAWING_CONTENT = serializeAsJSON(
   [],
   getDefaultAppState(),
   {},
