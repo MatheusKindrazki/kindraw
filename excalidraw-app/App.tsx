@@ -1378,6 +1378,9 @@ const ExcalidrawWrapper = () => {
     // Local draft: no backend item yet. Present an empty canvas without
     // fetching or persisting anything. The item is created on first real edit.
     if (isKindrawDraftDrawing(kindrawRoute)) {
+      if (collabAPI?.isCollaborating()) {
+        collabAPI.stopCollaboration(false);
+      }
       kindrawApplyingSceneRef.current = true;
       kindrawLastSavedContentRef.current = EMPTY_DRAWING_CONTENT;
       setKindrawCurrentItem(null);
