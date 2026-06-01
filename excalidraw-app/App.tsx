@@ -1378,6 +1378,8 @@ const ExcalidrawWrapper = () => {
     // Local draft: no backend item yet. Present an empty canvas without
     // fetching or persisting anything. The item is created on first real edit.
     if (isKindrawDraftDrawing(kindrawRoute)) {
+      // End any active collaboration session before clearing the drawing state
+      // to prevent onChange from syncing elements to the previous room.
       if (collabAPI?.isCollaborating()) {
         collabAPI.stopCollaboration(false);
       }
@@ -1800,16 +1802,19 @@ const ExcalidrawWrapper = () => {
         };
 
         kindrawLastSavedContentRef.current = content;
+
         // Swap the URL to the real drawing. The load effect will re-run for the
         // new id, but the scene the user is drawing on is already correct, so we
         // flag it to skip re-hydration (avoids flicker / losing undo history).
         kindrawJustPromotedItemIdRef.current = response.itemId;
         setKindrawCurrentItem(createdItem);
+
+        // Refresh the tree first so it contains the created item, then navigate
+        await refreshKindrawTree();
         navigateKindraw(buildItemPath(createdItem), { replace: true });
 
         setKindrawDrawingSaveState("idle");
         setKindrawDrawingStatus(t("kindraw.status.drawingSaved"));
-        await refreshKindrawTree();
 
         // Reconcile any edits made during the create round-trip: if the live
         // scene moved past what we POSTed, persist it now instead of relying on
