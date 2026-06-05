@@ -1,5 +1,8 @@
 import type {
+  ApiTokenPublic,
+  ApiTokenSecret,
   AuthContext,
+  CreateApiTokenInput,
   CreateFolderInput,
   CreateHybridItemInput,
   CreateItemInput,
@@ -42,6 +45,18 @@ type SessionRow = {
   expires_at: string;
   created_at: string;
   last_seen_at: string;
+};
+
+type ApiTokenRow = {
+  id: string;
+  user_id: string;
+  name: string;
+  prefix: string;
+  scope: string;
+  created_at: string;
+  expires_at: string | null;
+  last_seen_at: string | null;
+  revoked_at: string | null;
 };
 
 type FolderRow = {
@@ -200,6 +215,22 @@ const toHybridItem = (
 });
 
 const isoNow = () => new Date().toISOString();
+
+const base64UrlEncode = (bytes: Uint8Array): string => {
+  let binary = "";
+  for (const byte of bytes) {
+    binary += String.fromCharCode(byte);
+  }
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+};
+
+const sha256Hex = async (input: string): Promise<string> => {
+  const data = new TextEncoder().encode(input);
+  const digest = await crypto.subtle.digest("SHA-256", data);
+  return Array.from(new Uint8Array(digest))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+};
 
 const createCollaborationRoomKey = async () => {
   const key = await crypto.subtle.generateKey(
@@ -433,6 +464,170 @@ export class KindrawStore {
       return null;
     }
     return { user: auth.user };
+  }
+
+  // --- API tokens (Personal Access Tokens) ----------------------------------
+  // The raw secret is shown to the user exactly once; we persist only its
+  // SHA-256 hash as the row id. Mirrors the session model above.
+
+  async createApiToken(
+    userId: string,
+    input: CreateApiTokenInput,
+  ): Promise<ApiTokenSecret> {
+    const name = input.name.trim() || "API token";
+    // 32 random bytes, base64url — ~256 bits of entropy (not randomUUID).
+    const bytes = crypto.getRandomValues(new Uint8Array(32));
+    const random = base64UrlEncode(bytes);
+    const secret = `kdr_${random}`;
+    const id = await sha256Hex(secret);
+    const prefix = `kdr_${random.slice(0, 8)}`;
+    const now = isoNow();
+    const expiresAt =
+      input.expiresInDays && input.expiresInDays > 0
+        ? new Date(
+            Date.now() + input.expiresInDays * 24 * 60 * 60 * 1000,
+          ).toISOString()
+        : null;
+
+    await this.db
+      .prepare(
+        `INSERT INTO api_tokens
+           (id, user_id, name, prefix, scope, created_at, expires_at, last_seen_at, revoked_at)
+         VALUES (?, ?, ?, ?, 'full', ?, ?, NULL, NULL)`,
+      )
+      .bind(id, userId, name, prefix, now, expiresAt)
+      .run();
+
+    return {
+      secret,
+      token: {
+        prefix,
+        name,
+        scope: "full",
+        createdAt: now,
+        expiresAt,
+        lastSeenAt: null,
+      },
+    };
+  }
+
+  async resolveApiToken(secret: string): Promise<AuthContext | null> {
+    if (!secret || !secret.startsWith("kdr_")) {
+      return null;
+    }
+    const id = await sha256Hex(secret);
+    const row = await this.db
+      .prepare(
+        `SELECT
+           api_tokens.id,
+           api_tokens.user_id,
+           api_tokens.name,
+           api_tokens.prefix,
+           api_tokens.scope,
+           api_tokens.created_at,
+           api_tokens.expires_at,
+           api_tokens.last_seen_at,
+           api_tokens.revoked_at,
+           users.github_login,
+           users.name AS user_name,
+           users.avatar_url
+         FROM api_tokens
+         JOIN users ON users.id = api_tokens.user_id
+         WHERE api_tokens.id = ?`,
+      )
+      .bind(id)
+      .first<
+        ApiTokenRow & {
+          github_login: string;
+          user_name: string;
+          avatar_url: string | null;
+        }
+      >();
+
+    if (!row) {
+      return null;
+    }
+    if (row.revoked_at) {
+      return null;
+    }
+    if (row.expires_at && new Date(row.expires_at).getTime() <= Date.now()) {
+      return null;
+    }
+
+    const now = isoNow();
+    // Throttle last_seen writes to at most ~1/min to avoid a D1 write per call.
+    if (
+      !row.last_seen_at ||
+      Date.now() - new Date(row.last_seen_at).getTime() > 60_000
+    ) {
+      await this.db
+        .prepare("UPDATE api_tokens SET last_seen_at = ? WHERE id = ?")
+        .bind(now, row.id)
+        .run();
+    }
+
+    return {
+      user: {
+        id: row.user_id,
+        githubLogin: row.github_login,
+        name: row.user_name,
+        avatarUrl: row.avatar_url,
+      },
+      apiToken: {
+        id: row.id,
+        userId: row.user_id,
+        name: row.name,
+        prefix: row.prefix,
+        scope: row.scope,
+        createdAt: row.created_at,
+        expiresAt: row.expires_at,
+        lastSeenAt: now,
+        revokedAt: null,
+      },
+    };
+  }
+
+  async listApiTokens(userId: string): Promise<ApiTokenPublic[]> {
+    const { results } = await this.db
+      .prepare(
+        `SELECT prefix, name, scope, created_at, expires_at, last_seen_at
+         FROM api_tokens
+         WHERE user_id = ? AND revoked_at IS NULL
+         ORDER BY created_at DESC`,
+      )
+      .bind(userId)
+      .all<{
+        prefix: string;
+        name: string;
+        scope: string;
+        created_at: string;
+        expires_at: string | null;
+        last_seen_at: string | null;
+      }>();
+
+    return results.map((row) => ({
+      prefix: row.prefix,
+      name: row.name,
+      scope: row.scope,
+      createdAt: row.created_at,
+      expiresAt: row.expires_at,
+      lastSeenAt: row.last_seen_at,
+    }));
+  }
+
+  async revokeApiToken(userId: string, prefix: string): Promise<boolean> {
+    const now = isoNow();
+    const result = await this.db
+      .prepare(
+        `UPDATE api_tokens SET revoked_at = ?
+         WHERE user_id = ? AND prefix = ? AND revoked_at IS NULL`,
+      )
+      .bind(now, userId, prefix)
+      .run();
+    // D1 run() returns meta.changes
+    return (result as { meta?: { changes?: number } }).meta?.changes
+      ? true
+      : false;
   }
 
   async getTree(ownerId: string): Promise<KindrawTreeResponse> {

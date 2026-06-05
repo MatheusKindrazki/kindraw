@@ -14,6 +14,7 @@ import type {
   CreateItemInput,
   Env,
   KindrawSession,
+  KindrawTreeEntry,
   PatchFolderInput,
   PatchHybridItemMetaInput,
   PatchItemMetaInput,
@@ -35,6 +36,20 @@ const json = (body: unknown, init?: ResponseInit) =>
       ...(init?.headers || {}),
     },
   });
+
+// Public /v1 item shape: omits internal/sensitive fields (ownerId,
+// collaborationRoomId, share links) so the public API never leaks them.
+const toV1ItemSummary = (item: KindrawTreeEntry) => ({
+  id: item.id,
+  kind: item.kind,
+  title: item.title,
+  folderId: item.folderId,
+  createdAt: item.createdAt,
+  updatedAt: item.updatedAt,
+});
+
+const drawingUrl = (request: Request, env: Env, itemId: string) =>
+  `${resolveAppOrigin(request, env)}/draw/${itemId}`;
 
 const errorResponse = (status: number, message: string) =>
   json(
@@ -418,7 +433,38 @@ const getAuthSession = async (
   return store.getSessionPayload(sessionId);
 };
 
+// Accepts either an API token (Authorization: Bearer kdr_...) or a browser
+// session cookie. Used by /v1/api/* (public API) and all existing routes.
 const requireAuth = async (request: Request, env: Env) => {
+  const store = createStore(env.KINDRAW_DB, env.KINDRAW_BLOBS);
+
+  const authorization = request.headers.get("Authorization");
+  if (authorization && authorization.startsWith("Bearer ")) {
+    const secret = authorization.slice("Bearer ".length).trim();
+    const auth = await store.resolveApiToken(secret);
+    if (!auth) {
+      throw new HttpError(401, "Invalid or expired API token.");
+    }
+    return { auth, store, sessionId: null as string | null };
+  }
+
+  const cookies = parseCookies(request.headers.get("Cookie"));
+  const sessionId = cookies.get(SESSION_COOKIE);
+  if (!sessionId) {
+    throw new HttpError(401, "Authentication required.");
+  }
+
+  const auth = await store.resolveSession(sessionId);
+  if (!auth) {
+    throw new HttpError(401, "Session is missing or expired.");
+  }
+
+  return { auth, store, sessionId: sessionId as string | null };
+};
+
+// Cookie-only auth. Used by token-management routes so that an API token can
+// never mint or revoke other API tokens (privilege containment).
+const requireSession = async (request: Request, env: Env) => {
   const cookies = parseCookies(request.headers.get("Cookie"));
   const sessionId = cookies.get(SESSION_COOKIE);
   if (!sessionId) {
@@ -431,11 +477,7 @@ const requireAuth = async (request: Request, env: Env) => {
     throw new HttpError(401, "Session is missing or expired.");
   }
 
-  return {
-    auth,
-    store,
-    sessionId,
-  };
+  return { auth, store, sessionId };
 };
 
 export const routeRequest = async (request: Request, env: Env) => {
@@ -478,6 +520,138 @@ export const routeRequest = async (request: Request, env: Env) => {
       }),
     );
     return response;
+  }
+
+  // --- API token management (cookie-only; a PAT cannot mint/list/revoke PATs) -
+  if (pathname === "/api/auth/tokens" && request.method === "GET") {
+    const { auth, store } = await requireSession(request, env);
+    return json({ tokens: await store.listApiTokens(auth.user.id) });
+  }
+
+  if (pathname === "/api/auth/tokens" && request.method === "POST") {
+    const { auth, store } = await requireSession(request, env);
+    const input = await readJson<{ name?: string; expiresInDays?: number }>(
+      request,
+    );
+    const created = await store.createApiToken(auth.user.id, {
+      name: input.name || "API token",
+      expiresInDays: input.expiresInDays ?? null,
+    });
+    // `secret` is returned exactly once here and never again.
+    return json(created, { status: 201 });
+  }
+
+  if (
+    pathname.startsWith("/api/auth/tokens/") &&
+    request.method === "DELETE"
+  ) {
+    const prefix = pathname.replace("/api/auth/tokens/", "");
+    const { auth, store } = await requireSession(request, env);
+    const revoked = await store.revokeApiToken(auth.user.id, prefix);
+    if (!revoked) {
+      throw new HttpError(404, "Token not found.");
+    }
+    return new Response(null, { status: 204 });
+  }
+
+  // --- Public API surface /v1/api/* (Bearer token; also accepts cookie) -------
+  if (pathname === "/v1/api/me" && request.method === "GET") {
+    const { auth } = await requireAuth(request, env);
+    return json({
+      user: {
+        id: auth.user.id,
+        githubLogin: auth.user.githubLogin,
+        name: auth.user.name,
+      },
+      scope: auth.apiToken?.scope ?? "full",
+      via: auth.apiToken ? "token" : "session",
+    });
+  }
+
+  if (pathname === "/v1/api/items" && request.method === "GET") {
+    const { auth, store } = await requireAuth(request, env);
+    const tree = await store.getTree(auth.user.id);
+    return json({ items: tree.items.map(toV1ItemSummary) });
+  }
+
+  if (pathname === "/v1/api/items" && request.method === "POST") {
+    const { auth, store } = await requireAuth(request, env);
+    const input = await readJson<CreateItemInput>(request);
+    const itemId = await store.createItem(auth.user.id, input);
+    return json({ itemId, url: drawingUrl(request, env, itemId) }, {
+      status: 201,
+    });
+  }
+
+  // Create a drawing from pre-serialized Excalidraw content. Mermaid->Excalidraw
+  // conversion happens client-side (see kindraw-client); this endpoint only
+  // persists. A `mermaid` field is explicitly rejected so the contract is clear.
+  if (
+    (pathname === "/v1/api/items:generate" ||
+      pathname === "/v1/api/items/generate") &&
+    request.method === "POST"
+  ) {
+    const { auth, store } = await requireAuth(request, env);
+    const input = await readJson<{
+      title?: string;
+      folderId?: string | null;
+      content?: string;
+      mermaid?: string;
+    }>(request);
+
+    if (input.mermaid && !input.content) {
+      throw new HttpError(
+        422,
+        "Mermaid conversion happens client-side. Send serialized Excalidraw `content`.",
+      );
+    }
+    if (!input.content || typeof input.content !== "string") {
+      throw new HttpError(400, "`content` (serialized Excalidraw JSON) is required.");
+    }
+    // Cheap structural validation — no DOM/rendering in the Worker.
+    try {
+      const parsed = JSON.parse(input.content) as { elements?: unknown };
+      if (!parsed || !Array.isArray(parsed.elements)) {
+        throw new Error("missing elements array");
+      }
+    } catch {
+      throw new HttpError(400, "`content` is not valid Excalidraw JSON.");
+    }
+
+    const itemId = await store.createItem(auth.user.id, {
+      kind: "drawing",
+      title: input.title || "Untitled drawing",
+      folderId: input.folderId ?? null,
+      content: input.content,
+    });
+    return json({ itemId, url: drawingUrl(request, env, itemId) }, {
+      status: 201,
+    });
+  }
+
+  if (pathname.startsWith("/v1/api/items/") && pathname.endsWith("/content")) {
+    const itemId = pathname
+      .replace("/v1/api/items/", "")
+      .replace("/content", "");
+    const { auth, store } = await requireAuth(request, env);
+    if (request.method === "PUT") {
+      const input = await readJson<{ content?: string }>(request);
+      await store.putItemContent(auth.user.id, itemId, input.content || "");
+      return new Response(null, { status: 204 });
+    }
+  }
+
+  if (pathname.startsWith("/v1/api/items/")) {
+    const itemId = pathname.replace("/v1/api/items/", "");
+    const { auth, store } = await requireAuth(request, env);
+    if (request.method === "GET") {
+      const { item, content } = await store.getItem(auth.user.id, itemId);
+      return json({ item: toV1ItemSummary(item), content });
+    }
+    if (request.method === "DELETE") {
+      await store.deleteItem(auth.user.id, itemId);
+      return new Response(null, { status: 204 });
+    }
   }
 
   if (
