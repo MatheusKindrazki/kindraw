@@ -1,7 +1,7 @@
 {
   "name": "kindraw",
   "displayName": "Kindraw",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Let Claude create real, shareable drawings and diagrams in your Kindraw workspace instead of ASCII art.",
   "author": {
     "name": "Matheus Kindrazki",
@@ -10,11 +10,20 @@
   "homepage": "https://kindraw.dev",
   "repository": "https://github.com/MatheusKindrazki/kindraw",
   "license": "MIT",
-  "keywords": ["drawing", "diagram", "mermaid", "excalidraw", "kindraw"],
+  "keywords": [
+    "drawing",
+    "diagram",
+    "mermaid",
+    "excalidraw",
+    "kindraw"
+  ],
   "mcpServers": {
     "kindraw": {
       "command": "npx",
-      "args": ["-y", "@kindraw/mcp"],
+      "args": [
+        "-y",
+        "@kindraw/mcp"
+      ],
       "env": {
         "KINDRAW_TOKEN": "${user_config.api_token}",
         "KINDRAW_API_BASE_URL": "${user_config.api_base_url}"

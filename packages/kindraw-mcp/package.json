@@ -1,6 +1,6 @@
 {
   "name": "@kindraw/mcp",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Kindraw MCP server — gives Claude tools to create and manage drawings in a Kindraw workspace.",
   "type": "module",
   "license": "MIT",
@@ -18,7 +18,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@kindraw/client": "0.1.0",
+    "@kindraw/client": "0.1.1",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "zod": "^4.0.0"
   },
