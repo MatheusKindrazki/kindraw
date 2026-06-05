@@ -37,6 +37,8 @@ import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
 import { openGithubLogin } from "../kindraw/api";
 import { generateKindrawCanvasTitle } from "../kindraw/naming";
 import { buildItemPath, navigateKindraw } from "../kindraw/router";
+import { useSetAtom } from "../app-jotai";
+import { apiTokensDialogStateAtom } from "./ApiTokensDialog";
 
 import { IconLibraryPanel } from "./IconLibraryPanel";
 import { TemplateLibraryPanel } from "./TemplateLibraryPanel";
@@ -402,6 +404,7 @@ export const AppSidebar = ({
   const { openSidebar } = useUIAppState();
   const editorInterface = useEditorInterface();
   const setAppState = useExcalidrawSetAppState();
+  const setApiTokensDialogState = useSetAtom(apiTokensDialogStateAtom);
   const didAutoOpenRef = useRef(false);
   const composerInputRef = useRef<HTMLInputElement>(null);
   const [composerMode, setComposerMode] = useState<ComposerMode | null>(null);
@@ -706,14 +709,23 @@ export const AppSidebar = ({
                   <span>@{session.user.githubLogin}</span>
                 </div>
               </div>
-              <button
-                className="kindraw-app-sidebar__text-link"
-                disabled={isMutating}
-                onClick={() => void onLogout()}
-                type="button"
-              >
-                {t("kindraw.actions.signOut")}
-              </button>
+              <div className="kindraw-app-sidebar__profile-actions">
+                <button
+                  className="kindraw-app-sidebar__text-link"
+                  onClick={() => setApiTokensDialogState({ isOpen: true })}
+                  type="button"
+                >
+                  {t("kindraw.apiTokens.menuLabel")}
+                </button>
+                <button
+                  className="kindraw-app-sidebar__text-link"
+                  disabled={isMutating}
+                  onClick={() => void onLogout()}
+                  type="button"
+                >
+                  {t("kindraw.actions.signOut")}
+                </button>
+              </div>
             </header>
 
             <section className="kindraw-app-sidebar__cta-section">

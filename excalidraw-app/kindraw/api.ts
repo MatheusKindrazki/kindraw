@@ -1,6 +1,8 @@
 import { isKindrawHybridItem } from "./types";
 
 import type {
+  KindrawApiToken,
+  KindrawApiTokenSecret,
   KindrawCollaborationBootstrapResponse,
   KindrawCollaborationRoom,
   KindrawHybridItemResponse,
@@ -63,6 +65,20 @@ export const openGithubLogin = () => {
 
 export const getSession = () =>
   requestJson<KindrawSession | null>("/api/auth/session");
+
+export const listApiTokens = () =>
+  requestJson<{ tokens: KindrawApiToken[] }>("/api/auth/tokens");
+
+export const createApiToken = (name: string) =>
+  requestJson<KindrawApiTokenSecret>("/api/auth/tokens", {
+    method: "POST",
+    body: { name },
+  });
+
+export const revokeApiToken = (prefix: string) =>
+  requestJson<void>(`/api/auth/tokens/${encodeURIComponent(prefix)}`, {
+    method: "DELETE",
+  });
 
 export const logout = () =>
   requestJson<void>("/api/auth/logout", {

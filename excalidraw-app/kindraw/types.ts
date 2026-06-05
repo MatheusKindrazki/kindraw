@@ -28,6 +28,22 @@ export type KindrawShareLink = {
   revokedAt: string | null;
 };
 
+// API token shown when listing (no secret). Revocation is keyed by `prefix`.
+export type KindrawApiToken = {
+  prefix: string;
+  name: string;
+  scope: string;
+  createdAt: string;
+  expiresAt: string | null;
+  lastSeenAt: string | null;
+};
+
+// Returned exactly once, on creation — `secret` is the raw token.
+export type KindrawApiTokenSecret = {
+  secret: string;
+  token: KindrawApiToken;
+};
+
 export type KindrawCollaborationRoom = {
   roomId: string;
   roomKey: string;
