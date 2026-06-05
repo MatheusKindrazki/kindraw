@@ -16,6 +16,8 @@ export const ensureDom = async (): Promise<void> => {
   const { JSDOM } = await import("jsdom");
   const dom = new JSDOM("<!DOCTYPE html><html><body></body></html>", {
     pretendToBeVisual: true,
+    // A concrete URL gives a non-opaque origin so localStorage etc. don't throw.
+    url: "http://localhost/",
   });
   const { window } = dom;
 
@@ -34,9 +36,26 @@ export const ensureDom = async (): Promise<void> => {
   setGlobal("window", window);
   setGlobal("document", window.document);
   setGlobal("navigator", window.navigator);
-  setGlobal("HTMLElement", window.HTMLElement);
-  setGlobal("SVGElement", window.SVGElement);
-  setGlobal("Node", window.Node);
+
+  // mermaid 11 reaches for many DOM/CSSOM globals (CSSStyleSheet, DOMParser,
+  // Element, XMLSerializer, MutationObserver, …). Mirror every browser global
+  // the jsdom window exposes onto globalThis, rather than hand-listing them.
+  const win = window as unknown as Record<string, unknown>;
+  for (const key of Object.getOwnPropertyNames(window)) {
+    if (key in globalThis) {
+      continue;
+    }
+    let value: unknown;
+    try {
+      value = win[key]; // some props (e.g. localStorage) throw on access
+    } catch {
+      continue;
+    }
+    if (typeof value === "function" || (value && typeof value === "object")) {
+      setGlobal(key, value);
+    }
+  }
+
   setGlobal(
     "getComputedStyle",
     window.getComputedStyle?.bind(window) ||
