@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "kindraw": {
+      "command": "npx",
+      "args": ["-y", "@kindraw/mcp"],
+      "env": {
+        "KINDRAW_TOKEN": "${user_config.api_token}",
+        "KINDRAW_API_BASE_URL": "${user_config.api_base_url}"
+      }
+    }
+  }
+}
