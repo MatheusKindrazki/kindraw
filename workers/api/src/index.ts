@@ -14,6 +14,7 @@ import type {
   CreateItemInput,
   Env,
   KindrawSession,
+  KindrawTreeEntry,
   PatchFolderInput,
   PatchHybridItemMetaInput,
   PatchItemMetaInput,
@@ -26,6 +27,9 @@ type ExportedHandler<E> = {
 const SESSION_COOKIE = "kindraw_session";
 const OAUTH_STATE_COOKIE = "kindraw_oauth_state";
 const OAUTH_RETURN_TO_COOKIE = "kindraw_oauth_return_to";
+// For the CLI OAuth loopback: stores the full localhost callback URL so the
+// callback can mint a one-time code and redirect there instead of the web app.
+const CLI_RETURN_TO_COOKIE = "kindraw_cli_return_to";
 
 const json = (body: unknown, init?: ResponseInit) =>
   new Response(JSON.stringify(body), {
@@ -35,6 +39,20 @@ const json = (body: unknown, init?: ResponseInit) =>
       ...(init?.headers || {}),
     },
   });
+
+// Public /v1 item shape: omits internal/sensitive fields (ownerId,
+// collaborationRoomId, share links) so the public API never leaks them.
+const toV1ItemSummary = (item: KindrawTreeEntry) => ({
+  id: item.id,
+  kind: item.kind,
+  title: item.title,
+  folderId: item.folderId,
+  createdAt: item.createdAt,
+  updatedAt: item.updatedAt,
+});
+
+const drawingUrl = (request: Request, env: Env, itemId: string) =>
+  `${resolveAppOrigin(request, env)}/draw/${itemId}`;
 
 const errorResponse = (status: number, message: string) =>
   json(
@@ -345,7 +363,43 @@ const handleAuthLogin = async (request: Request, env: Env) => {
       secure: isSecureRequest(request),
     }),
   );
+
+  // CLI loopback login: remember the full localhost callback URL so the
+  // callback redirects there with a one-time code (not the web app).
+  const cliReturnTo = parseLoopbackReturnTo(
+    new URL(request.url).searchParams.get("returnTo"),
+  );
+  if (cliReturnTo) {
+    response.headers.append(
+      "Set-Cookie",
+      buildCookie(CLI_RETURN_TO_COOKIE, cliReturnTo, {
+        maxAge: 60 * 10,
+        sameSite: "Lax",
+        secure: isSecureRequest(request),
+      }),
+    );
+  }
   return response;
+};
+
+// Validates that a returnTo is a localhost loopback callback URL (CLI flow).
+const parseLoopbackReturnTo = (value: string | null): string | null => {
+  if (!value) {
+    return null;
+  }
+  try {
+    const url = new URL(value);
+    if (
+      url.protocol === "http:" &&
+      (url.hostname === "localhost" || url.hostname === "127.0.0.1") &&
+      url.pathname === "/callback"
+    ) {
+      return url.toString();
+    }
+  } catch {
+    // not a URL
+  }
+  return null;
 };
 
 const handleAuthCallback = async (request: Request, env: Env) => {
@@ -369,6 +423,37 @@ const handleAuthCallback = async (request: Request, env: Env) => {
     name: githubUser.name || githubUser.login,
     avatarUrl: githubUser.avatar_url,
   });
+
+  // CLI loopback flow: issue a one-time code and redirect to the local server,
+  // which exchanges it for a PAT. No web session cookie is set.
+  const cliReturnTo = parseLoopbackReturnTo(
+    cookies.get(CLI_RETURN_TO_COOKIE) ?? null,
+  );
+  if (cliReturnTo) {
+    const { code } = await store.createCliAuthCode(user.id, "kindraw CLI");
+    const target = new URL(cliReturnTo);
+    target.searchParams.set("code", code);
+    const cliResponse = new Response(null, {
+      status: 302,
+      headers: { Location: target.toString() },
+    });
+    for (const cookieName of [
+      OAUTH_STATE_COOKIE,
+      OAUTH_RETURN_TO_COOKIE,
+      CLI_RETURN_TO_COOKIE,
+    ]) {
+      cliResponse.headers.append(
+        "Set-Cookie",
+        buildCookie(cookieName, "", {
+          maxAge: 0,
+          sameSite: "Lax",
+          secure: isSecureRequest(request),
+        }),
+      );
+    }
+    return cliResponse;
+  }
+
   const session = await store.createSession(user.id);
 
   const response = new Response(null, {
@@ -418,7 +503,38 @@ const getAuthSession = async (
   return store.getSessionPayload(sessionId);
 };
 
+// Accepts either an API token (Authorization: Bearer kdr_...) or a browser
+// session cookie. Used by /v1/api/* (public API) and all existing routes.
 const requireAuth = async (request: Request, env: Env) => {
+  const store = createStore(env.KINDRAW_DB, env.KINDRAW_BLOBS);
+
+  const authorization = request.headers.get("Authorization");
+  if (authorization && authorization.startsWith("Bearer ")) {
+    const secret = authorization.slice("Bearer ".length).trim();
+    const auth = await store.resolveApiToken(secret);
+    if (!auth) {
+      throw new HttpError(401, "Invalid or expired API token.");
+    }
+    return { auth, store, sessionId: null as string | null };
+  }
+
+  const cookies = parseCookies(request.headers.get("Cookie"));
+  const sessionId = cookies.get(SESSION_COOKIE);
+  if (!sessionId) {
+    throw new HttpError(401, "Authentication required.");
+  }
+
+  const auth = await store.resolveSession(sessionId);
+  if (!auth) {
+    throw new HttpError(401, "Session is missing or expired.");
+  }
+
+  return { auth, store, sessionId: sessionId as string | null };
+};
+
+// Cookie-only auth. Used by token-management routes so that an API token can
+// never mint or revoke other API tokens (privilege containment).
+const requireSession = async (request: Request, env: Env) => {
   const cookies = parseCookies(request.headers.get("Cookie"));
   const sessionId = cookies.get(SESSION_COOKIE);
   if (!sessionId) {
@@ -431,11 +547,7 @@ const requireAuth = async (request: Request, env: Env) => {
     throw new HttpError(401, "Session is missing or expired.");
   }
 
-  return {
-    auth,
-    store,
-    sessionId,
-  };
+  return { auth, store, sessionId };
 };
 
 export const routeRequest = async (request: Request, env: Env) => {
@@ -478,6 +590,150 @@ export const routeRequest = async (request: Request, env: Env) => {
       }),
     );
     return response;
+  }
+
+  // CLI loopback: exchange a one-time auth code for a PAT (the code is the
+  // credential; single-use; minted only by the GitHub callback in CLI flow).
+  if (pathname === "/api/auth/cli-exchange" && request.method === "POST") {
+    const store = createStore(env.KINDRAW_DB, env.KINDRAW_BLOBS);
+    const input = await readJson<{ code?: string }>(request);
+    const result = await store.exchangeCliAuthCode(input.code || "");
+    if (!result) {
+      throw new HttpError(400, "Invalid or expired authorization code.");
+    }
+    return json(result, { status: 201 });
+  }
+
+  // --- API token management (cookie-only; a PAT cannot mint/list/revoke PATs) -
+  if (pathname === "/api/auth/tokens" && request.method === "GET") {
+    const { auth, store } = await requireSession(request, env);
+    return json({ tokens: await store.listApiTokens(auth.user.id) });
+  }
+
+  if (pathname === "/api/auth/tokens" && request.method === "POST") {
+    const { auth, store } = await requireSession(request, env);
+    const input = await readJson<{ name?: string; expiresInDays?: number }>(
+      request,
+    );
+    const created = await store.createApiToken(auth.user.id, {
+      name: input.name || "API token",
+      expiresInDays: input.expiresInDays ?? null,
+    });
+    // `secret` is returned exactly once here and never again.
+    return json(created, { status: 201 });
+  }
+
+  if (
+    pathname.startsWith("/api/auth/tokens/") &&
+    request.method === "DELETE"
+  ) {
+    const prefix = pathname.replace("/api/auth/tokens/", "");
+    const { auth, store } = await requireSession(request, env);
+    const revoked = await store.revokeApiToken(auth.user.id, prefix);
+    if (!revoked) {
+      throw new HttpError(404, "Token not found.");
+    }
+    return new Response(null, { status: 204 });
+  }
+
+  // --- Public API surface /v1/api/* (Bearer token; also accepts cookie) -------
+  if (pathname === "/v1/api/me" && request.method === "GET") {
+    const { auth } = await requireAuth(request, env);
+    return json({
+      user: {
+        id: auth.user.id,
+        githubLogin: auth.user.githubLogin,
+        name: auth.user.name,
+      },
+      scope: auth.apiToken?.scope ?? "full",
+      via: auth.apiToken ? "token" : "session",
+    });
+  }
+
+  if (pathname === "/v1/api/items" && request.method === "GET") {
+    const { auth, store } = await requireAuth(request, env);
+    const tree = await store.getTree(auth.user.id);
+    return json({ items: tree.items.map(toV1ItemSummary) });
+  }
+
+  if (pathname === "/v1/api/items" && request.method === "POST") {
+    const { auth, store } = await requireAuth(request, env);
+    const input = await readJson<CreateItemInput>(request);
+    const itemId = await store.createItem(auth.user.id, input);
+    return json({ itemId, url: drawingUrl(request, env, itemId) }, {
+      status: 201,
+    });
+  }
+
+  // Create a drawing from pre-serialized Excalidraw content. Mermaid->Excalidraw
+  // conversion happens client-side (see kindraw-client); this endpoint only
+  // persists. A `mermaid` field is explicitly rejected so the contract is clear.
+  if (
+    (pathname === "/v1/api/items:generate" ||
+      pathname === "/v1/api/items/generate") &&
+    request.method === "POST"
+  ) {
+    const { auth, store } = await requireAuth(request, env);
+    const input = await readJson<{
+      title?: string;
+      folderId?: string | null;
+      content?: string;
+      mermaid?: string;
+    }>(request);
+
+    if (input.mermaid && !input.content) {
+      throw new HttpError(
+        422,
+        "Mermaid conversion happens client-side. Send serialized Excalidraw `content`.",
+      );
+    }
+    if (!input.content || typeof input.content !== "string") {
+      throw new HttpError(400, "`content` (serialized Excalidraw JSON) is required.");
+    }
+    // Cheap structural validation — no DOM/rendering in the Worker.
+    try {
+      const parsed = JSON.parse(input.content) as { elements?: unknown };
+      if (!parsed || !Array.isArray(parsed.elements)) {
+        throw new Error("missing elements array");
+      }
+    } catch {
+      throw new HttpError(400, "`content` is not valid Excalidraw JSON.");
+    }
+
+    const itemId = await store.createItem(auth.user.id, {
+      kind: "drawing",
+      title: input.title || "Untitled drawing",
+      folderId: input.folderId ?? null,
+      content: input.content,
+    });
+    return json({ itemId, url: drawingUrl(request, env, itemId) }, {
+      status: 201,
+    });
+  }
+
+  if (pathname.startsWith("/v1/api/items/") && pathname.endsWith("/content")) {
+    const itemId = pathname
+      .replace("/v1/api/items/", "")
+      .replace("/content", "");
+    const { auth, store } = await requireAuth(request, env);
+    if (request.method === "PUT") {
+      const input = await readJson<{ content?: string }>(request);
+      await store.putItemContent(auth.user.id, itemId, input.content || "");
+      return new Response(null, { status: 204 });
+    }
+  }
+
+  if (pathname.startsWith("/v1/api/items/")) {
+    const itemId = pathname.replace("/v1/api/items/", "");
+    const { auth, store } = await requireAuth(request, env);
+    if (request.method === "GET") {
+      const { item, content } = await store.getItem(auth.user.id, itemId);
+      return json({ item: toV1ItemSummary(item), content });
+    }
+    if (request.method === "DELETE") {
+      await store.deleteItem(auth.user.id, itemId);
+      return new Response(null, { status: 204 });
+    }
   }
 
   if (
@@ -577,6 +833,37 @@ export const routeRequest = async (request: Request, env: Env) => {
       },
       { status: 201 },
     );
+  }
+
+  // Maintenance: list the authenticated user's empty drawings (read-only).
+  if (
+    pathname === "/api/admin/empty-drawings" &&
+    request.method === "GET"
+  ) {
+    const { auth, store } = await requireAuth(request, env);
+    return json({ drawings: await store.listEmptyDrawings(auth.user.id) });
+  }
+
+  // Maintenance: delete the given drawing ids, but ONLY those that are still
+  // confirmed empty at delete time (re-scan) — a non-empty drawing is never
+  // deleted even if its id is passed in.
+  if (
+    pathname === "/api/admin/empty-drawings/delete" &&
+    request.method === "POST"
+  ) {
+    const { auth, store } = await requireAuth(request, env);
+    const input = await readJson<{ ids?: string[] }>(request);
+    const requested = new Set(input.ids || []);
+    const stillEmpty = (await store.listEmptyDrawings(auth.user.id)).filter(
+      (drawing) => requested.has(drawing.id),
+    );
+    for (const drawing of stillEmpty) {
+      await store.deleteItem(auth.user.id, drawing.id);
+    }
+    return json({
+      deleted: stillEmpty.map((drawing) => drawing.id),
+      deletedCount: stillEmpty.length,
+    });
   }
 
   if (pathname.startsWith("/api/items/") && pathname.endsWith("/meta")) {

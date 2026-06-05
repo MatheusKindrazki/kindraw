@@ -1,5 +1,8 @@
 import type {
+  ApiTokenPublic,
+  ApiTokenSecret,
   AuthContext,
+  CreateApiTokenInput,
   CreateFolderInput,
   CreateHybridItemInput,
   CreateItemInput,
@@ -42,6 +45,18 @@ type SessionRow = {
   expires_at: string;
   created_at: string;
   last_seen_at: string;
+};
+
+type ApiTokenRow = {
+  id: string;
+  user_id: string;
+  name: string;
+  prefix: string;
+  scope: string;
+  created_at: string;
+  expires_at: string | null;
+  last_seen_at: string | null;
+  revoked_at: string | null;
 };
 
 type FolderRow = {
@@ -200,6 +215,22 @@ const toHybridItem = (
 });
 
 const isoNow = () => new Date().toISOString();
+
+const base64UrlEncode = (bytes: Uint8Array): string => {
+  let binary = "";
+  for (const byte of bytes) {
+    binary += String.fromCharCode(byte);
+  }
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+};
+
+const sha256Hex = async (input: string): Promise<string> => {
+  const data = new TextEncoder().encode(input);
+  const digest = await crypto.subtle.digest("SHA-256", data);
+  return Array.from(new Uint8Array(digest))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+};
 
 const createCollaborationRoomKey = async () => {
   const key = await crypto.subtle.generateKey(
@@ -433,6 +464,222 @@ export class KindrawStore {
       return null;
     }
     return { user: auth.user };
+  }
+
+  // --- API tokens (Personal Access Tokens) ----------------------------------
+  // The raw secret is shown to the user exactly once; we persist only its
+  // SHA-256 hash as the row id. Mirrors the session model above.
+
+  async createApiToken(
+    userId: string,
+    input: CreateApiTokenInput,
+  ): Promise<ApiTokenSecret> {
+    const name = input.name.trim() || "API token";
+    // 32 random bytes, base64url — ~256 bits of entropy (not randomUUID).
+    const bytes = crypto.getRandomValues(new Uint8Array(32));
+    const random = base64UrlEncode(bytes);
+    const secret = `kdr_${random}`;
+    const id = await sha256Hex(secret);
+    const prefix = `kdr_${random.slice(0, 8)}`;
+    const now = isoNow();
+    const expiresAt =
+      input.expiresInDays && input.expiresInDays > 0
+        ? new Date(
+            Date.now() + input.expiresInDays * 24 * 60 * 60 * 1000,
+          ).toISOString()
+        : null;
+
+    await this.db
+      .prepare(
+        `INSERT INTO api_tokens
+           (id, user_id, name, prefix, scope, created_at, expires_at, last_seen_at, revoked_at)
+         VALUES (?, ?, ?, ?, 'full', ?, ?, NULL, NULL)`,
+      )
+      .bind(id, userId, name, prefix, now, expiresAt)
+      .run();
+
+    return {
+      secret,
+      token: {
+        prefix,
+        name,
+        scope: "full",
+        createdAt: now,
+        expiresAt,
+        lastSeenAt: null,
+      },
+    };
+  }
+
+  async resolveApiToken(secret: string): Promise<AuthContext | null> {
+    if (!secret || !secret.startsWith("kdr_")) {
+      return null;
+    }
+    const id = await sha256Hex(secret);
+    const row = await this.db
+      .prepare(
+        `SELECT
+           api_tokens.id,
+           api_tokens.user_id,
+           api_tokens.name,
+           api_tokens.prefix,
+           api_tokens.scope,
+           api_tokens.created_at,
+           api_tokens.expires_at,
+           api_tokens.last_seen_at,
+           api_tokens.revoked_at,
+           users.github_login,
+           users.name AS user_name,
+           users.avatar_url
+         FROM api_tokens
+         JOIN users ON users.id = api_tokens.user_id
+         WHERE api_tokens.id = ?`,
+      )
+      .bind(id)
+      .first<
+        ApiTokenRow & {
+          github_login: string;
+          user_name: string;
+          avatar_url: string | null;
+        }
+      >();
+
+    if (!row) {
+      return null;
+    }
+    if (row.revoked_at) {
+      return null;
+    }
+    if (row.expires_at && new Date(row.expires_at).getTime() <= Date.now()) {
+      return null;
+    }
+
+    const now = isoNow();
+    // Throttle last_seen writes to at most ~1/min to avoid a D1 write per call.
+    if (
+      !row.last_seen_at ||
+      Date.now() - new Date(row.last_seen_at).getTime() > 60_000
+    ) {
+      await this.db
+        .prepare("UPDATE api_tokens SET last_seen_at = ? WHERE id = ?")
+        .bind(now, row.id)
+        .run();
+    }
+
+    return {
+      user: {
+        id: row.user_id,
+        githubLogin: row.github_login,
+        name: row.user_name,
+        avatarUrl: row.avatar_url,
+      },
+      apiToken: {
+        id: row.id,
+        userId: row.user_id,
+        name: row.name,
+        prefix: row.prefix,
+        scope: row.scope,
+        createdAt: row.created_at,
+        expiresAt: row.expires_at,
+        lastSeenAt: now,
+        revokedAt: null,
+      },
+    };
+  }
+
+  async listApiTokens(userId: string): Promise<ApiTokenPublic[]> {
+    const { results } = await this.db
+      .prepare(
+        `SELECT prefix, name, scope, created_at, expires_at, last_seen_at
+         FROM api_tokens
+         WHERE user_id = ? AND revoked_at IS NULL
+         ORDER BY created_at DESC`,
+      )
+      .bind(userId)
+      .all<{
+        prefix: string;
+        name: string;
+        scope: string;
+        created_at: string;
+        expires_at: string | null;
+        last_seen_at: string | null;
+      }>();
+
+    return results.map((row) => ({
+      prefix: row.prefix,
+      name: row.name,
+      scope: row.scope,
+      createdAt: row.created_at,
+      expiresAt: row.expires_at,
+      lastSeenAt: row.last_seen_at,
+    }));
+  }
+
+  // One-time CLI authorization codes (OAuth loopback). The raw code is shown to
+  // the loopback callback once; only its hash is stored, single-use, 60s TTL.
+  async createCliAuthCode(
+    userId: string,
+    tokenName: string,
+  ): Promise<{ code: string }> {
+    const bytes = crypto.getRandomValues(new Uint8Array(32));
+    const code = base64UrlEncode(bytes);
+    const id = await sha256Hex(code);
+    const now = isoNow();
+    const expiresAt = new Date(Date.now() + 60_000).toISOString();
+    await this.db
+      .prepare(
+        `INSERT INTO cli_auth_codes (id, user_id, token_name, created_at, expires_at)
+         VALUES (?, ?, ?, ?, ?)`,
+      )
+      .bind(id, userId, tokenName || "kindraw CLI", now, expiresAt)
+      .run();
+    return { code };
+  }
+
+  // Atomically consume a CLI auth code: returns the bound user + mints a PAT,
+  // then deletes the code so it can never be reused.
+  async exchangeCliAuthCode(
+    code: string,
+  ): Promise<ApiTokenSecret | null> {
+    if (!code) {
+      return null;
+    }
+    const id = await sha256Hex(code);
+    const row = await this.db
+      .prepare(
+        `SELECT user_id, token_name, expires_at FROM cli_auth_codes WHERE id = ?`,
+      )
+      .bind(id)
+      .first<{ user_id: string; token_name: string; expires_at: string }>();
+
+    // Always delete (consume) regardless of validity to prevent replay.
+    await this.db
+      .prepare("DELETE FROM cli_auth_codes WHERE id = ?")
+      .bind(id)
+      .run();
+
+    if (!row) {
+      return null;
+    }
+    if (new Date(row.expires_at).getTime() <= Date.now()) {
+      return null;
+    }
+    return this.createApiToken(row.user_id, { name: row.token_name });
+  }
+
+  async revokeApiToken(userId: string, prefix: string): Promise<boolean> {
+    const now = isoNow();
+    const result = await this.db
+      .prepare(
+        `UPDATE api_tokens SET revoked_at = ?
+         WHERE user_id = ? AND prefix = ? AND revoked_at IS NULL`,
+      )
+      .bind(now, userId, prefix)
+      .run();
+    // D1 run() returns meta.changes
+    return (result as { meta?: { changes?: number } }).meta?.changes
+      ? true
+      : false;
   }
 
   async getTree(ownerId: string): Promise<KindrawTreeResponse> {
@@ -971,6 +1218,62 @@ export class KindrawStore {
       .prepare("UPDATE items SET updated_at = ? WHERE id = ? AND owner_id = ?")
       .bind(isoNow(), itemId, ownerId)
       .run();
+  }
+
+  // Maintenance: find the user's drawings whose stored scene has no visible
+  // elements (the empty canvases left behind by the old "create on open" bug).
+  // Read-only — never deletes. Skips drawings with share links or collab so we
+  // never flag anything the user intentionally published.
+  async listEmptyDrawings(ownerId: string) {
+    const rows = await this.db
+      .prepare(
+        `SELECT i.* FROM items i
+         WHERE i.owner_id = ?
+           AND i.kind = 'drawing'
+           AND i.archived_at IS NULL
+           AND i.collaboration_room_key IS NULL
+           AND NOT EXISTS (
+             SELECT 1 FROM share_links s WHERE s.item_id = i.id
+           )
+         ORDER BY i.created_at DESC`,
+      )
+      .bind(ownerId)
+      .all<ItemRow>();
+
+    const empty: Array<{
+      id: string;
+      title: string;
+      createdAt: string;
+      updatedAt: string;
+    }> = [];
+
+    for (const row of rows.results) {
+      let visibleElements = -1;
+      try {
+        const content = await this.getContent(row.content_blob_key);
+        const parsed = JSON.parse(content) as {
+          elements?: Array<{ isDeleted?: boolean }>;
+        };
+        visibleElements = (parsed.elements || []).filter(
+          (element) => !element.isDeleted,
+        ).length;
+      } catch {
+        // Unreadable/missing content is treated as non-empty (skip) so we never
+        // delete something we couldn't positively confirm is empty.
+        continue;
+      }
+
+      if (visibleElements === 0) {
+        empty.push({
+          id: row.id,
+          title: row.title,
+          createdAt: row.created_at,
+          updatedAt: row.updated_at,
+        });
+      }
+    }
+
+    return empty;
   }
 
   async deleteItem(ownerId: string, itemId: string) {

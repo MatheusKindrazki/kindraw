@@ -255,7 +255,44 @@ export type Env = {
   OPENROUTER_APP_TITLE?: string;
 };
 
+export type ApiTokenRecord = {
+  id: string; // SHA-256(secret) hex — never the raw secret
+  userId: string;
+  name: string;
+  prefix: string;
+  scope: string;
+  createdAt: string;
+  expiresAt: string | null;
+  lastSeenAt: string | null;
+  revokedAt: string | null;
+};
+
+// Safe-to-return shape for listing tokens (no hash/secret).
+export type ApiTokenPublic = {
+  prefix: string;
+  name: string;
+  scope: string;
+  createdAt: string;
+  expiresAt: string | null;
+  lastSeenAt: string | null;
+};
+
+// Returned exactly once, on creation.
+export type ApiTokenSecret = {
+  secret: string;
+  token: ApiTokenPublic;
+};
+
+export type CreateApiTokenInput = {
+  name: string;
+  expiresInDays?: number | null;
+};
+
+// Auth carries either a browser session (cookie) or an API token (Bearer).
+// `user` is always present so route handlers (which only read auth.user) work
+// unchanged regardless of which credential was used.
 export type AuthContext = {
-  session: SessionRecord;
   user: KindrawUser;
+  session?: SessionRecord;
+  apiToken?: ApiTokenRecord;
 };

@@ -875,6 +875,24 @@
     "links": {
       "title": "Kindraw links"
     },
+    "apiTokens": {
+      "menuLabel": "API tokens",
+      "title": "API tokens",
+      "description": "Create a token to use Kindraw from the CLI (npx kindraw) or the Claude MCP server. A token has full access to your account.",
+      "namePlaceholder": "Token name (e.g. My laptop)",
+      "generate": "Generate token",
+      "generating": "Generating...",
+      "secretTitle": "Copy your token now",
+      "secretHelper": "This is the only time the token is shown. Store it somewhere safe.",
+      "copy": "Copy token",
+      "listTitle": "Active tokens",
+      "empty": "No API tokens yet.",
+      "created": "Created {{date}}",
+      "lastUsed": "Last used {{date}}",
+      "neverUsed": "Never used",
+      "revoke": "Revoke",
+      "revokeConfirm": "Revoke this token? Apps using it will stop working."
+    },
     "technicalExport": {
       "title": "Technical export",
       "description": "Generate Mermaid from the current drawing, then copy it, download it, or open the result directly in draw.io.",
