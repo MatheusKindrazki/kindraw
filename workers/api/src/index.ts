@@ -579,6 +579,37 @@ export const routeRequest = async (request: Request, env: Env) => {
     );
   }
 
+  // Maintenance: list the authenticated user's empty drawings (read-only).
+  if (
+    pathname === "/api/admin/empty-drawings" &&
+    request.method === "GET"
+  ) {
+    const { auth, store } = await requireAuth(request, env);
+    return json({ drawings: await store.listEmptyDrawings(auth.user.id) });
+  }
+
+  // Maintenance: delete the given drawing ids, but ONLY those that are still
+  // confirmed empty at delete time (re-scan) — a non-empty drawing is never
+  // deleted even if its id is passed in.
+  if (
+    pathname === "/api/admin/empty-drawings/delete" &&
+    request.method === "POST"
+  ) {
+    const { auth, store } = await requireAuth(request, env);
+    const input = await readJson<{ ids?: string[] }>(request);
+    const requested = new Set(input.ids || []);
+    const stillEmpty = (await store.listEmptyDrawings(auth.user.id)).filter(
+      (drawing) => requested.has(drawing.id),
+    );
+    for (const drawing of stillEmpty) {
+      await store.deleteItem(auth.user.id, drawing.id);
+    }
+    return json({
+      deleted: stillEmpty.map((drawing) => drawing.id),
+      deletedCount: stillEmpty.length,
+    });
+  }
+
   if (pathname.startsWith("/api/items/") && pathname.endsWith("/meta")) {
     const itemId = pathname.replace("/api/items/", "").replace("/meta", "");
     const { auth, store } = await requireAuth(request, env);

@@ -973,6 +973,62 @@ export class KindrawStore {
       .run();
   }
 
+  // Maintenance: find the user's drawings whose stored scene has no visible
+  // elements (the empty canvases left behind by the old "create on open" bug).
+  // Read-only — never deletes. Skips drawings with share links or collab so we
+  // never flag anything the user intentionally published.
+  async listEmptyDrawings(ownerId: string) {
+    const rows = await this.db
+      .prepare(
+        `SELECT i.* FROM items i
+         WHERE i.owner_id = ?
+           AND i.kind = 'drawing'
+           AND i.archived_at IS NULL
+           AND i.collaboration_room_key IS NULL
+           AND NOT EXISTS (
+             SELECT 1 FROM share_links s WHERE s.item_id = i.id
+           )
+         ORDER BY i.created_at DESC`,
+      )
+      .bind(ownerId)
+      .all<ItemRow>();
+
+    const empty: Array<{
+      id: string;
+      title: string;
+      createdAt: string;
+      updatedAt: string;
+    }> = [];
+
+    for (const row of rows.results) {
+      let visibleElements = -1;
+      try {
+        const content = await this.getContent(row.content_blob_key);
+        const parsed = JSON.parse(content) as {
+          elements?: Array<{ isDeleted?: boolean }>;
+        };
+        visibleElements = (parsed.elements || []).filter(
+          (element) => !element.isDeleted,
+        ).length;
+      } catch {
+        // Unreadable/missing content is treated as non-empty (skip) so we never
+        // delete something we couldn't positively confirm is empty.
+        continue;
+      }
+
+      if (visibleElements === 0) {
+        empty.push({
+          id: row.id,
+          title: row.title,
+          createdAt: row.created_at,
+          updatedAt: row.updated_at,
+        });
+      }
+    }
+
+    return empty;
+  }
+
   async deleteItem(ownerId: string, itemId: string) {
     const item = await this.requireItem(ownerId, itemId);
     const hybridRow = await this.findHybridRowByItemId(ownerId, itemId);
