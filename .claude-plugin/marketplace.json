@@ -1,0 +1,15 @@
+{
+  "name": "kindraw",
+  "description": "Kindraw plugins for Claude Code — create real, editable drawings and diagrams in your Kindraw workspace.",
+  "owner": {
+    "name": "Matheus Kindrazki",
+    "url": "https://github.com/MatheusKindrazki"
+  },
+  "plugins": [
+    {
+      "name": "kindraw",
+      "source": "./packages/kindraw-plugin",
+      "description": "Let Claude create real, shareable drawings and diagrams in your Kindraw workspace instead of ASCII art."
+    }
+  ]
+}
