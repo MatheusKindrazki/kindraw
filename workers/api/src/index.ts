@@ -27,6 +27,9 @@ type ExportedHandler<E> = {
 const SESSION_COOKIE = "kindraw_session";
 const OAUTH_STATE_COOKIE = "kindraw_oauth_state";
 const OAUTH_RETURN_TO_COOKIE = "kindraw_oauth_return_to";
+// For the CLI OAuth loopback: stores the full localhost callback URL so the
+// callback can mint a one-time code and redirect there instead of the web app.
+const CLI_RETURN_TO_COOKIE = "kindraw_cli_return_to";
 
 const json = (body: unknown, init?: ResponseInit) =>
   new Response(JSON.stringify(body), {
@@ -360,7 +363,43 @@ const handleAuthLogin = async (request: Request, env: Env) => {
       secure: isSecureRequest(request),
     }),
   );
+
+  // CLI loopback login: remember the full localhost callback URL so the
+  // callback redirects there with a one-time code (not the web app).
+  const cliReturnTo = parseLoopbackReturnTo(
+    new URL(request.url).searchParams.get("returnTo"),
+  );
+  if (cliReturnTo) {
+    response.headers.append(
+      "Set-Cookie",
+      buildCookie(CLI_RETURN_TO_COOKIE, cliReturnTo, {
+        maxAge: 60 * 10,
+        sameSite: "Lax",
+        secure: isSecureRequest(request),
+      }),
+    );
+  }
   return response;
+};
+
+// Validates that a returnTo is a localhost loopback callback URL (CLI flow).
+const parseLoopbackReturnTo = (value: string | null): string | null => {
+  if (!value) {
+    return null;
+  }
+  try {
+    const url = new URL(value);
+    if (
+      url.protocol === "http:" &&
+      (url.hostname === "localhost" || url.hostname === "127.0.0.1") &&
+      url.pathname === "/callback"
+    ) {
+      return url.toString();
+    }
+  } catch {
+    // not a URL
+  }
+  return null;
 };
 
 const handleAuthCallback = async (request: Request, env: Env) => {
@@ -384,6 +423,37 @@ const handleAuthCallback = async (request: Request, env: Env) => {
     name: githubUser.name || githubUser.login,
     avatarUrl: githubUser.avatar_url,
   });
+
+  // CLI loopback flow: issue a one-time code and redirect to the local server,
+  // which exchanges it for a PAT. No web session cookie is set.
+  const cliReturnTo = parseLoopbackReturnTo(
+    cookies.get(CLI_RETURN_TO_COOKIE) ?? null,
+  );
+  if (cliReturnTo) {
+    const { code } = await store.createCliAuthCode(user.id, "kindraw CLI");
+    const target = new URL(cliReturnTo);
+    target.searchParams.set("code", code);
+    const cliResponse = new Response(null, {
+      status: 302,
+      headers: { Location: target.toString() },
+    });
+    for (const cookieName of [
+      OAUTH_STATE_COOKIE,
+      OAUTH_RETURN_TO_COOKIE,
+      CLI_RETURN_TO_COOKIE,
+    ]) {
+      cliResponse.headers.append(
+        "Set-Cookie",
+        buildCookie(cookieName, "", {
+          maxAge: 0,
+          sameSite: "Lax",
+          secure: isSecureRequest(request),
+        }),
+      );
+    }
+    return cliResponse;
+  }
+
   const session = await store.createSession(user.id);
 
   const response = new Response(null, {
@@ -520,6 +590,18 @@ export const routeRequest = async (request: Request, env: Env) => {
       }),
     );
     return response;
+  }
+
+  // CLI loopback: exchange a one-time auth code for a PAT (the code is the
+  // credential; single-use; minted only by the GitHub callback in CLI flow).
+  if (pathname === "/api/auth/cli-exchange" && request.method === "POST") {
+    const store = createStore(env.KINDRAW_DB, env.KINDRAW_BLOBS);
+    const input = await readJson<{ code?: string }>(request);
+    const result = await store.exchangeCliAuthCode(input.code || "");
+    if (!result) {
+      throw new HttpError(400, "Invalid or expired authorization code.");
+    }
+    return json(result, { status: 201 });
   }
 
   // --- API token management (cookie-only; a PAT cannot mint/list/revoke PATs) -

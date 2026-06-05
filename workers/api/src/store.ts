@@ -615,6 +615,58 @@ export class KindrawStore {
     }));
   }
 
+  // One-time CLI authorization codes (OAuth loopback). The raw code is shown to
+  // the loopback callback once; only its hash is stored, single-use, 60s TTL.
+  async createCliAuthCode(
+    userId: string,
+    tokenName: string,
+  ): Promise<{ code: string }> {
+    const bytes = crypto.getRandomValues(new Uint8Array(32));
+    const code = base64UrlEncode(bytes);
+    const id = await sha256Hex(code);
+    const now = isoNow();
+    const expiresAt = new Date(Date.now() + 60_000).toISOString();
+    await this.db
+      .prepare(
+        `INSERT INTO cli_auth_codes (id, user_id, token_name, created_at, expires_at)
+         VALUES (?, ?, ?, ?, ?)`,
+      )
+      .bind(id, userId, tokenName || "kindraw CLI", now, expiresAt)
+      .run();
+    return { code };
+  }
+
+  // Atomically consume a CLI auth code: returns the bound user + mints a PAT,
+  // then deletes the code so it can never be reused.
+  async exchangeCliAuthCode(
+    code: string,
+  ): Promise<ApiTokenSecret | null> {
+    if (!code) {
+      return null;
+    }
+    const id = await sha256Hex(code);
+    const row = await this.db
+      .prepare(
+        `SELECT user_id, token_name, expires_at FROM cli_auth_codes WHERE id = ?`,
+      )
+      .bind(id)
+      .first<{ user_id: string; token_name: string; expires_at: string }>();
+
+    // Always delete (consume) regardless of validity to prevent replay.
+    await this.db
+      .prepare("DELETE FROM cli_auth_codes WHERE id = ?")
+      .bind(id)
+      .run();
+
+    if (!row) {
+      return null;
+    }
+    if (new Date(row.expires_at).getTime() <= Date.now()) {
+      return null;
+    }
+    return this.createApiToken(row.user_id, { name: row.token_name });
+  }
+
   async revokeApiToken(userId: string, prefix: string): Promise<boolean> {
     const now = isoNow();
     const result = await this.db

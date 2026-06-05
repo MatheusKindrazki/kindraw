@@ -90,5 +90,14 @@ await build({
   },
 });
 
+// Emit type declarations for consumers (CLI, MCP) via tsc.
+const { execSync } = await import("node:child_process");
+execSync(
+  "npx tsc --emitDeclarationOnly --declaration --outDir dist " +
+    "--module ESNext --moduleResolution Bundler --target ES2022 " +
+    "--skipLibCheck --types node src/index.ts src/client.ts src/auth.ts src/generate.ts src/dom.ts",
+  { cwd: __dirname, stdio: "inherit" },
+);
+
 // eslint-disable-next-line no-console
-console.log("@kindraw/client built → dist/index.js, dist/generate.js");
+console.log("@kindraw/client built → dist/index.js, dist/generate.js (+ .d.ts)");
