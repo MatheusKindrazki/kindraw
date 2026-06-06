@@ -1,6 +1,6 @@
 {
   "name": "@kindraw/client",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Node client for the Kindraw public API (HTTP) + optional Mermaid→Excalidraw generation. Shared by the Kindraw CLI and MCP server.",
   "type": "module",
   "license": "MIT",

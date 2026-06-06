@@ -4,6 +4,7 @@
 // caller actually needs to generate (not for plain CRUD).
 
 import { ensureDom } from "./dom.js";
+import { reanchorArrows } from "./reanchor.js";
 
 export type GenerateResult = {
   content: string; // serialized .excalidraw JSON string
@@ -39,6 +40,10 @@ export const generateExcalidrawFromMermaid = async (
   const elements = convertToExcalidrawElements(parsed.elements, {
     regenerateIds: true,
   });
+
+  // Deterministically connect arrows border-to-border using the real node
+  // positions (jsdom's approximate getBBox leaves mermaid's edge points off).
+  reanchorArrows(elements as unknown as Parameters<typeof reanchorArrows>[0]);
 
   const visible = elements.filter(
     (element: { isDeleted?: boolean }) => !element.isDeleted,
