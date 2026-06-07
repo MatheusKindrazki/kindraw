@@ -7,6 +7,16 @@ import type {
 const ROUTE_EVENT = "kindraw:route-change";
 let historyPatched = false;
 
+// Sentinel item id for an unsaved local draft drawing. A drawing at /draw/new
+// exists only in the browser; no backend item is created until the user makes
+// the first real edit, which prevents empty canvases from piling up on open.
+export const KINDRAW_DRAFT_ITEM_ID = "new";
+
+export const isKindrawDraftDrawing = (route: KindrawRoute) =>
+  route.kind === "drawing" && route.itemId === KINDRAW_DRAFT_ITEM_ID;
+
+export const buildDraftDrawingPath = () => `/draw/${KINDRAW_DRAFT_ITEM_ID}`;
+
 export type KindrawRoute =
   | { kind: "workspace"; folderId: string | null }
   | { kind: "drawing"; itemId: string }

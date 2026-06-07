@@ -1,5 +1,7 @@
 import {
+  buildDraftDrawingPath,
   buildHybridPath,
+  isKindrawDraftDrawing,
   isKindrawPath,
   matchKindrawRoute,
   shouldAutoCreateRootDrawing,
@@ -84,6 +86,21 @@ describe("Kindraw router", () => {
         kind: "drawing",
         itemId: "item-1",
       }),
+    ).toBe(false);
+  });
+
+  it("should identify the local draft drawing route", () => {
+    expect(buildDraftDrawingPath()).toBe("/draw/new");
+
+    expect(matchKindrawRoute("/draw/new")).toEqual({
+      kind: "drawing",
+      itemId: "new",
+    });
+
+    expect(isKindrawDraftDrawing(matchKindrawRoute("/draw/new"))).toBe(true);
+    expect(isKindrawDraftDrawing(matchKindrawRoute("/draw/item-1"))).toBe(false);
+    expect(
+      isKindrawDraftDrawing({ kind: "workspace", folderId: null }),
     ).toBe(false);
   });
 });
