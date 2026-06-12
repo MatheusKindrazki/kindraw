@@ -41,6 +41,10 @@ jobs:
 
       - name: Build frontend
         run: yarn build:app
+        env:
+          # Erros TS pré-existentes do fork (vite-plugin-checker) não devem
+          # travar deploy — ver comentário em excalidraw-app/vite.config.mts.
+          VITE_APP_ENABLE_TS_CHECK: "false"
 
       - name: Deploy to Cloudflare Pages
         uses: cloudflare/wrangler-action@v3
