@@ -32,6 +32,7 @@ import {
 } from "./api";
 import { parseDrawingContent } from "./content";
 import { HybridMarkdownPane } from "./HybridMarkdownPane";
+import { KindrawIcon } from "./icons";
 import {
   buildHybridPath,
   buildItemPath,
@@ -43,11 +44,13 @@ import { getKindrawDraft, setKindrawDraft } from "./storage";
 import { getErrorMessage, isDraftNewer } from "./utils";
 import {
   buildKindrawSectionLink,
+  parseHybridMarkdownSections,
   parseKindrawSectionLink,
 } from "./hybridSections";
 
 import type { PointerEvent as ReactPointerEvent } from "react";
 import type {
+  KindrawFolder,
   KindrawHybridItemResponse,
   KindrawHybridView,
   KindrawItem,
@@ -59,21 +62,14 @@ type HybridEditorPageProps = {
   initialSectionId: string | null;
   itemsById: Record<string, KindrawItem>;
   onTreeRefresh: () => Promise<void> | void;
+  folders?: KindrawFolder[];
 };
 
-const copyToClipboard = async (value: string) => {
-  if (!navigator.clipboard) {
-    return false;
-  }
-
-  try {
-    await navigator.clipboard.writeText(value);
-    return true;
-  } catch (error) {
-    console.warn("Failed to copy Kindraw share link:", error);
-    return false;
-  }
-};
+const HYBRID_VIEW_LABELS: { view: KindrawHybridView; label: string }[] = [
+  { view: "document", label: "Documento" },
+  { view: "both", label: "Ambos" },
+  { view: "canvas", label: "Canvas" },
+];
 
 const useNarrowLayout = () => {
   const [isNarrow, setIsNarrow] = useState(() =>
@@ -102,6 +98,7 @@ export const HybridEditorPage = ({
   initialSectionId,
   itemsById,
   onTreeRefresh,
+  folders,
 }: HybridEditorPageProps) => {
   const [response, setResponse] = useState<KindrawHybridItemResponse | null>(
     null,
@@ -146,9 +143,54 @@ export const HybridEditorPage = ({
       ? clampSplitRatio(parsedValue)
       : DEFAULT_SPLIT_RATIO;
   });
+  const [headerMenuOpen, setHeaderMenuOpen] = useState(false);
+  const [unlinkConfirmOpen, setUnlinkConfirmOpen] = useState(false);
   const excalidrawAPIRef = useRef<ExcalidrawImperativeAPI | null>(null);
   const splitBodyRef = useRef<HTMLDivElement | null>(null);
+  const headerMenuRef = useRef<HTMLDivElement | null>(null);
   const isNarrow = useNarrowLayout();
+
+  useEffect(() => {
+    if (!headerMenuOpen) {
+      return;
+    }
+
+    const onPointerDown = (event: PointerEvent) => {
+      if (
+        headerMenuRef.current &&
+        !headerMenuRef.current.contains(event.target as Node)
+      ) {
+        setHeaderMenuOpen(false);
+      }
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setHeaderMenuOpen(false);
+      }
+    };
+
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [headerMenuOpen]);
+
+  useEffect(() => {
+    if (!unlinkConfirmOpen) {
+      return;
+    }
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setUnlinkConfirmOpen(false);
+      }
+    };
+
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [unlinkConfirmOpen]);
 
   const loadHybrid = useCallback(async () => {
     setErrorMessage(null);
@@ -402,10 +444,6 @@ export const HybridEditorPage = ({
   const handleCreateShareLink = useCallback(async () => {
     try {
       const shareResponse = await createHybridShareLink(hybridId);
-      const publicUrl = buildPublicShareUrl(shareResponse.shareLink.token, {
-        view: "both",
-      });
-      const copied = await copyToClipboard(publicUrl);
 
       setResponse((current) =>
         current
@@ -418,9 +456,7 @@ export const HybridEditorPage = ({
             }
           : current,
       );
-      setStatusMessage(
-        copied ? "Link publico criado e copiado." : "Link publico criado.",
-      );
+      setStatusMessage("Link publico criado.");
       await onTreeRefresh();
     } catch (error) {
       setStatusMessage(getErrorMessage(error, "Falha ao criar link publico."));
@@ -454,10 +490,6 @@ export const HybridEditorPage = ({
 
   const handleUnlink = useCallback(async () => {
     if (!response) {
-      return;
-    }
-
-    if (!window.confirm("Desvincular documento e canvas deste hibrido?")) {
       return;
     }
 
@@ -610,6 +642,35 @@ export const HybridEditorPage = ({
     [drawingSeedContent],
   );
 
+  const sections = useMemo(
+    () => parseHybridMarkdownSections(markdown),
+    [markdown],
+  );
+
+  /** Seções com pelo menos um elemento do canvas vinculado (element.link). */
+  const linkedSectionIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const element of sceneElements) {
+      if (!element.link) {
+        continue;
+      }
+
+      const target = parseKindrawSectionLink(element.link);
+      if (target && target.hybridId === hybridId) {
+        ids.add(target.sectionId);
+      }
+    }
+    return ids;
+  }, [hybridId, sceneElements]);
+
+  const activeLinkedSection = useMemo(
+    () =>
+      activeSectionId && linkedSectionIds.has(activeSectionId)
+        ? sections.find((section) => section.id === activeSectionId) || null
+        : null,
+    [activeSectionId, linkedSectionIds, sections],
+  );
+
   if (errorMessage) {
     return (
       <div className="kindraw-empty-state">
@@ -629,13 +690,19 @@ export const HybridEditorPage = ({
 
   const showDocument = initialView === "document" || initialView === "both";
   const showCanvas = initialView === "canvas" || initialView === "both";
+  const folderName =
+    folders?.find((folder) => folder.id === response.hybrid.folderId)?.name ||
+    "Biblioteca";
+
   const documentPane = (
-    <div className="kindraw-hybrid-shell__document">
+    <section className="kindraw-hybrid-shell__document">
+      <h2 className="kindraw-hybrid-doc__title">{response.hybrid.title}</h2>
       <HybridMarkdownPane
         activeSectionId={activeSectionId}
         canLinkSelection={showCanvas}
         hybridId={hybridId}
         itemsById={hybridItemsById}
+        linkedSectionIds={linkedSectionIds}
         markdown={markdown}
         onLinkSelection={handleLinkSelection}
         onMarkdownChange={setMarkdown}
@@ -646,10 +713,16 @@ export const HybridEditorPage = ({
         }}
         onStatusMessage={setStatusMessage}
       />
-    </div>
+    </section>
   );
   const canvasPane = (
-    <div className="kindraw-hybrid-shell__canvas kindraw-drawing-stage">
+    <section className="kindraw-hybrid-shell__canvas">
+      {activeLinkedSection ? (
+        <span className="kindraw-canvas-chip">
+          <KindrawIcon name="link" size={11} /> Seção:{" "}
+          {activeLinkedSection.title}
+        </span>
+      ) : null}
       <Excalidraw
         key={response.drawing.item.id}
         onExcalidrawAPI={(api) => {
@@ -667,87 +740,134 @@ export const HybridEditorPage = ({
         }}
         onLinkOpen={handleCanvasLinkOpen}
       />
-    </div>
+    </section>
   );
 
   return (
     <div className="kindraw-editor-shell kindraw-hybrid-shell">
-      <header className="kindraw-editor-header kindraw-hybrid-shell__header">
+      <header className="kindraw-editor-header">
         <div className="kindraw-editor-header__leading">
           <button
-            className="kindraw-link-button"
+            aria-label="Voltar para a pasta"
+            className="kindraw-iconbtn"
             onClick={() =>
               navigateKindraw(buildFolderPath(response.hybrid.folderId))
             }
             type="button"
           >
-            Voltar
+            <KindrawIcon name="back" size={17} />
           </button>
-          <input
-            className="kindraw-title-input"
-            onBlur={() => void commitTitle()}
-            onChange={(event) => setTitle(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") {
-                event.currentTarget.blur();
-              }
-            }}
-            type="text"
-            value={title}
-          />
-        </div>
-        <div className="kindraw-editor-header__status">
-          <div className="kindraw-hybrid-shell__toggle">
-            <button
-              className={`kindraw-hybrid-shell__toggle-button${
-                initialView === "document"
-                  ? " kindraw-hybrid-shell__toggle-button--active"
-                  : ""
-              }`}
-              onClick={() => void setView("document")}
-              type="button"
-            >
-              Document
-            </button>
-            <button
-              className={`kindraw-hybrid-shell__toggle-button${
-                initialView === "both"
-                  ? " kindraw-hybrid-shell__toggle-button--active"
-                  : ""
-              }`}
-              onClick={() => void setView("both")}
-              type="button"
-            >
-              Both
-            </button>
-            <button
-              className={`kindraw-hybrid-shell__toggle-button${
-                initialView === "canvas"
-                  ? " kindraw-hybrid-shell__toggle-button--active"
-                  : ""
-              }`}
-              onClick={() => void setView("canvas")}
-              type="button"
-            >
-              Canvas
-            </button>
+          <span className="kindraw-editor-crumb">{folderName} /</span>
+          <div className="kindraw-editor-title">
+            <input
+              aria-label="Titulo do híbrido"
+              className="kindraw-editor-title__input"
+              onBlur={() => void commitTitle()}
+              onChange={(event) => setTitle(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.currentTarget.blur();
+                }
+              }}
+              size={Math.min(Math.max(title.length, 4), 48)}
+              type="text"
+              value={title}
+            />
+            <KindrawIcon name="pen" size={13} />
           </div>
+        </div>
+        <div className="kindraw-segment kindraw-editor-header__segment">
+          {HYBRID_VIEW_LABELS.map(({ view, label }) => (
+            <button
+              className={`kindraw-segment__btn${
+                initialView === view ? " kindraw-segment__btn--active" : ""
+              }`}
+              key={view}
+              onClick={() => void setView(view)}
+              type="button"
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        <div className="kindraw-editor-header__trailing">
           <span
-            className={`kindraw-status-pill kindraw-status-pill--${saveState}`}
+            className={`kindraw-pill kindraw-pill--${
+              saveState === "idle" ? "ok" : saveState
+            }`}
+            title={statusMessage}
           >
-            {statusMessage}
+            <i />
+            <span>{statusMessage}</span>
           </span>
+          <div className="kindraw-menuwrap" ref={headerMenuRef}>
+            <button
+              aria-expanded={headerMenuOpen}
+              aria-label="Mais ações do híbrido"
+              className="kindraw-dots kindraw-dots--visible"
+              onClick={() => setHeaderMenuOpen(!headerMenuOpen)}
+              type="button"
+            >
+              <KindrawIcon name="dots" size={16} />
+            </button>
+            {headerMenuOpen ? (
+              <div className="kindraw-popover kindraw-popover--menu">
+                <div className="kindraw-menu" role="menu">
+                  <button
+                    className="kindraw-menu__item"
+                    onClick={() => {
+                      setHeaderMenuOpen(false);
+                      navigateKindraw(buildItemPath(response.document.item));
+                    }}
+                    role="menuitem"
+                    type="button"
+                  >
+                    <KindrawIcon name="doc" size={15} /> Abrir doc legado
+                  </button>
+                  <button
+                    className="kindraw-menu__item"
+                    onClick={() => {
+                      setHeaderMenuOpen(false);
+                      navigateKindraw(buildItemPath(response.drawing.item));
+                    }}
+                    role="menuitem"
+                    type="button"
+                  >
+                    <KindrawIcon name="pen" size={15} /> Abrir canvas legado
+                  </button>
+                  <button
+                    className="kindraw-menu__item kindraw-menu__item--danger"
+                    onClick={() => {
+                      setHeaderMenuOpen(false);
+                      setUnlinkConfirmOpen(true);
+                    }}
+                    role="menuitem"
+                    type="button"
+                  >
+                    Desvincular
+                  </button>
+                </div>
+              </div>
+            ) : null}
+          </div>
+          <ShareLinksPanel
+            busy={saveState === "saving"}
+            buildShareUrl={(token) =>
+              buildPublicShareUrl(token, { view: "both" })
+            }
+            onCreateShareLink={handleCreateShareLink}
+            onRevokeShareLink={handleRevokeShareLink}
+            shareLinks={response.hybrid.shareLinks}
+          />
         </div>
       </header>
 
       {initialView === "both" && isNarrow ? (
         <>
-          <div className="kindraw-hybrid-shell__mobile-tabs">
+          <div className="kindraw-segment kindraw-segment--tabs">
             <button
-              className={`kindraw-hybrid-shell__mobile-tab${
-                mobilePane === "document"
-                  ? " kindraw-hybrid-shell__mobile-tab--active"
-                  : ""
+              className={`kindraw-segment__btn${
+                mobilePane === "document" ? " kindraw-segment__btn--active" : ""
               }`}
               onClick={() => setMobilePane("document")}
               type="button"
@@ -755,10 +875,8 @@ export const HybridEditorPage = ({
               Documento
             </button>
             <button
-              className={`kindraw-hybrid-shell__mobile-tab${
-                mobilePane === "canvas"
-                  ? " kindraw-hybrid-shell__mobile-tab--active"
-                  : ""
+              className={`kindraw-segment__btn${
+                mobilePane === "canvas" ? " kindraw-segment__btn--active" : ""
               }`}
               onClick={() => setMobilePane("canvas")}
               type="button"
@@ -766,7 +884,9 @@ export const HybridEditorPage = ({
               Canvas
             </button>
           </div>
-          {mobilePane === "document" ? documentPane : canvasPane}
+          <div className="kindraw-hybrid-shell__body">
+            {mobilePane === "document" ? documentPane : canvasPane}
+          </div>
         </>
       ) : (
         <div
@@ -777,7 +897,7 @@ export const HybridEditorPage = ({
           style={
             initialView === "both"
               ? {
-                  gridTemplateColumns: `${splitRatio}fr 18px ${
+                  gridTemplateColumns: `${splitRatio}fr 14px ${
                     1 - splitRatio
                   }fr`,
                 }
@@ -791,43 +911,53 @@ export const HybridEditorPage = ({
               className="kindraw-hybrid-shell__divider"
               onPointerDown={handleSplitPointerDown}
               type="button"
-            />
+            >
+              <i />
+              <i />
+              <i />
+            </button>
           ) : null}
           {showCanvas ? canvasPane : null}
         </div>
       )}
 
-      <div className="kindraw-inline-actions">
-        <button
-          className="kindraw-link-button kindraw-link-button--danger"
-          onClick={() => void handleUnlink()}
-          type="button"
+      {unlinkConfirmOpen ? (
+        <div
+          className="kindraw-modal-overlay"
+          onClick={(event) => {
+            if (event.target === event.currentTarget) {
+              setUnlinkConfirmOpen(false);
+            }
+          }}
         >
-          Desvincular
-        </button>
-        <button
-          className="kindraw-link-button"
-          onClick={() => navigateKindraw(buildItemPath(response.document.item))}
-          type="button"
-        >
-          Abrir doc legado
-        </button>
-        <button
-          className="kindraw-link-button"
-          onClick={() => navigateKindraw(buildItemPath(response.drawing.item))}
-          type="button"
-        >
-          Abrir canvas legado
-        </button>
-      </div>
-
-      <ShareLinksPanel
-        busy={saveState === "saving"}
-        buildShareUrl={(token) => buildPublicShareUrl(token, { view: "both" })}
-        onCreateShareLink={handleCreateShareLink}
-        onRevokeShareLink={handleRevokeShareLink}
-        shareLinks={response.hybrid.shareLinks}
-      />
+          <div aria-modal="true" className="kindraw-modal" role="dialog">
+            <h2>Desvincular híbrido</h2>
+            <p>
+              Desvincular documento e canvas deste híbrido? Os dois itens
+              continuam existindo separadamente.
+            </p>
+            <div className="kindraw-modal__actions">
+              <button
+                className="kindraw-btn kindraw-btn--soft"
+                onClick={() => setUnlinkConfirmOpen(false)}
+                type="button"
+              >
+                Cancelar
+              </button>
+              <button
+                className="kindraw-btn kindraw-btn--danger"
+                onClick={() => {
+                  setUnlinkConfirmOpen(false);
+                  void handleUnlink();
+                }}
+                type="button"
+              >
+                Desvincular
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 };

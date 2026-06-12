@@ -1,6 +1,7 @@
 import {
   useCallback,
   useEffect,
+  useRef,
   useState,
   startTransition,
   useSyncExternalStore,
@@ -26,6 +27,7 @@ import { DocEditorPage } from "./DocEditorPage";
 import { DrawingEditorPage } from "./DrawingEditorPage";
 import { HybridEditorPage } from "./HybridEditorPage";
 import { HybridPublicShareView } from "./HybridPublicShareView";
+import { KindrawIcon } from "./icons";
 import { createInitialItemContent } from "./content";
 import {
   buildFolderPath,
@@ -42,6 +44,10 @@ import { getErrorMessage } from "./utils";
 
 import "./kindraw.scss";
 
+import type { ReactNode } from "react";
+
+import type { KindrawIconName } from "./icons";
+
 import type {
   KindrawFolder,
   KindrawHybridItem,
@@ -49,8 +55,13 @@ import type {
   KindrawItemKind,
   KindrawPublicItemResponse,
   KindrawSession,
+  KindrawTreeItem,
   KindrawWorkspaceTreeResponse,
 } from "./types";
+
+/* ────────────────────────────────────────────────────────
+   Helpers
+   ──────────────────────────────────────────────────────── */
 
 const formatUpdatedAt = (updatedAt: string) =>
   new Date(updatedAt).toLocaleString("pt-BR", {
@@ -58,10 +69,41 @@ const formatUpdatedAt = (updatedAt: string) =>
     timeStyle: "short",
   });
 
-const promptForName = (label: string, initialValue = "") => {
-  const value = window.prompt(label, initialValue)?.trim();
-  return value || null;
+const RELATIVE_TIME_DIVISIONS: {
+  amount: number;
+  unit: Intl.RelativeTimeFormatUnit;
+}[] = [
+  { amount: 60, unit: "second" },
+  { amount: 60, unit: "minute" },
+  { amount: 24, unit: "hour" },
+  { amount: 7, unit: "day" },
+  { amount: 4.34524, unit: "week" },
+  { amount: 12, unit: "month" },
+  { amount: Number.POSITIVE_INFINITY, unit: "year" },
+];
+
+const relativeTimeFormatter = new Intl.RelativeTimeFormat("pt-BR", {
+  numeric: "auto",
+});
+
+const formatRelativeTime = (updatedAt: string) => {
+  let duration = (new Date(updatedAt).getTime() - Date.now()) / 1000;
+  if (Number.isNaN(duration)) {
+    return formatUpdatedAt(updatedAt);
+  }
+
+  for (const division of RELATIVE_TIME_DIVISIONS) {
+    if (Math.abs(duration) < division.amount) {
+      return relativeTimeFormatter.format(Math.round(duration), division.unit);
+    }
+    duration /= division.amount;
+  }
+
+  return formatUpdatedAt(updatedAt);
 };
+
+const pluralize = (count: number, singular: string, plural: string) =>
+  `${count} ${count === 1 ? singular : plural}`;
 
 const getFolderChildren = (folders: KindrawFolder[], parentId: string | null) =>
   folders.filter((folder) => folder.parentId === parentId);
@@ -86,14 +128,235 @@ const getFolderTrail = (
   return trail;
 };
 
+const countItemsByFolder = (items: KindrawTreeItem[]) => {
+  const counts = new Map<string | null, number>();
+  for (const item of items) {
+    counts.set(item.folderId, (counts.get(item.folderId) || 0) + 1);
+  }
+  return counts;
+};
+
+const getItemKindKey = (item: KindrawTreeItem) =>
+  isKindrawHybridItem(item) ? "hybrid" : item.kind;
+
+const KIND_LABEL: Record<string, string> = {
+  drawing: "Drawing",
+  doc: "Doc",
+  hybrid: "Híbrido",
+};
+
+const KIND_ICON: Record<string, KindrawIconName> = {
+  drawing: "pen",
+  doc: "doc",
+  hybrid: "hybrid",
+};
+
+const openTreeItem = (item: KindrawTreeItem) => {
+  if (isKindrawHybridItem(item)) {
+    navigateKindraw(buildHybridItemPath(item));
+  } else if (item.kind === "drawing") {
+    // /draw/* é servido pelo ExcalidrawApp completo (outro shell);
+    // carga de página inteira evita montar o editor via transição SPA.
+    window.location.assign(buildItemPath(item));
+  } else {
+    navigateKindraw(buildItemPath(item));
+  }
+};
+
+type KindrawSharedView = "links" | "live" | null;
+
+/* ────────────────────────────────────────────────────────
+   Menus (popover) e modal temático
+   ──────────────────────────────────────────────────────── */
+
+const KindrawMenuWrap = ({
+  open,
+  onClose,
+  button,
+  align = "right",
+  children,
+}: {
+  open: boolean;
+  onClose: () => void;
+  button: ReactNode;
+  align?: "left" | "right";
+  children: ReactNode;
+}) => {
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+
+    const onPointerDown = (event: PointerEvent) => {
+      if (ref.current && !ref.current.contains(event.target as Node)) {
+        onClose();
+      }
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        onClose();
+      }
+    };
+
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [open, onClose]);
+
+  return (
+    <div className="kindraw-menuwrap" ref={ref}>
+      {button}
+      {open ? (
+        <div
+          className={`kindraw-popover ${
+            align === "left"
+              ? "kindraw-popover--menu-left"
+              : "kindraw-popover--menu"
+          }`}
+        >
+          <div className="kindraw-menu" role="menu">
+            {children}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+};
+
+type KindrawDialog =
+  | {
+      type: "prompt";
+      title: string;
+      confirmLabel: string;
+      initialValue: string;
+      placeholder?: string;
+      onSubmit: (value: string) => void;
+    }
+  | {
+      type: "confirm";
+      title: string;
+      message: string;
+      confirmLabel: string;
+      onConfirm: () => void;
+    };
+
+const KindrawDialogModal = ({
+  dialog,
+  onClose,
+}: {
+  dialog: KindrawDialog;
+  onClose: () => void;
+}) => {
+  const [value, setValue] = useState(
+    dialog.type === "prompt" ? dialog.initialValue : "",
+  );
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    inputRef.current?.focus();
+    inputRef.current?.select();
+  }, []);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        onClose();
+      }
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [onClose]);
+
+  const handleConfirm = () => {
+    if (dialog.type === "prompt") {
+      const trimmed = value.trim();
+      if (!trimmed) {
+        return;
+      }
+      onClose();
+      dialog.onSubmit(trimmed);
+    } else {
+      onClose();
+      dialog.onConfirm();
+    }
+  };
+
+  return (
+    <div
+      className="kindraw-modal-overlay"
+      onClick={(event) => {
+        if (event.target === event.currentTarget) {
+          onClose();
+        }
+      }}
+    >
+      <div aria-modal="true" className="kindraw-modal" role="dialog">
+        <h2>{dialog.title}</h2>
+        {dialog.type === "prompt" ? (
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              handleConfirm();
+            }}
+          >
+            <input
+              className="kindraw-modal__input"
+              onChange={(event) => setValue(event.target.value)}
+              placeholder={dialog.placeholder}
+              ref={inputRef}
+              value={value}
+            />
+          </form>
+        ) : (
+          <p>{dialog.message}</p>
+        )}
+        <div className="kindraw-modal__actions">
+          <button
+            className="kindraw-btn kindraw-btn--soft"
+            onClick={onClose}
+            type="button"
+          >
+            Cancelar
+          </button>
+          <button
+            className={`kindraw-btn ${
+              dialog.type === "confirm"
+                ? "kindraw-btn--danger"
+                : "kindraw-btn--primary"
+            }`}
+            disabled={dialog.type === "prompt" && !value.trim()}
+            onClick={handleConfirm}
+            type="button"
+          >
+            {dialog.confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+/* ────────────────────────────────────────────────────────
+   Sidebar — árvore de pastas
+   ──────────────────────────────────────────────────────── */
+
 const FolderTree = ({
   currentFolderId,
   folders,
+  itemCounts,
   parentId,
+  onNavigate,
 }: {
   currentFolderId: string | null;
   folders: KindrawFolder[];
+  itemCounts: Map<string | null, number>;
   parentId: string | null;
+  onNavigate: (folderId: string) => void;
 }) => {
   const children = getFolderChildren(folders, parentId);
   if (!children.length) {
@@ -110,14 +373,20 @@ const FolderTree = ({
                 ? " kindraw-tree__button--active"
                 : ""
             }`}
-            onClick={() => navigateKindraw(buildFolderPath(folder.id))}
+            onClick={() => onNavigate(folder.id)}
             type="button"
           >
-            {folder.name}
+            <KindrawIcon name="folder" size={16} />
+            <span className="kindraw-tree__label">{folder.name}</span>
+            <em className="kindraw-tree__count">
+              {itemCounts.get(folder.id) || 0}
+            </em>
           </button>
           <FolderTree
             currentFolderId={currentFolderId}
             folders={folders}
+            itemCounts={itemCounts}
+            onNavigate={onNavigate}
             parentId={folder.id}
           />
         </li>
@@ -126,8 +395,119 @@ const FolderTree = ({
   );
 };
 
+/* ────────────────────────────────────────────────────────
+   Cards de item
+   ──────────────────────────────────────────────────────── */
+
+const WorkspaceItemCard = ({
+  item,
+  menuOpen,
+  onToggleMenu,
+  onCloseMenu,
+  onRename,
+  onDelete,
+}: {
+  item: KindrawTreeItem;
+  menuOpen: boolean;
+  onToggleMenu: () => void;
+  onCloseMenu: () => void;
+  onRename: () => void;
+  onDelete: () => void;
+}) => {
+  const kindKey = getItemKindKey(item);
+
+  return (
+    <article className="kindraw-card">
+      <button
+        aria-label={`Abrir ${item.title}`}
+        className="kindraw-card__thumb"
+        onClick={() => openTreeItem(item)}
+        type="button"
+      >
+        {item.thumbnailUrl ? (
+          <img alt="" src={item.thumbnailUrl} />
+        ) : (
+          <KindrawIcon name={KIND_ICON[kindKey]} size={34} />
+        )}
+      </button>
+      <div className="kindraw-card__body">
+        <div className="kindraw-card__top">
+          <span className={`kindraw-kind kindraw-kind--${kindKey}`}>
+            {KIND_LABEL[kindKey]}
+          </span>
+          <span className="kindraw-card__topright">
+            {item.shareLinks.length ? (
+              <span className="kindraw-card__shared">
+                <KindrawIcon name="link" size={13} /> público
+              </span>
+            ) : null}
+            <KindrawMenuWrap
+              button={
+                <button
+                  aria-expanded={menuOpen}
+                  aria-label={`Ações de ${item.title}`}
+                  className="kindraw-dots"
+                  onClick={onToggleMenu}
+                  type="button"
+                >
+                  <KindrawIcon name="dots" size={16} />
+                </button>
+              }
+              onClose={onCloseMenu}
+              open={menuOpen}
+            >
+              <button
+                className="kindraw-menu__item"
+                onClick={() => {
+                  onCloseMenu();
+                  onRename();
+                }}
+                role="menuitem"
+                type="button"
+              >
+                Renomear
+              </button>
+              <button
+                className="kindraw-menu__item kindraw-menu__item--danger"
+                onClick={() => {
+                  onCloseMenu();
+                  onDelete();
+                }}
+                role="menuitem"
+                type="button"
+              >
+                {isKindrawHybridItem(item) ? "Desvincular" : "Excluir"}
+              </button>
+            </KindrawMenuWrap>
+          </span>
+        </div>
+        <button
+          className="kindraw-card__title"
+          onClick={() => openTreeItem(item)}
+          type="button"
+        >
+          {item.title}
+        </button>
+        <span
+          className="kindraw-card__meta"
+          title={formatUpdatedAt(item.updatedAt)}
+        >
+          <KindrawIcon name="clock" size={13} />{" "}
+          {formatRelativeTime(item.updatedAt)}
+        </span>
+      </div>
+    </article>
+  );
+};
+
+/* ────────────────────────────────────────────────────────
+   Workspace
+   ──────────────────────────────────────────────────────── */
+
 const WorkspacePage = ({
   currentFolderId,
+  searchQuery,
+  sharedView,
   tree,
   onCreateFolder,
   onCreateItem,
@@ -135,253 +515,321 @@ const WorkspacePage = ({
   onDeleteHybridItem,
   onDeleteFolder,
   onDeleteItem,
+  onNavigateFolder,
   onRenameHybridItem,
   onRenameFolder,
   onRenameItem,
 }: {
   currentFolderId: string | null;
+  searchQuery: string;
+  sharedView: KindrawSharedView;
   tree: KindrawWorkspaceTreeResponse;
-  onCreateFolder: (parentId: string | null) => Promise<void> | void;
-  onCreateItem: (
-    kind: KindrawItemKind,
-    folderId: string | null,
-  ) => Promise<void> | void;
-  onCreateHybridItem: (folderId: string | null) => Promise<void> | void;
-  onDeleteFolder: (folder: KindrawFolder) => Promise<void> | void;
-  onDeleteItem: (item: KindrawItem) => Promise<void> | void;
-  onDeleteHybridItem: (item: KindrawHybridItem) => Promise<void> | void;
-  onRenameFolder: (folder: KindrawFolder) => Promise<void> | void;
-  onRenameItem: (item: KindrawItem) => Promise<void> | void;
-  onRenameHybridItem: (item: KindrawHybridItem) => Promise<void> | void;
+  onCreateFolder: (parentId: string | null) => void;
+  onCreateItem: (kind: KindrawItemKind, folderId: string | null) => void;
+  onCreateHybridItem: (folderId: string | null) => void;
+  onDeleteFolder: (folder: KindrawFolder) => void;
+  onDeleteItem: (item: KindrawItem) => void;
+  onDeleteHybridItem: (item: KindrawHybridItem) => void;
+  onNavigateFolder: (folderId: string | null) => void;
+  onRenameFolder: (folder: KindrawFolder) => void;
+  onRenameItem: (item: KindrawItem) => void;
+  onRenameHybridItem: (item: KindrawHybridItem) => void;
 }) => {
-  const currentFolder =
-    tree.folders.find((folder) => folder.id === currentFolderId) || null;
-  const visibleFolders = getFolderChildren(tree.folders, currentFolderId);
-  const visibleItems = tree.items.filter(
-    (item) => item.folderId === currentFolderId,
-  );
+  const [newMenuOpen, setNewMenuOpen] = useState(false);
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+
+  const closeItemMenu = useCallback(() => setOpenMenuId(null), []);
+
+  const currentFolder = sharedView
+    ? null
+    : tree.folders.find((folder) => folder.id === currentFolderId) || null;
   const folderTrail = getFolderTrail(tree.folders, currentFolderId);
+  const itemCounts = countItemsByFolder(tree.items);
+
+  const visibleFolders = sharedView
+    ? []
+    : getFolderChildren(tree.folders, currentFolderId);
+
+  let scopedItems: KindrawTreeItem[];
+  if (sharedView === "links") {
+    scopedItems = tree.items.filter((item) => item.shareLinks.length > 0);
+  } else if (sharedView === "live") {
+    scopedItems = tree.items.filter(
+      (item) => !isKindrawHybridItem(item) && item.collaborationRoomId !== null,
+    );
+  } else {
+    scopedItems = tree.items.filter(
+      (item) => item.folderId === currentFolderId,
+    );
+  }
+
+  const normalizedQuery = searchQuery.trim().toLowerCase();
+  const visibleItems = normalizedQuery
+    ? scopedItems.filter((item) =>
+        item.title.toLowerCase().includes(normalizedQuery),
+      )
+    : scopedItems;
+
+  const heading = sharedView
+    ? sharedView === "links"
+      ? "Links públicos"
+      : "Sessões ao vivo"
+    : currentFolder?.name || "Biblioteca";
 
   return (
     <section className="kindraw-workspace">
-      <header className="kindraw-workspace__header">
+      <div className="kindraw-main-head">
         <div>
-          <span className="kindraw-eyebrow">Workspace</span>
-          <h1>{currentFolder?.name || "Biblioteca"}</h1>
-          <p>
-            {visibleFolders.length} pastas, {visibleItems.length} itens
+          <nav aria-label="Caminho" className="kindraw-crumb">
+            {sharedView ? (
+              <span>Compartilhados</span>
+            ) : (
+              <>
+                <button onClick={() => onNavigateFolder(null)} type="button">
+                  Raiz
+                </button>
+                {folderTrail.slice(0, -1).map((folder) => (
+                  <span key={folder.id}>
+                    /{" "}
+                    <button
+                      onClick={() => onNavigateFolder(folder.id)}
+                      type="button"
+                    >
+                      {folder.name}
+                    </button>
+                  </span>
+                ))}
+                {currentFolder ? <span>/ {currentFolder.name}</span> : null}
+              </>
+            )}
+          </nav>
+          <div className="kindraw-main-head__title">
+            <h1>{heading}</h1>
+            {currentFolder ? (
+              <KindrawMenuWrap
+                button={
+                  <button
+                    aria-expanded={openMenuId === "current-folder"}
+                    aria-label="Ações da pasta atual"
+                    className="kindraw-dots kindraw-dots--visible"
+                    onClick={() =>
+                      setOpenMenuId(
+                        openMenuId === "current-folder"
+                          ? null
+                          : "current-folder",
+                      )
+                    }
+                    type="button"
+                  >
+                    <KindrawIcon name="dots" size={16} />
+                  </button>
+                }
+                onClose={closeItemMenu}
+                open={openMenuId === "current-folder"}
+              >
+                <button
+                  className="kindraw-menu__item"
+                  onClick={() => {
+                    closeItemMenu();
+                    onRenameFolder(currentFolder);
+                  }}
+                  role="menuitem"
+                  type="button"
+                >
+                  Renomear pasta
+                </button>
+                <button
+                  className="kindraw-menu__item kindraw-menu__item--danger"
+                  onClick={() => {
+                    closeItemMenu();
+                    onDeleteFolder(currentFolder);
+                  }}
+                  role="menuitem"
+                  type="button"
+                >
+                  Excluir pasta
+                </button>
+              </KindrawMenuWrap>
+            ) : null}
+          </div>
+          <p className="kindraw-main-head__meta">
+            {sharedView
+              ? pluralize(visibleItems.length, "item", "itens")
+              : `${pluralize(
+                  visibleFolders.length,
+                  "pasta",
+                  "pastas",
+                )} · ${pluralize(visibleItems.length, "item", "itens")}`}
           </p>
         </div>
-        <div className="kindraw-toolbar">
+        <div className="kindraw-main-head__actions">
           <button
-            className="kindraw-button"
-            onClick={() => void onCreateFolder(currentFolderId)}
+            className="kindraw-btn kindraw-btn--soft"
+            onClick={() => onCreateFolder(currentFolderId)}
             type="button"
           >
-            Nova pasta
+            <KindrawIcon name="folder" size={16} /> Nova pasta
           </button>
-          <button
-            className="kindraw-button kindraw-button--secondary"
-            onClick={() => void onCreateHybridItem(currentFolderId)}
-            type="button"
+          <KindrawMenuWrap
+            button={
+              <button
+                aria-expanded={newMenuOpen}
+                className="kindraw-btn kindraw-btn--primary"
+                onClick={() => setNewMenuOpen(!newMenuOpen)}
+                type="button"
+              >
+                <KindrawIcon name="plus" size={16} /> Novo{" "}
+                <KindrawIcon name="chevD" size={14} />
+              </button>
+            }
+            onClose={() => setNewMenuOpen(false)}
+            open={newMenuOpen}
           >
-            Novo hibrido
-          </button>
-          <button
-            className="kindraw-button kindraw-button--secondary"
-            onClick={() => void onCreateItem("drawing", currentFolderId)}
-            type="button"
-          >
-            Novo drawing
-          </button>
-          <button
-            className="kindraw-button kindraw-button--secondary"
-            onClick={() => void onCreateItem("doc", currentFolderId)}
-            type="button"
-          >
-            Novo doc
-          </button>
+            <button
+              className="kindraw-menu__item"
+              onClick={() => {
+                setNewMenuOpen(false);
+                onCreateItem("drawing", currentFolderId);
+              }}
+              role="menuitem"
+              type="button"
+            >
+              <KindrawIcon name="pen" size={16} /> Drawing
+            </button>
+            <button
+              className="kindraw-menu__item"
+              onClick={() => {
+                setNewMenuOpen(false);
+                onCreateItem("doc", currentFolderId);
+              }}
+              role="menuitem"
+              type="button"
+            >
+              <KindrawIcon name="doc" size={16} /> Doc
+            </button>
+            <button
+              className="kindraw-menu__item"
+              onClick={() => {
+                setNewMenuOpen(false);
+                onCreateHybridItem(currentFolderId);
+              }}
+              role="menuitem"
+              type="button"
+            >
+              <KindrawIcon name="hybrid" size={16} /> Híbrido
+            </button>
+          </KindrawMenuWrap>
         </div>
-      </header>
+      </div>
 
-      <nav className="kindraw-breadcrumbs">
-        <button
-          className="kindraw-link-button"
-          onClick={() => navigateKindraw("/")}
-          type="button"
-        >
-          Raiz
-        </button>
-        {folderTrail.map((folder) => (
-          <button
-            className="kindraw-link-button"
-            key={folder.id}
-            onClick={() => navigateKindraw(buildFolderPath(folder.id))}
-            type="button"
-          >
-            / {folder.name}
-          </button>
-        ))}
-      </nav>
-
-      {currentFolder ? (
-        <div className="kindraw-inline-actions">
-          <button
-            className="kindraw-link-button"
-            onClick={() => void onRenameFolder(currentFolder)}
-            type="button"
-          >
-            Renomear pasta atual
-          </button>
-          <button
-            className="kindraw-link-button kindraw-link-button--danger"
-            onClick={() => void onDeleteFolder(currentFolder)}
-            type="button"
-          >
-            Excluir pasta atual
-          </button>
+      {visibleFolders.length ? (
+        <div className="kindraw-folderrow">
+          {visibleFolders.map((folder) => (
+            <div className="kindraw-folderchip" key={folder.id}>
+              <button
+                className="kindraw-folderchip__main"
+                onClick={() => onNavigateFolder(folder.id)}
+                type="button"
+              >
+                <KindrawIcon name="folder" size={18} />
+                <span>{folder.name}</span>
+                <em className="kindraw-folderchip__count">
+                  {itemCounts.get(folder.id) || 0}
+                </em>
+              </button>
+              <KindrawMenuWrap
+                button={
+                  <button
+                    aria-expanded={openMenuId === `folder:${folder.id}`}
+                    aria-label={`Ações da pasta ${folder.name}`}
+                    className="kindraw-dots"
+                    onClick={() =>
+                      setOpenMenuId(
+                        openMenuId === `folder:${folder.id}`
+                          ? null
+                          : `folder:${folder.id}`,
+                      )
+                    }
+                    type="button"
+                  >
+                    <KindrawIcon name="dots" size={16} />
+                  </button>
+                }
+                onClose={closeItemMenu}
+                open={openMenuId === `folder:${folder.id}`}
+              >
+                <button
+                  className="kindraw-menu__item"
+                  onClick={() => {
+                    closeItemMenu();
+                    onRenameFolder(folder);
+                  }}
+                  role="menuitem"
+                  type="button"
+                >
+                  Renomear
+                </button>
+                <button
+                  className="kindraw-menu__item kindraw-menu__item--danger"
+                  onClick={() => {
+                    closeItemMenu();
+                    onDeleteFolder(folder);
+                  }}
+                  role="menuitem"
+                  type="button"
+                >
+                  Excluir
+                </button>
+              </KindrawMenuWrap>
+            </div>
+          ))}
         </div>
       ) : null}
 
-      <section className="kindraw-section">
-        <div className="kindraw-section__header">
-          <h2>Pastas</h2>
-        </div>
-        {visibleFolders.length ? (
-          <div className="kindraw-card-grid">
-            {visibleFolders.map((folder) => (
-              <article className="kindraw-folder-card" key={folder.id}>
-                <button
-                  className="kindraw-folder-card__title"
-                  onClick={() => navigateKindraw(buildFolderPath(folder.id))}
-                  type="button"
-                >
-                  {folder.name}
-                </button>
-                <div className="kindraw-folder-card__meta">
-                  Atualizada em {formatUpdatedAt(folder.updatedAt)}
-                </div>
-                <div className="kindraw-inline-actions">
-                  <button
-                    className="kindraw-link-button"
-                    onClick={() => void onRenameFolder(folder)}
-                    type="button"
-                  >
-                    Renomear
-                  </button>
-                  <button
-                    className="kindraw-link-button kindraw-link-button--danger"
-                    onClick={() => void onDeleteFolder(folder)}
-                    type="button"
-                  >
-                    Excluir
-                  </button>
-                </div>
-              </article>
-            ))}
-          </div>
-        ) : (
-          <p className="kindraw-section__empty">Nenhuma pasta aqui ainda.</p>
-        )}
-      </section>
-
-      <section className="kindraw-section">
-        <div className="kindraw-section__header">
-          <h2>Itens</h2>
-        </div>
-        {visibleItems.length ? (
-          <div className="kindraw-card-grid">
-            {visibleItems.map((item) => {
-              if (isKindrawHybridItem(item)) {
-                return (
-                  <article className="kindraw-item-card" key={item.id}>
-                    <div className="kindraw-item-card__header">
-                      <span className="kindraw-badge">{item.kind}</span>
-                      <span className="kindraw-item-card__date">
-                        {formatUpdatedAt(item.updatedAt)}
-                      </span>
-                    </div>
-                    <button
-                      className="kindraw-item-card__title"
-                      onClick={() => navigateKindraw(buildHybridItemPath(item))}
-                      type="button"
-                    >
-                      {item.title}
-                    </button>
-                    <div className="kindraw-item-card__meta">
-                      {item.shareLinks.length
-                        ? `${item.shareLinks.length} link(s) publicos`
-                        : "Privado"}
-                    </div>
-                    <div className="kindraw-inline-actions">
-                      <button
-                        className="kindraw-link-button"
-                        onClick={() => void onRenameHybridItem(item)}
-                        type="button"
-                      >
-                        Renomear
-                      </button>
-                      <button
-                        className="kindraw-link-button kindraw-link-button--danger"
-                        onClick={() => void onDeleteHybridItem(item)}
-                        type="button"
-                      >
-                        Excluir
-                      </button>
-                    </div>
-                  </article>
-                );
+      {visibleItems.length ? (
+        <div className="kindraw-grid">
+          {visibleItems.map((item) => (
+            <WorkspaceItemCard
+              item={item}
+              key={item.id}
+              menuOpen={openMenuId === `item:${item.id}`}
+              onCloseMenu={closeItemMenu}
+              onDelete={() =>
+                isKindrawHybridItem(item)
+                  ? onDeleteHybridItem(item)
+                  : onDeleteItem(item)
               }
-
-              return (
-                <article className="kindraw-item-card" key={item.id}>
-                  <div className="kindraw-item-card__header">
-                    <span className="kindraw-badge">{item.kind}</span>
-                    <span className="kindraw-item-card__date">
-                      {formatUpdatedAt(item.updatedAt)}
-                    </span>
-                  </div>
-                  <button
-                    className="kindraw-item-card__title"
-                    onClick={() => navigateKindraw(buildItemPath(item))}
-                    type="button"
-                  >
-                    {item.title}
-                  </button>
-                  <div className="kindraw-item-card__meta">
-                    {item.shareLinks.length
-                      ? `${item.shareLinks.length} link(s) publicos`
-                      : "Privado"}
-                  </div>
-                  <div className="kindraw-inline-actions">
-                    <button
-                      className="kindraw-link-button"
-                      onClick={() => void onRenameItem(item)}
-                      type="button"
-                    >
-                      Renomear
-                    </button>
-                    <button
-                      className="kindraw-link-button kindraw-link-button--danger"
-                      onClick={() => void onDeleteItem(item)}
-                      type="button"
-                    >
-                      Excluir
-                    </button>
-                  </div>
-                </article>
-              );
-            })}
-          </div>
-        ) : (
-          <p className="kindraw-section__empty">
-            Nenhum drawing ou doc nesta pasta.
-          </p>
-        )}
-      </section>
+              onRename={() =>
+                isKindrawHybridItem(item)
+                  ? onRenameHybridItem(item)
+                  : onRenameItem(item)
+              }
+              onToggleMenu={() =>
+                setOpenMenuId(
+                  openMenuId === `item:${item.id}` ? null : `item:${item.id}`,
+                )
+              }
+            />
+          ))}
+        </div>
+      ) : (
+        <p className="kindraw-empty">
+          {normalizedQuery
+            ? "Nenhum item corresponde à busca."
+            : sharedView === "links"
+            ? "Nenhum item com link público ainda."
+            : sharedView === "live"
+            ? "Nenhuma sessão ao vivo ativa."
+            : "Nenhum drawing, doc ou híbrido nesta pasta."}
+        </p>
+      )}
     </section>
   );
 };
+
+/* ────────────────────────────────────────────────────────
+   Página pública de share (inalterada)
+   ──────────────────────────────────────────────────────── */
 
 const PublicSharePage = ({ token }: { token: string }) => {
   const [itemResponse, setItemResponse] =
@@ -441,6 +889,10 @@ const PublicSharePage = ({ token }: { token: string }) => {
 const isKindrawDocumentItem = (item: KindrawItem | KindrawHybridItem) =>
   !isKindrawHybridItem(item);
 
+/* ────────────────────────────────────────────────────────
+   App
+   ──────────────────────────────────────────────────────── */
+
 export const KindrawApp = () => {
   const pathname = useSyncExternalStore(
     subscribeToLocation,
@@ -454,11 +906,19 @@ export const KindrawApp = () => {
   const [tree, setTree] = useState<KindrawWorkspaceTreeResponse | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isMutating, setIsMutating] = useState(false);
+  const [dialog, setDialog] = useState<KindrawDialog | null>(null);
+  const [avatarMenuOpen, setAvatarMenuOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [sharedView, setSharedView] = useState<KindrawSharedView>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
   const itemsById = Object.fromEntries(
     (tree?.items || [])
       .filter(isKindrawDocumentItem)
       .map((item) => [item.id, item]),
   );
+
+  const closeDialog = useCallback(() => setDialog(null), []);
 
   const refreshTree = useCallback(async () => {
     if (!session) {
@@ -515,6 +975,18 @@ export const KindrawApp = () => {
     }
   }, [route, tree]);
 
+  // ⌘K / Ctrl+K foca a busca
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        searchInputRef.current?.focus();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
+
   const runMutation = useCallback(
     async (action: () => Promise<void> | void) => {
       setIsMutating(true);
@@ -530,166 +1002,230 @@ export const KindrawApp = () => {
     [],
   );
 
-  const handleCreateFolder = useCallback(
-    async (parentId: string | null) => {
-      const name = promptForName("Nome da nova pasta");
-      if (!name) {
-        return;
-      }
+  const navigateToFolder = useCallback((folderId: string | null) => {
+    setSharedView(null);
+    navigateKindraw(folderId ? buildFolderPath(folderId) : "/");
+  }, []);
 
-      await runMutation(async () => {
-        await createFolder(name, parentId);
-        await refreshTree();
+  const openSharedView = useCallback(
+    (view: Exclude<KindrawSharedView, null>) => {
+      setSharedView(view);
+      navigateKindraw("/");
+    },
+    [],
+  );
+
+  const handleCreateFolder = useCallback(
+    (parentId: string | null) => {
+      setDialog({
+        type: "prompt",
+        title: "Nova pasta",
+        confirmLabel: "Criar pasta",
+        initialValue: "",
+        placeholder: "Nome da pasta",
+        onSubmit: (name) => {
+          void runMutation(async () => {
+            await createFolder(name, parentId);
+            await refreshTree();
+          });
+        },
       });
     },
     [refreshTree, runMutation],
   );
 
   const handleCreateItem = useCallback(
-    async (kind: KindrawItemKind, folderId: string | null) => {
-      const defaultTitle =
-        kind === "drawing" ? "Novo drawing" : "Nova nota markdown";
-      const title = promptForName("Titulo do item", defaultTitle);
-      if (!title) {
-        return;
-      }
-
-      await runMutation(async () => {
-        const response = await createItem({
-          kind,
-          title,
-          folderId,
-          content: createInitialItemContent(kind, title),
-        });
-        await refreshTree();
-        navigateKindraw(
-          buildItemPath({
-            id: response.itemId,
-            kind,
-          }),
-        );
+    (kind: KindrawItemKind, folderId: string | null) => {
+      setDialog({
+        type: "prompt",
+        title: kind === "drawing" ? "Novo drawing" : "Novo doc",
+        confirmLabel: "Criar",
+        initialValue:
+          kind === "drawing" ? "Novo drawing" : "Nova nota markdown",
+        placeholder: "Título do item",
+        onSubmit: (title) => {
+          void runMutation(async () => {
+            const response = await createItem({
+              kind,
+              title,
+              folderId,
+              content: createInitialItemContent(kind, title),
+            });
+            await refreshTree();
+            const itemPath = buildItemPath({
+              id: response.itemId,
+              kind,
+            });
+            if (kind === "drawing") {
+              window.location.assign(itemPath);
+            } else {
+              navigateKindraw(itemPath);
+            }
+          });
+        },
       });
     },
     [refreshTree, runMutation],
   );
 
   const handleCreateHybridItem = useCallback(
-    async (folderId: string | null) => {
-      const title = promptForName("Titulo do hibrido", "Nova nota visual");
-      if (!title) {
-        return;
-      }
-
-      await runMutation(async () => {
-        const response = await createHybridItem({
-          title,
-          folderId,
-        });
-        await refreshTree();
-        navigateKindraw(
-          buildHybridPath(response.hybridId, {
-            view: "both",
-          }),
-        );
+    (folderId: string | null) => {
+      setDialog({
+        type: "prompt",
+        title: "Novo híbrido",
+        confirmLabel: "Criar",
+        initialValue: "Nova nota visual",
+        placeholder: "Título do híbrido",
+        onSubmit: (title) => {
+          void runMutation(async () => {
+            const response = await createHybridItem({
+              title,
+              folderId,
+            });
+            await refreshTree();
+            navigateKindraw(
+              buildHybridPath(response.hybridId, {
+                view: "both",
+              }),
+            );
+          });
+        },
       });
     },
     [refreshTree, runMutation],
   );
 
   const handleRenameFolder = useCallback(
-    async (folder: KindrawFolder) => {
-      const nextName = promptForName("Novo nome da pasta", folder.name);
-      if (!nextName || nextName === folder.name) {
-        return;
-      }
-
-      await runMutation(async () => {
-        await renameFolder(folder.id, nextName);
-        await refreshTree();
+    (folder: KindrawFolder) => {
+      setDialog({
+        type: "prompt",
+        title: "Renomear pasta",
+        confirmLabel: "Salvar",
+        initialValue: folder.name,
+        placeholder: "Nome da pasta",
+        onSubmit: (nextName) => {
+          if (nextName === folder.name) {
+            return;
+          }
+          void runMutation(async () => {
+            await renameFolder(folder.id, nextName);
+            await refreshTree();
+          });
+        },
       });
     },
     [refreshTree, runMutation],
   );
 
   const handleDeleteFolder = useCallback(
-    async (folder: KindrawFolder) => {
-      if (!window.confirm(`Excluir a pasta "${folder.name}"?`)) {
-        return;
-      }
-
-      await runMutation(async () => {
-        await deleteFolder(folder.id);
-        await refreshTree();
-        if (route.kind === "workspace" && route.folderId === folder.id) {
-          navigateKindraw("/", { replace: true });
-        }
+    (folder: KindrawFolder) => {
+      setDialog({
+        type: "confirm",
+        title: "Excluir pasta",
+        message: `Excluir a pasta "${folder.name}"?`,
+        confirmLabel: "Excluir",
+        onConfirm: () => {
+          void runMutation(async () => {
+            await deleteFolder(folder.id);
+            await refreshTree();
+            if (route.kind === "workspace" && route.folderId === folder.id) {
+              navigateKindraw("/", { replace: true });
+            }
+          });
+        },
       });
     },
     [refreshTree, route, runMutation],
   );
 
   const handleRenameItem = useCallback(
-    async (item: KindrawItem) => {
-      const nextTitle = promptForName("Novo titulo do item", item.title);
-      if (!nextTitle || nextTitle === item.title) {
-        return;
-      }
-
-      await runMutation(async () => {
-        await updateItemMeta(item.id, { title: nextTitle });
-        await refreshTree();
+    (item: KindrawItem) => {
+      setDialog({
+        type: "prompt",
+        title: "Renomear item",
+        confirmLabel: "Salvar",
+        initialValue: item.title,
+        placeholder: "Título do item",
+        onSubmit: (nextTitle) => {
+          if (nextTitle === item.title) {
+            return;
+          }
+          void runMutation(async () => {
+            await updateItemMeta(item.id, { title: nextTitle });
+            await refreshTree();
+          });
+        },
       });
     },
     [refreshTree, runMutation],
   );
 
   const handleDeleteItem = useCallback(
-    async (item: KindrawItem) => {
-      if (!window.confirm(`Excluir "${item.title}"?`)) {
-        return;
-      }
-
-      await runMutation(async () => {
-        await deleteItem(item.id);
-        await refreshTree();
-        if (
-          (route.kind === "drawing" || route.kind === "doc") &&
-          route.itemId === item.id
-        ) {
-          navigateKindraw(buildFolderPath(item.folderId), { replace: true });
-        }
+    (item: KindrawItem) => {
+      setDialog({
+        type: "confirm",
+        title: "Excluir item",
+        message: `Excluir "${item.title}"?`,
+        confirmLabel: "Excluir",
+        onConfirm: () => {
+          void runMutation(async () => {
+            await deleteItem(item.id);
+            await refreshTree();
+            if (
+              (route.kind === "drawing" || route.kind === "doc") &&
+              route.itemId === item.id
+            ) {
+              navigateKindraw(buildFolderPath(item.folderId), {
+                replace: true,
+              });
+            }
+          });
+        },
       });
     },
     [refreshTree, route, runMutation],
   );
 
   const handleRenameHybridItem = useCallback(
-    async (item: KindrawHybridItem) => {
-      const nextTitle = promptForName("Novo titulo do hibrido", item.title);
-      if (!nextTitle || nextTitle === item.title) {
-        return;
-      }
-
-      await runMutation(async () => {
-        await updateHybridItemMeta(item.id, { title: nextTitle });
-        await refreshTree();
+    (item: KindrawHybridItem) => {
+      setDialog({
+        type: "prompt",
+        title: "Renomear híbrido",
+        confirmLabel: "Salvar",
+        initialValue: item.title,
+        placeholder: "Título do híbrido",
+        onSubmit: (nextTitle) => {
+          if (nextTitle === item.title) {
+            return;
+          }
+          void runMutation(async () => {
+            await updateHybridItemMeta(item.id, { title: nextTitle });
+            await refreshTree();
+          });
+        },
       });
     },
     [refreshTree, runMutation],
   );
 
   const handleDeleteHybridItem = useCallback(
-    async (item: KindrawHybridItem) => {
-      if (!window.confirm(`Desvincular "${item.title}"?`)) {
-        return;
-      }
-
-      await runMutation(async () => {
-        await deleteHybridItem(item.id);
-        await refreshTree();
-        if (route.kind === "hybrid" && route.hybridId === item.id) {
-          navigateKindraw(buildFolderPath(item.folderId), { replace: true });
-        }
+    (item: KindrawHybridItem) => {
+      setDialog({
+        type: "confirm",
+        title: "Desvincular híbrido",
+        message: `Desvincular "${item.title}"? O doc e o canvas continuam como itens separados.`,
+        confirmLabel: "Desvincular",
+        onConfirm: () => {
+          void runMutation(async () => {
+            await deleteHybridItem(item.id);
+            await refreshTree();
+            if (route.kind === "hybrid" && route.hybridId === item.id) {
+              navigateKindraw(buildFolderPath(item.folderId), {
+                replace: true,
+              });
+            }
+          });
+        },
       });
     },
     [refreshTree, route, runMutation],
@@ -720,24 +1256,28 @@ export const KindrawApp = () => {
     return (
       <div className="kindraw-login-shell">
         <div className="kindraw-login-card">
-          <span className="kindraw-eyebrow">Kindraw v1</span>
-          <h1>Your Kindraw workspace with account, folders and docs</h1>
+          <span className="kindraw-logomark kindraw-logomark--lg">
+            <KindrawIcon name="pen" size={22} strokeWidth={2.1} />
+          </span>
+          <span className="kindraw-eyebrow">Kindraw</span>
+          <h1>Desenhe. Documente. Compartilhe.</h1>
           <p>
-            Entre com GitHub para organizar drawings e arquivos Markdown no seu
-            workspace.
+            Seu workspace de drawings, docs e híbridos — com pastas, autosave e
+            links públicos.
           </p>
-          <div className="kindraw-toolbar">
-            <button
-              className="kindraw-button"
-              onClick={openGithubLogin}
-              type="button"
-            >
-              Entrar com GitHub
-            </button>
-            <a className="kindraw-link-button" href="/">
-              Open public Kindraw
-            </a>
-          </div>
+          <button
+            className="kindraw-btn kindraw-btn--primary kindraw-btn--github"
+            onClick={openGithubLogin}
+            type="button"
+          >
+            <KindrawIcon name="github" size={18} /> Continuar com GitHub
+          </button>
+          <a className="kindraw-ghostlink" href="/public">
+            Explorar sem conta
+          </a>
+          <small>
+            Usamos seu GitHub apenas para login e presença em sessões ao vivo.
+          </small>
           {errorMessage ? (
             <p className="kindraw-error-copy">{errorMessage}</p>
           ) : null}
@@ -754,138 +1294,168 @@ export const KindrawApp = () => {
     );
   }
 
+  const currentFolderId =
+    route.kind === "workspace" && !sharedView ? route.folderId : null;
+  const itemCounts = countItemsByFolder(tree.items);
+  const publicLinksCount = tree.items.filter(
+    (item) => item.shareLinks.length > 0,
+  ).length;
+  const isWorkspaceRoute = route.kind === "workspace";
+
   return (
     <div className="kindraw-shell">
       <header className="kindraw-topbar">
-        <div className="kindraw-topbar__brand">
-          <a href="/">Kindraw</a>
-          <span>workspace autenticado</span>
+        <a className="kindraw-topbar__logo" href="/">
+          <span className="kindraw-logomark">
+            <KindrawIcon name="pen" size={15} strokeWidth={2.1} />
+          </span>
+          Kindraw
+        </a>
+        <div className="kindraw-search">
+          <KindrawIcon name="search" size={15} />
+          <input
+            onChange={(event) => setSearchQuery(event.target.value)}
+            placeholder="Buscar drawings, docs e híbridos…"
+            ref={searchInputRef}
+            type="search"
+            value={searchQuery}
+          />
+          <kbd className="kindraw-kbd">⌘K</kbd>
         </div>
-        <div className="kindraw-topbar__session">
-          <div className="kindraw-topbar__user">
-            {session.user.avatarUrl ? (
-              <img alt={session.user.name} src={session.user.avatarUrl} />
-            ) : (
-              <span className="kindraw-avatar-fallback">
-                {session.user.name.charAt(0).toUpperCase()}
+        <KindrawMenuWrap
+          button={
+            <button
+              aria-expanded={avatarMenuOpen}
+              className="kindraw-userbutton"
+              onClick={() => setAvatarMenuOpen(!avatarMenuOpen)}
+              type="button"
+            >
+              {session.user.avatarUrl ? (
+                <img alt={session.user.name} src={session.user.avatarUrl} />
+              ) : (
+                <span className="kindraw-avatar-fallback">
+                  {session.user.name.charAt(0).toUpperCase()}
+                </span>
+              )}
+              <span>
+                <strong>{session.user.name}</strong>
+                <span>@{session.user.githubLogin}</span>
               </span>
-            )}
-            <div>
-              <strong>{session.user.name}</strong>
-              <span>@{session.user.githubLogin}</span>
-            </div>
+            </button>
+          }
+          onClose={() => setAvatarMenuOpen(false)}
+          open={avatarMenuOpen}
+        >
+          <div className="kindraw-menu__header">
+            <strong>{session.user.name}</strong>
+            <span>@{session.user.githubLogin}</span>
           </div>
           <button
-            className="kindraw-link-button"
+            className="kindraw-menu__item"
             disabled={isMutating}
-            onClick={() => void handleLogout()}
+            onClick={() => {
+              setAvatarMenuOpen(false);
+              void handleLogout();
+            }}
+            role="menuitem"
             type="button"
           >
             Sair
           </button>
-        </div>
+        </KindrawMenuWrap>
       </header>
 
       <div className="kindraw-shell__body">
         <aside className="kindraw-sidebar">
-          <div className="kindraw-sidebar__section">
-            <div className="kindraw-sidebar__header">
-              <h2>Pastas</h2>
-              <button
-                className="kindraw-link-button"
-                onClick={() =>
-                  void handleCreateFolder(
-                    route.kind === "workspace" ? route.folderId : null,
-                  )
-                }
-                type="button"
-              >
-                +
-              </button>
-            </div>
-            <button
-              className={`kindraw-tree__button${
-                route.kind === "workspace" && route.folderId === null
-                  ? " kindraw-tree__button--active"
-                  : ""
-              }`}
-              onClick={() => navigateKindraw("/")}
-              type="button"
-            >
-              Raiz
-            </button>
-            <FolderTree
-              currentFolderId={
-                route.kind === "workspace" ? route.folderId : null
-              }
-              folders={tree.folders}
-              parentId={null}
-            />
-          </div>
-          <div className="kindraw-sidebar__section">
-            <div className="kindraw-sidebar__header">
-              <h2>Criar</h2>
-            </div>
-            <div className="kindraw-action-grid">
-              <button
-                className="kindraw-button kindraw-button--secondary"
-                onClick={() =>
-                  void handleCreateItem(
-                    "drawing",
-                    route.kind === "workspace" ? route.folderId : null,
-                  )
-                }
-                type="button"
-              >
-                Drawing
-              </button>
-              <button
-                className="kindraw-button kindraw-button--secondary"
-                onClick={() =>
-                  void handleCreateItem(
-                    "doc",
-                    route.kind === "workspace" ? route.folderId : null,
-                  )
-                }
-                type="button"
-              >
-                Markdown
-              </button>
-              <button
-                className="kindraw-button kindraw-button--secondary"
-                onClick={() =>
-                  void handleCreateHybridItem(
-                    route.kind === "workspace" ? route.folderId : null,
-                  )
-                }
-                type="button"
-              >
-                Hibrido
-              </button>
-            </div>
-          </div>
-          {errorMessage ? (
-            <p className="kindraw-error-copy">{errorMessage}</p>
-          ) : null}
+          <div className="kindraw-sidebar__label">Workspace</div>
+          <button
+            className={`kindraw-tree__button${
+              isWorkspaceRoute && !sharedView && route.folderId === null
+                ? " kindraw-tree__button--active"
+                : ""
+            }`}
+            onClick={() => navigateToFolder(null)}
+            type="button"
+          >
+            <KindrawIcon name="home" size={16} />
+            <span className="kindraw-tree__label">Biblioteca</span>
+          </button>
+          <FolderTree
+            currentFolderId={currentFolderId}
+            folders={tree.folders}
+            itemCounts={itemCounts}
+            onNavigate={(folderId) => navigateToFolder(folderId)}
+            parentId={null}
+          />
+          <button
+            className="kindraw-tree__button kindraw-tree__button--ghost"
+            onClick={() => handleCreateFolder(currentFolderId)}
+            type="button"
+          >
+            <KindrawIcon name="plus" size={15} />
+            <span className="kindraw-tree__label">Nova pasta</span>
+          </button>
+
+          <div className="kindraw-sidebar__label">Compartilhados</div>
+          <button
+            className={`kindraw-tree__button${
+              isWorkspaceRoute && sharedView === "links"
+                ? " kindraw-tree__button--active"
+                : ""
+            }`}
+            onClick={() => openSharedView("links")}
+            type="button"
+          >
+            <KindrawIcon name="link" size={16} />
+            <span className="kindraw-tree__label">Links públicos</span>
+            <em className="kindraw-tree__count">{publicLinksCount}</em>
+          </button>
+          <button
+            className={`kindraw-tree__button${
+              isWorkspaceRoute && sharedView === "live"
+                ? " kindraw-tree__button--active"
+                : ""
+            }`}
+            onClick={() => openSharedView("live")}
+            type="button"
+          >
+            <KindrawIcon name="users" size={16} />
+            <span className="kindraw-tree__label">Sessões ao vivo</span>
+          </button>
         </aside>
 
-        <main className="kindraw-main">
+        <main
+          className={`kindraw-main${
+            route.kind === "drawing" ||
+            route.kind === "doc" ||
+            route.kind === "hybrid"
+              ? " kindraw-main--editor"
+              : ""
+          }`}
+        >
+          {errorMessage ? (
+            <p className="kindraw-error-banner">{errorMessage}</p>
+          ) : null}
           {route.kind === "workspace" ? (
             <WorkspacePage
-              currentFolderId={route.folderId}
+              currentFolderId={currentFolderId}
               onCreateHybridItem={handleCreateHybridItem}
               onCreateFolder={handleCreateFolder}
               onCreateItem={handleCreateItem}
               onDeleteHybridItem={handleDeleteHybridItem}
               onDeleteFolder={handleDeleteFolder}
               onDeleteItem={handleDeleteItem}
+              onNavigateFolder={navigateToFolder}
               onRenameHybridItem={handleRenameHybridItem}
               onRenameFolder={handleRenameFolder}
               onRenameItem={handleRenameItem}
+              searchQuery={searchQuery}
+              sharedView={sharedView}
               tree={tree}
             />
           ) : route.kind === "hybrid" ? (
             <HybridEditorPage
+              folders={tree.folders}
               hybridId={route.hybridId}
               initialSectionId={route.sectionId}
               initialView={route.view}
@@ -894,11 +1464,13 @@ export const KindrawApp = () => {
             />
           ) : route.kind === "drawing" ? (
             <DrawingEditorPage
+              folders={tree.folders}
               itemId={route.itemId}
               onTreeRefresh={refreshTree}
             />
           ) : route.kind === "doc" ? (
             <DocEditorPage
+              folders={tree.folders}
               itemId={route.itemId}
               itemsById={itemsById}
               onTreeRefresh={refreshTree}
@@ -906,6 +1478,16 @@ export const KindrawApp = () => {
           ) : null}
         </main>
       </div>
+
+      {dialog ? (
+        <KindrawDialogModal
+          dialog={dialog}
+          key={
+            dialog.title + (dialog.type === "prompt" ? dialog.initialValue : "")
+          }
+          onClose={closeDialog}
+        />
+      ) : null}
     </div>
   );
 };

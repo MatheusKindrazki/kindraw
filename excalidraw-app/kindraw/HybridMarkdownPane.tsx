@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import { KindrawIcon } from "./icons";
 import { MarkdownPreview } from "./MarkdownPreview";
 import {
   buildKindrawSectionLink,
@@ -15,6 +16,7 @@ type HybridMarkdownPaneProps = {
   itemsById: Record<string, KindrawItem>;
   activeSectionId: string | null;
   canLinkSelection: boolean;
+  linkedSectionIds?: ReadonlySet<string>;
   onMarkdownChange: (nextMarkdown: string) => void;
   onNavigate: (pathname: string) => void;
   onOpenCanvas: (sectionId: string) => void;
@@ -22,12 +24,15 @@ type HybridMarkdownPaneProps = {
   onStatusMessage: (message: string) => void;
 };
 
+const formatSectionNumber = (value: number) => String(value).padStart(2, "0");
+
 export const HybridMarkdownPane = ({
   hybridId,
   markdown,
   itemsById,
   activeSectionId,
   canLinkSelection,
+  linkedSectionIds,
   onMarkdownChange,
   onNavigate,
   onOpenCanvas,
@@ -63,11 +68,17 @@ export const HybridMarkdownPane = ({
     setDraftMarkdown(section?.markdown || "");
   }, [editingSectionId, sections]);
 
+  let sectionNumber = 0;
+
   return (
     <div className="kindraw-hybrid-doc">
       {sections.map((section) => {
         const isEditing = editingSectionId === section.id;
         const isActive = activeSectionId === section.id;
+        const isLinked = linkedSectionIds?.has(section.id) || false;
+        if (!section.isIntro) {
+          sectionNumber += 1;
+        }
 
         return (
           <article
@@ -81,37 +92,44 @@ export const HybridMarkdownPane = ({
             }}
           >
             <div className="kindraw-hybrid-doc__section-header">
-              <div>
-                <span className="kindraw-eyebrow">
-                  {section.isIntro ? "Intro" : `Secao ${section.id}`}
+              <div className="kindraw-hybrid-doc__section-heading">
+                <span className="kindraw-hybrid-doc__eyebrow">
+                  {section.isIntro
+                    ? "Intro"
+                    : `Seção ${formatSectionNumber(sectionNumber)}`}
                 </span>
                 <h3>{section.title}</h3>
+                {isLinked ? (
+                  <span className="kindraw-sectionchip">
+                    <KindrawIcon name="link" size={11} /> vinculada ao canvas
+                  </span>
+                ) : null}
               </div>
-              <div className="kindraw-inline-actions">
+              <div className="kindraw-hybrid-doc__actions">
                 <button
-                  className="kindraw-link-button"
+                  className="kindraw-hybrid-doc__action"
                   onClick={() => setEditingSectionId(section.id)}
                   type="button"
                 >
                   Editar
                 </button>
                 <button
-                  className="kindraw-link-button"
+                  className="kindraw-hybrid-doc__action"
                   onClick={() => void onOpenCanvas(section.id)}
                   type="button"
                 >
                   Canvas
                 </button>
                 <button
-                  className="kindraw-link-button"
+                  className="kindraw-hybrid-doc__action"
                   disabled={!canLinkSelection}
                   onClick={() => void onLinkSelection(section.id)}
                   type="button"
                 >
-                  Vincular selecao
+                  Vincular seleção
                 </button>
                 <button
-                  className="kindraw-link-button"
+                  className="kindraw-hybrid-doc__action"
                   onClick={() => {
                     void navigator.clipboard
                       .writeText(buildKindrawSectionLink(hybridId, section.id))
@@ -142,16 +160,16 @@ export const HybridMarkdownPane = ({
                   onChange={(event) => setDraftMarkdown(event.target.value)}
                   value={draftMarkdown}
                 />
-                <div className="kindraw-inline-actions">
+                <div className="kindraw-hybrid-doc__editor-actions">
                   <button
-                    className="kindraw-button kindraw-button--secondary"
+                    className="kindraw-btn kindraw-btn--soft kindraw-btn--sm"
                     onClick={() => setEditingSectionId(null)}
                     type="button"
                   >
                     Cancelar
                   </button>
                   <button
-                    className="kindraw-button"
+                    className="kindraw-btn kindraw-btn--primary kindraw-btn--sm"
                     onClick={() => {
                       onMarkdownChange(
                         replaceHybridMarkdownSection(
@@ -165,7 +183,7 @@ export const HybridMarkdownPane = ({
                     }}
                     type="button"
                   >
-                    Salvar secao
+                    Salvar seção
                   </button>
                 </div>
               </div>

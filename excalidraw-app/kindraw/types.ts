@@ -71,6 +71,8 @@ export type KindrawItem = {
   collaborationRoomId: string | null;
   collaborationEnabledAt: string | null;
   hybrid?: KindrawHybridMetadata | null;
+  /** Preview do conteúdo gerado no autosave (geração ainda não implementada). */
+  thumbnailUrl?: string | null;
 };
 
 export type KindrawHybridItem = {
@@ -86,6 +88,8 @@ export type KindrawHybridItem = {
   defaultView: KindrawHybridView;
   docItemId: string;
   drawingItemId: string;
+  /** Preview do conteúdo gerado no autosave (geração ainda não implementada). */
+  thumbnailUrl?: string | null;
 };
 
 export type KindrawTreeItem = KindrawItem | KindrawHybridItem;

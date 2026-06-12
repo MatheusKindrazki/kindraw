@@ -8,45 +8,33 @@ import {
 import CodeMirrorEditor from "@excalidraw/excalidraw/components/TTDDialog/CodeMirrorEditor";
 
 import {
-  buildPublicShareUrl,
   createShareLink,
   getItem,
   revokeShareLink,
   updateItemContent,
   updateItemMeta,
 } from "./api";
+import { KindrawIcon } from "./icons";
 import { MarkdownPreview } from "./MarkdownPreview";
 import { buildFolderPath, buildHybridPath, navigateKindraw } from "./router";
 import { ShareLinksPanel } from "./ShareLinksPanel";
 import { getKindrawDraft, setKindrawDraft } from "./storage";
 import { getErrorMessage, isDraftNewer } from "./utils";
 
-import type { KindrawItem, KindrawItemResponse } from "./types";
-
-const copyToClipboard = async (value: string) => {
-  if (!navigator.clipboard) {
-    return false;
-  }
-
-  try {
-    await navigator.clipboard.writeText(value);
-    return true;
-  } catch (error) {
-    console.warn("Failed to copy Kindraw share link:", error);
-    return false;
-  }
-};
+import type { KindrawFolder, KindrawItem, KindrawItemResponse } from "./types";
 
 type DocEditorPageProps = {
   itemId: string;
   itemsById: Record<string, KindrawItem>;
   onTreeRefresh: () => Promise<void> | void;
+  folders?: KindrawFolder[];
 };
 
 export const DocEditorPage = ({
   itemId,
   itemsById,
   onTreeRefresh,
+  folders,
 }: DocEditorPageProps) => {
   const [itemResponse, setItemResponse] = useState<KindrawItemResponse | null>(
     null,
@@ -191,8 +179,6 @@ export const DocEditorPage = ({
   const handleCreateShareLink = useCallback(async () => {
     try {
       const response = await createShareLink(itemId);
-      const publicUrl = buildPublicShareUrl(response.shareLink.token);
-      const copied = await copyToClipboard(publicUrl);
       setItemResponse((current) =>
         current
           ? {
@@ -204,9 +190,7 @@ export const DocEditorPage = ({
             }
           : current,
       );
-      setStatusMessage(
-        copied ? "Link publico criado e copiado." : "Link publico criado.",
-      );
+      setStatusMessage("Link publico criado.");
       await onTreeRefresh();
     } catch (error) {
       setStatusMessage(getErrorMessage(error, "Falha ao criar link publico."));
@@ -256,37 +240,56 @@ export const DocEditorPage = ({
   }
 
   const hybridMeta = itemResponse.item.hybrid || null;
+  const folderName =
+    folders?.find((folder) => folder.id === itemResponse.item.folderId)?.name ||
+    "Biblioteca";
 
   return (
     <div className="kindraw-editor-shell">
       <header className="kindraw-editor-header">
         <div className="kindraw-editor-header__leading">
           <button
-            className="kindraw-link-button"
+            aria-label="Voltar para a pasta"
+            className="kindraw-iconbtn"
             onClick={() =>
               navigateKindraw(buildFolderPath(itemResponse.item.folderId))
             }
             type="button"
           >
-            Voltar
+            <KindrawIcon name="back" size={17} />
           </button>
-          <input
-            className="kindraw-title-input"
-            onBlur={() => void commitTitle()}
-            onChange={(event) => setTitle(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") {
-                event.currentTarget.blur();
-              }
-            }}
-            type="text"
-            value={title}
-          />
+          <span className="kindraw-editor-crumb">{folderName} /</span>
+          <div className="kindraw-editor-title">
+            <input
+              aria-label="Titulo do documento"
+              className="kindraw-editor-title__input"
+              onBlur={() => void commitTitle()}
+              onChange={(event) => setTitle(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.currentTarget.blur();
+                }
+              }}
+              size={Math.min(Math.max(title.length, 4), 48)}
+              type="text"
+              value={title}
+            />
+            <KindrawIcon name="pen" size={13} />
+          </div>
         </div>
-        <div className="kindraw-editor-header__status">
+        <div className="kindraw-editor-header__trailing">
+          <span
+            className={`kindraw-pill kindraw-pill--${
+              saveState === "idle" ? "ok" : saveState
+            }`}
+            title={statusMessage}
+          >
+            <i />
+            <span>{statusMessage}</span>
+          </span>
           {hybridMeta ? (
             <button
-              className="kindraw-link-button"
+              className="kindraw-btn kindraw-btn--ghost kindraw-btn--sm"
               onClick={() =>
                 navigateKindraw(
                   buildHybridPath(hybridMeta.hybridId, {
@@ -296,42 +299,38 @@ export const DocEditorPage = ({
               }
               type="button"
             >
-              Abrir híbrido
+              <KindrawIcon name="hybrid" size={15} /> Abrir híbrido
             </button>
           ) : null}
-          <span
-            className={`kindraw-status-pill kindraw-status-pill--${saveState}`}
-          >
-            {statusMessage}
-          </span>
+          <ShareLinksPanel
+            busy={saveState === "saving"}
+            onCreateShareLink={handleCreateShareLink}
+            onRevokeShareLink={handleRevokeShareLink}
+            shareLinks={itemResponse.item.shareLinks}
+          />
         </div>
       </header>
 
-      <div className="kindraw-doc-layout">
-        <section className="kindraw-doc-layout__editor">
-          <CodeMirrorEditor
-            onChange={setMarkdown}
-            placeholder="Escreva em Markdown..."
-            theme="light"
-            value={markdown}
-          />
-        </section>
-        <section className="kindraw-doc-layout__preview">
-          <MarkdownPreview
-            emptyMessage="Comece escrevendo para ver o preview."
-            itemsById={itemsById}
-            markdown={deferredMarkdown}
-            onNavigate={(pathname) => navigateKindraw(pathname)}
-          />
-        </section>
+      <div className="kindraw-editor-body kindraw-editor-body--doc">
+        <div className="kindraw-doc-layout">
+          <section className="kindraw-doc-layout__editor">
+            <CodeMirrorEditor
+              onChange={setMarkdown}
+              placeholder="Escreva em Markdown..."
+              theme="light"
+              value={markdown}
+            />
+          </section>
+          <section className="kindraw-doc-layout__preview">
+            <MarkdownPreview
+              emptyMessage="Comece escrevendo para ver o preview."
+              itemsById={itemsById}
+              markdown={deferredMarkdown}
+              onNavigate={(pathname) => navigateKindraw(pathname)}
+            />
+          </section>
+        </div>
       </div>
-
-      <ShareLinksPanel
-        busy={saveState === "saving"}
-        onCreateShareLink={handleCreateShareLink}
-        onRevokeShareLink={handleRevokeShareLink}
-        shareLinks={itemResponse.item.shareLinks}
-      />
     </div>
   );
 };

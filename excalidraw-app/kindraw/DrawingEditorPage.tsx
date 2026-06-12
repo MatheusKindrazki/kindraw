@@ -2,43 +2,33 @@ import { useCallback, useEffect, useState, startTransition } from "react";
 import { Excalidraw, serializeAsJSON } from "@excalidraw/excalidraw";
 
 import {
-  buildPublicShareUrl,
   createShareLink,
+  disableCollaborationRoom,
+  enableCollaborationRoom,
   getItem,
   revokeShareLink,
   updateItemContent,
   updateItemMeta,
 } from "./api";
 import { parseDrawingContent } from "./content";
+import { KindrawIcon } from "./icons";
 import { buildFolderPath, buildHybridPath, navigateKindraw } from "./router";
 import { ShareLinksPanel } from "./ShareLinksPanel";
 import { getKindrawDraft, setKindrawDraft } from "./storage";
 import { getErrorMessage, isDraftNewer } from "./utils";
 
-import type { KindrawItemResponse } from "./types";
-
-const copyToClipboard = async (value: string) => {
-  if (!navigator.clipboard) {
-    return false;
-  }
-
-  try {
-    await navigator.clipboard.writeText(value);
-    return true;
-  } catch (error) {
-    console.warn("Failed to copy Kindraw share link:", error);
-    return false;
-  }
-};
+import type { KindrawFolder, KindrawItemResponse } from "./types";
 
 type DrawingEditorPageProps = {
   itemId: string;
   onTreeRefresh: () => Promise<void> | void;
+  folders?: KindrawFolder[];
 };
 
 export const DrawingEditorPage = ({
   itemId,
   onTreeRefresh,
+  folders,
 }: DrawingEditorPageProps) => {
   const [itemResponse, setItemResponse] = useState<KindrawItemResponse | null>(
     null,
@@ -182,8 +172,6 @@ export const DrawingEditorPage = ({
   const handleCreateShareLink = useCallback(async () => {
     try {
       const response = await createShareLink(itemId);
-      const publicUrl = buildPublicShareUrl(response.shareLink.token);
-      const copied = await copyToClipboard(publicUrl);
       setItemResponse((current) =>
         current
           ? {
@@ -195,9 +183,7 @@ export const DrawingEditorPage = ({
             }
           : current,
       );
-      setStatusMessage(
-        copied ? "Link publico criado e copiado." : "Link publico criado.",
-      );
+      setStatusMessage("Link publico criado.");
       await onTreeRefresh();
     } catch (error) {
       setStatusMessage(getErrorMessage(error, "Falha ao criar link publico."));
@@ -229,6 +215,53 @@ export const DrawingEditorPage = ({
     [onTreeRefresh],
   );
 
+  const handleToggleLiveSession = useCallback(async () => {
+    if (!itemResponse) {
+      return;
+    }
+
+    try {
+      if (itemResponse.collaborationRoom) {
+        await disableCollaborationRoom(itemId);
+        setItemResponse((current) =>
+          current
+            ? {
+                ...current,
+                item: {
+                  ...current.item,
+                  collaborationRoomId: null,
+                  collaborationEnabledAt: null,
+                },
+                collaborationRoom: null,
+              }
+            : current,
+        );
+        setStatusMessage("Sessao ao vivo encerrada.");
+      } else {
+        const response = await enableCollaborationRoom(itemId);
+        setItemResponse((current) =>
+          current
+            ? {
+                ...current,
+                item: {
+                  ...current.item,
+                  collaborationRoomId: response.collaborationRoom.roomId,
+                  collaborationEnabledAt: response.collaborationRoom.enabledAt,
+                },
+                collaborationRoom: response.collaborationRoom,
+              }
+            : current,
+        );
+        setStatusMessage("Sessao ao vivo ativa.");
+      }
+      await onTreeRefresh();
+    } catch (error) {
+      setStatusMessage(
+        getErrorMessage(error, "Falha ao alternar a sessao ao vivo."),
+      );
+    }
+  }, [itemId, itemResponse, onTreeRefresh]);
+
   if (errorMessage) {
     return (
       <div className="kindraw-empty-state">
@@ -247,37 +280,57 @@ export const DrawingEditorPage = ({
   }
 
   const hybridMeta = itemResponse.item.hybrid || null;
+  const liveSessionActive = Boolean(itemResponse.collaborationRoom);
+  const folderName =
+    folders?.find((folder) => folder.id === itemResponse.item.folderId)?.name ||
+    "Biblioteca";
 
   return (
     <div className="kindraw-editor-shell">
       <header className="kindraw-editor-header">
         <div className="kindraw-editor-header__leading">
           <button
-            className="kindraw-link-button"
+            aria-label="Voltar para a pasta"
+            className="kindraw-iconbtn"
             onClick={() =>
               navigateKindraw(buildFolderPath(itemResponse.item.folderId))
             }
             type="button"
           >
-            Voltar
+            <KindrawIcon name="back" size={17} />
           </button>
-          <input
-            className="kindraw-title-input"
-            onBlur={() => void commitTitle()}
-            onChange={(event) => setTitle(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") {
-                event.currentTarget.blur();
-              }
-            }}
-            type="text"
-            value={title}
-          />
+          <span className="kindraw-editor-crumb">{folderName} /</span>
+          <div className="kindraw-editor-title">
+            <input
+              aria-label="Titulo do drawing"
+              className="kindraw-editor-title__input"
+              onBlur={() => void commitTitle()}
+              onChange={(event) => setTitle(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.currentTarget.blur();
+                }
+              }}
+              size={Math.min(Math.max(title.length, 4), 48)}
+              type="text"
+              value={title}
+            />
+            <KindrawIcon name="pen" size={13} />
+          </div>
         </div>
-        <div className="kindraw-editor-header__status">
+        <div className="kindraw-editor-header__trailing">
+          <span
+            className={`kindraw-pill kindraw-pill--${
+              saveState === "idle" ? "ok" : saveState
+            }`}
+            title={statusMessage}
+          >
+            <i />
+            <span>{statusMessage}</span>
+          </span>
           {hybridMeta ? (
             <button
-              className="kindraw-link-button"
+              className="kindraw-btn kindraw-btn--ghost kindraw-btn--sm"
               onClick={() =>
                 navigateKindraw(
                   buildHybridPath(hybridMeta.hybridId, {
@@ -287,18 +340,35 @@ export const DrawingEditorPage = ({
               }
               type="button"
             >
-              Abrir híbrido
+              <KindrawIcon name="hybrid" size={15} /> Abrir híbrido
             </button>
           ) : null}
-          <span
-            className={`kindraw-status-pill kindraw-status-pill--${saveState}`}
+          <button
+            className={`kindraw-btn kindraw-btn--soft${
+              liveSessionActive ? " kindraw-btn--live-on" : ""
+            }`}
+            onClick={() => void handleToggleLiveSession()}
+            title={
+              liveSessionActive
+                ? "Encerrar a sessão ao vivo"
+                : "Iniciar uma sessão ao vivo"
+            }
+            type="button"
           >
-            {statusMessage}
-          </span>
+            <KindrawIcon name="users" size={16} /> Sessão ao vivo
+          </button>
+          <ShareLinksPanel
+            busy={saveState === "saving"}
+            liveSessionActive={liveSessionActive}
+            onCreateShareLink={handleCreateShareLink}
+            onRevokeShareLink={handleRevokeShareLink}
+            onToggleLiveSession={handleToggleLiveSession}
+            shareLinks={itemResponse.item.shareLinks}
+          />
         </div>
       </header>
 
-      <div className="kindraw-drawing-stage">
+      <div className="kindraw-editor-canvas">
         <Excalidraw
           initialData={parseDrawingContent(initialContent)}
           onChange={(elements, appState, files) => {
@@ -308,13 +378,6 @@ export const DrawingEditorPage = ({
           }}
         />
       </div>
-
-      <ShareLinksPanel
-        busy={saveState === "saving"}
-        onCreateShareLink={handleCreateShareLink}
-        onRevokeShareLink={handleRevokeShareLink}
-        shareLinks={itemResponse.item.shareLinks}
-      />
     </div>
   );
 };

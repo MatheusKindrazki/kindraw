@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from "react";
 
 import ExcalidrawApp from "./App";
+import { KindrawApp } from "./kindraw/KindrawApp";
 import {
   KindrawDocScreen,
   KindrawHybridScreen,
@@ -19,6 +20,10 @@ const RootApp = () => {
     getLocationPathname,
   );
   const route = matchKindrawRoute(pathname);
+
+  if (route.kind === "workspace") {
+    return <KindrawApp />;
+  }
 
   if (route.kind === "doc") {
     return <KindrawDocScreen itemId={route.itemId} />;
