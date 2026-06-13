@@ -801,6 +801,8 @@
       "tabWorkspace": "Workspace",
       "tabInsert": "Insert",
       "tabsAria": "Sidebar sections",
+      "backToLibrary": "Library",
+      "backToLibraryAria": "Go to your library",
       "loadingWorkspace": "Loading workspace...",
       "loadingWorkspaceTree": "Loading workspace tree...",
       "guestTitle": "Sign in to sync your canvases",
