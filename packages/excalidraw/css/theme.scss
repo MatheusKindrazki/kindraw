@@ -79,17 +79,17 @@
   --space-factor: 0.25rem;
   --text-primary-color: var(--color-on-surface);
 
-  /* Kindraw playful identity — coral/tangerine primary (anti-purple) */
-  --color-selection: #ff6b4a;
+  /* Kindraw "Ateliê" identity — amber primary over warm paper (anti-purple) */
+  --color-selection: #c9963f;
 
   --color-icon-white: #fff;
 
-  --color-primary: #ff6b4a;
-  --color-primary-darker: #e8482a;
-  --color-primary-darkest: #c83a1f;
-  --color-primary-light: #ffe2d9;
-  --color-primary-light-darker: #ffd1c4;
-  --color-primary-hover: #f4583a;
+  --color-primary: #c9963f;
+  --color-primary-darker: #a8791f;
+  --color-primary-darkest: #7a5414;
+  --color-primary-light: #f1e6cf;
+  --color-primary-light-darker: #f5e7c8;
+  --color-primary-hover: #b8852e;
 
   --color-gray-10: #f5f5f5;
   --color-gray-20: #ebebeb;
@@ -143,9 +143,9 @@
   --color-success-contrast-hover: #6bcf70;
   --color-success-contrast-active: #6edf74;
 
-  --color-logo-icon: #ffffff;
-  --color-logo-surface: #ff6b4a;
-  --color-logo-text: #2b2620;
+  --color-logo-icon: #c9963f;
+  --color-logo-surface: #20283a;
+  --color-logo-text: #20283a;
 
   /* playful: cantos mais arredondados, linguagem toy */
   --border-radius-md: 0.625rem;
@@ -157,10 +157,10 @@
   --color-surface-low: #efe7d6;
   --color-surface-lowest: #fffdf8;
   --color-on-surface: #2b2620;
-  --color-brand-hover: #f4583a;
-  --color-on-primary-container: #7a2410;
-  --color-surface-primary-container: #ffe2d9;
-  --color-brand-active: #c83a1f;
+  --color-brand-hover: #b8852e;
+  --color-on-primary-container: #7a5414;
+  --color-surface-primary-container: #f1e6cf;
+  --color-brand-active: #7a5414;
   --color-border-outline: #b7a98f;
   --color-border-outline-variant: #e7ddca;
 
@@ -229,19 +229,19 @@
 
     --color-slider-track: hsl(244, 23%, 39%);
 
-    // Kindraw playful: coral accent for dark mode (NOT purple).
+    // Kindraw "Ateliê": amber accent for dark mode (NOT purple, NOT coral).
     // The chrome (toolbar/panels) does NOT get the invert filter, so these
-    // values render as authored — keep them coral, not the old purple.
-    --color-selection: #ff7a59;
+    // values render as authored — keep them amber, not the old coral.
+    --color-selection: #dcb15f;
 
     --color-icon-white: var(--color-gray-90);
 
-    --color-primary: #ff8a6e;
-    --color-primary-darker: #ff9c84;
-    --color-primary-darkest: #ffb09b;
-    --color-primary-light: #4a342c;
-    --color-primary-light-darker: #3d2b24;
-    --color-primary-hover: #ff9c84;
+    --color-primary: #dcb15f;
+    --color-primary-darker: #e6c37e;
+    --color-primary-darkest: #f0d59d;
+    --color-primary-light: #3d3119;
+    --color-primary-light-darker: #2f2613;
+    --color-primary-hover: #e6c37e;
 
     --color-disabled: var(--color-gray-70);
 
@@ -269,7 +269,8 @@
     --color-muted-background: var(--color-gray-40);
     --color-muted-background-darker: var(--color-gray-20);
 
-    --color-logo-surface: #ff6b4a;
+    --color-logo-icon: #dcb15f;
+    --color-logo-surface: #20283a;
     --color-logo-text: #fff4ee;
 
     --color-surface-high: #2c2926;

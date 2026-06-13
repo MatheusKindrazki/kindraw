@@ -1,8 +1,8 @@
 @import "../packages/excalidraw/css/variables.module.scss";
 
 .excalidraw {
-  // Kindraw playful identity: warm coral, Bricolage Grotesque UI font
-  --color-primary-contrast-offset: #f4583a; // coral, offsets Chubb illusion
+  // Kindraw "Ateliê" identity: warm amber, Bricolage Grotesque UI font
+  --color-primary-contrast-offset: #b8852e; // amber, offsets Chubb illusion
   --ui-font: "Bricolage Grotesque", system-ui, BlinkMacSystemFont, -apple-system,
     "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   // display font for logo + headings (characterful, not hand-drawn)
@@ -17,7 +17,7 @@
   }
 
   &.theme--dark {
-    --color-primary-contrast-offset: #ff8a6e; // coral light for dark mode
+    --color-primary-contrast-offset: #e6c37e; // amber light for dark mode
   }
 
   .footer-center {
