@@ -5,30 +5,28 @@
   viewBox="0 0 1200 675"
   fill="none"
 >
-  <rect width="1200" height="675" rx="48" fill="#FCFBFF" />
-  <circle cx="1082" cy="96" r="138" fill="#EEE9FF" />
-  <circle cx="132" cy="612" r="124" fill="#F2EEFF" />
+  <rect width="1200" height="675" rx="48" fill="#FAF6EF" />
+  <circle cx="1082" cy="96" r="138" fill="#F1E6CF" />
+  <circle cx="132" cy="612" r="124" fill="#F5E7C8" />
   <rect
     x="122"
-    y="174"
+    y="158"
     width="124"
     height="124"
     rx="32"
-    fill="#F4F1FF"
-    stroke="#6C63FF"
-    stroke-width="16"
+    fill="#20283A"
   />
   <path
-    d="M164 205V267M175 236L219 200M175 236L219 272"
-    stroke="#6C63FF"
+    d="M162 188V252M174 220L218 184M174 220L218 256"
+    stroke="#C9963F"
     stroke-width="18"
     stroke-linecap="round"
     stroke-linejoin="round"
   />
   <text
     x="286"
-    y="259"
-    fill="#201453"
+    y="243"
+    fill="#20283A"
     font-size="104"
     font-family="Helvetica, Arial, sans-serif"
     font-weight="700"
@@ -38,18 +36,18 @@
   </text>
   <text
     x="122"
-    y="410"
-    fill="#3F4670"
-    font-size="40"
+    y="408"
+    fill="#4A4434"
+    font-size="37"
     font-family="Helvetica, Arial, sans-serif"
   >
     A free multi-canvas workspace for diagrams and visual thinking.
   </text>
   <text
     x="122"
-    y="464"
-    fill="#3F4670"
-    font-size="40"
+    y="460"
+    fill="#8A7E63"
+    font-size="37"
     font-family="Helvetica, Arial, sans-serif"
   >
     Organize, share, and collaborate in realtime with Kindraw.

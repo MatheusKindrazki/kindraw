@@ -245,8 +245,8 @@ export default defineConfig(({ mode }) => {
           start_url: "/",
           id: "kindraw",
           display: "standalone",
-          theme_color: "#121212",
-          background_color: "#ffffff",
+          theme_color: "#20283a",
+          background_color: "#faf6ef",
           file_handlers: [
             {
               action: "/",
@@ -310,6 +310,8 @@ export default defineConfig(({ mode }) => {
         minify: true,
       }),
     ],
-    publicDir: "../public",
+    // Static branding assets (favicon, app icons, og-image, screenshots) live
+    // in packages/public — Vite copies this dir to the build root as-is.
+    publicDir: "../packages/public",
   };
 });
