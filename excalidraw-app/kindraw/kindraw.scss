@@ -1865,24 +1865,28 @@
   overflow: hidden;
 }
 
-.kindraw-rte__toolbar {
+/* ── Menus flutuantes (headless, estilo Outline) ─────────── */
+.kindraw-rte__bubble,
+.kindraw-rte__floating {
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
   gap: 2px;
-  padding: 8px 10px;
-  border-bottom: 1px solid var(--kd-line-soft);
-  background: var(--kd-surface-warm);
+  padding: 4px;
+  border: 1px solid var(--kd-line);
+  border-radius: 10px;
+  background: var(--kd-surface);
+  box-shadow: var(--kd-shadow-popover);
+  z-index: 40;
 }
 
-.kindraw-rte__sep {
+.kindraw-rte__menu-sep {
   width: 1px;
   align-self: stretch;
-  margin: 2px 6px;
+  margin: 2px 4px;
   background: var(--kd-line);
 }
 
-.kindraw-rte__tool {
+.kindraw-rte__menu-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1890,7 +1894,7 @@
   height: 30px;
   padding: 0 8px;
   border: none;
-  border-radius: 8px;
+  border-radius: 7px;
   background: transparent;
   color: var(--kd-ink-soft);
   font-family: var(--kd-font);
@@ -1900,18 +1904,13 @@
   transition: background 0.12s ease, color 0.12s ease;
 }
 
-.kindraw-rte__tool:hover {
+.kindraw-rte__menu-btn:hover {
   background: var(--kd-hover);
 }
 
-.kindraw-rte__tool--active {
+.kindraw-rte__menu-btn--active {
   background: var(--kd-amber-soft);
   color: var(--kd-amber-deep);
-}
-
-.kindraw-rte__tool:disabled {
-  opacity: 0.5;
-  cursor: default;
 }
 
 .kindraw-rte__surface {
