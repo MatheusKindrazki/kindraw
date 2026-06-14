@@ -361,6 +361,17 @@
   opacity: 0.7;
 }
 
+.kindraw-kbd--button {
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  transition: opacity 0.12s ease;
+}
+
+.kindraw-kbd--button:hover {
+  opacity: 1;
+}
+
 /* Logomark — quadrado navy com caneta âmbar (placeholder do logo oficial) */
 .kindraw-logomark {
   width: 28px;
@@ -485,6 +496,167 @@
   color: var(--kd-muted);
   font-size: 13.5px;
   text-align: center;
+}
+
+/* ─────────────────────────────────────────────────────────
+   Command palette (⌘K) — busca global flutuante
+   ───────────────────────────────────────────────────────── */
+.kindraw-cmdk-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(32, 40, 58, 0.34);
+  animation: kindraw-cmdk-fade 0.12s ease;
+}
+
+.kindraw-cmdk {
+  width: min(560px, 92vw);
+  margin-top: 12vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--kd-surface);
+  border: 1px solid var(--kd-line);
+  border-radius: var(--kd-r-popover);
+  box-shadow: var(--kd-shadow-popover);
+  font-family: var(--kd-font);
+  overflow: hidden;
+  animation: kindraw-cmdk-pop 0.12s ease;
+}
+
+.kindraw-cmdk__head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--kd-line-soft);
+  color: var(--kd-muted);
+}
+
+.kindraw-cmdk__input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--kd-ink);
+  font-family: var(--kd-font);
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.kindraw-cmdk__input::placeholder {
+  color: var(--kd-faint);
+}
+
+.kindraw-cmdk__list {
+  list-style: none;
+  margin: 0;
+  padding: 6px;
+  max-height: 48vh;
+  overflow-y: auto;
+}
+
+.kindraw-cmdk__item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 10px;
+  border-radius: var(--kd-r-btn);
+  cursor: pointer;
+  color: var(--kd-ink);
+}
+
+.kindraw-cmdk__item--active {
+  background: var(--kd-amber-soft);
+  color: var(--kd-amber-deep);
+}
+
+.kindraw-cmdk__item-icon {
+  display: inline-flex;
+  flex-shrink: 0;
+  color: var(--kd-muted);
+}
+
+.kindraw-cmdk__item--active .kindraw-cmdk__item-icon {
+  color: var(--kd-amber-deep);
+}
+
+.kindraw-cmdk__item-title {
+  flex: 1;
+  min-width: 0;
+  font-size: 13.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.kindraw-cmdk__item .kindraw-kind {
+  flex-shrink: 0;
+}
+
+.kindraw-cmdk__item-folder {
+  flex-shrink: 0;
+  max-width: 140px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--kd-faint);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.kindraw-cmdk__item--active .kindraw-cmdk__item-folder {
+  color: var(--kd-amber-deep);
+  opacity: 0.75;
+}
+
+.kindraw-cmdk__empty {
+  padding: 28px 16px;
+  text-align: center;
+  color: var(--kd-muted);
+  font-size: 13.5px;
+}
+
+.kindraw-cmdk__foot {
+  padding: 9px 16px;
+  border-top: 1px solid var(--kd-line-soft);
+  color: var(--kd-faint);
+  font-size: 11.5px;
+}
+
+@keyframes kindraw-cmdk-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes kindraw-cmdk-pop {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (max-width: 720px) {
+  .kindraw-cmdk {
+    margin-top: 8vh;
+  }
+
+  .kindraw-cmdk__item-folder {
+    max-width: 84px;
+  }
 }
 
 /* ─────────────────────────────────────────────────────────

@@ -47,7 +47,7 @@ import type { KindrawThumbnail } from "./thumbnails";
 
 import "./kindraw.scss";
 
-import type { ReactNode } from "react";
+import type { KeyboardEvent as ReactKeyboardEvent, ReactNode } from "react";
 
 import type { KindrawIconName } from "./icons";
 
@@ -338,6 +338,201 @@ const KindrawDialogModal = ({
           >
             {dialog.confirmLabel}
           </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+/* ────────────────────────────────────────────────────────
+   Command palette (⌘K / Ctrl+K) — busca global no workspace
+   ──────────────────────────────────────────────────────── */
+
+const CMDK_RECENT_LIMIT = 8;
+const CMDK_MAX_RESULTS = 25;
+
+const KindrawCommandPalette = ({
+  open,
+  onClose,
+  items,
+  folders,
+}: {
+  open: boolean;
+  onClose: () => void;
+  items: KindrawTreeItem[];
+  folders: KindrawFolder[];
+}) => {
+  const [query, setQuery] = useState("");
+  const [activeIndex, setActiveIndex] = useState(0);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const listRef = useRef<HTMLUListElement>(null);
+
+  // Reseta busca e seleção sempre que o palette abre; foca o input.
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+    setQuery("");
+    setActiveIndex(0);
+    const id = window.requestAnimationFrame(() => inputRef.current?.focus());
+    return () => window.cancelAnimationFrame(id);
+  }, [open]);
+
+  const normalizedQuery = query.trim().toLowerCase();
+
+  const results = normalizedQuery
+    ? items
+        .filter((item) => item.title.toLowerCase().includes(normalizedQuery))
+        .slice(0, CMDK_MAX_RESULTS)
+    : [...items]
+        .sort(
+          (a, b) =>
+            new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
+        )
+        .slice(0, CMDK_RECENT_LIMIT);
+
+  // Mantém o índice ativo dentro dos limites quando a lista muda.
+  useEffect(() => {
+    setActiveIndex((prev) => {
+      if (results.length === 0) {
+        return 0;
+      }
+      return Math.min(prev, results.length - 1);
+    });
+  }, [results.length]);
+
+  // Faz o item ativo rolar para a vista quando navega via teclado.
+  useEffect(() => {
+    if (!open || !listRef.current) {
+      return;
+    }
+    const node = listRef.current.children[activeIndex] as
+      | HTMLElement
+      | undefined;
+    node?.scrollIntoView({ block: "nearest" });
+  }, [activeIndex, open]);
+
+  if (!open) {
+    return null;
+  }
+
+  const folderNameForItem = (folderId: string | null) => {
+    if (!folderId) {
+      return "Raiz";
+    }
+    const trail = getFolderTrail(folders, folderId);
+    return trail.length ? trail[trail.length - 1].name : "Raiz";
+  };
+
+  const openResult = (item: KindrawTreeItem) => {
+    onClose();
+    openTreeItem(item);
+  };
+
+  const handleKeyDown = (event: ReactKeyboardEvent) => {
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      setActiveIndex((prev) =>
+        results.length ? Math.min(prev + 1, results.length - 1) : 0,
+      );
+    } else if (event.key === "ArrowUp") {
+      event.preventDefault();
+      setActiveIndex((prev) => Math.max(prev - 1, 0));
+    } else if (event.key === "Enter") {
+      event.preventDefault();
+      const item = results[activeIndex];
+      if (item) {
+        openResult(item);
+      }
+    } else if (event.key === "Escape") {
+      event.preventDefault();
+      onClose();
+    }
+  };
+
+  return (
+    <div
+      className="kindraw-cmdk-overlay"
+      onClick={(event) => {
+        if (event.target === event.currentTarget) {
+          onClose();
+        }
+      }}
+    >
+      <div
+        aria-modal="true"
+        className="kindraw-cmdk"
+        onKeyDown={handleKeyDown}
+        role="dialog"
+      >
+        <div className="kindraw-cmdk__head">
+          <KindrawIcon name="search" size={17} />
+          <input
+            aria-activedescendant={
+              results[activeIndex]
+                ? `kindraw-cmdk-option-${results[activeIndex].id}`
+                : undefined
+            }
+            aria-label="Buscar em todo o workspace"
+            aria-controls="kindraw-cmdk-list"
+            autoComplete="off"
+            className="kindraw-cmdk__input"
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Buscar em todo o workspace…"
+            ref={inputRef}
+            role="combobox"
+            aria-expanded={results.length > 0}
+            type="text"
+            value={query}
+          />
+        </div>
+
+        {results.length ? (
+          <ul
+            className="kindraw-cmdk__list"
+            id="kindraw-cmdk-list"
+            ref={listRef}
+            role="listbox"
+          >
+            {results.map((item, index) => {
+              const kindKey = getItemKindKey(item);
+              const active = index === activeIndex;
+              return (
+                <li
+                  aria-selected={active}
+                  className={`kindraw-cmdk__item${
+                    active ? " kindraw-cmdk__item--active" : ""
+                  }`}
+                  id={`kindraw-cmdk-option-${item.id}`}
+                  key={item.id}
+                  onClick={() => openResult(item)}
+                  onMouseMove={() => setActiveIndex(index)}
+                  role="option"
+                >
+                  <span className="kindraw-cmdk__item-icon">
+                    <KindrawIcon name={KIND_ICON[kindKey]} size={16} />
+                  </span>
+                  <span className="kindraw-cmdk__item-title">{item.title}</span>
+                  <span className={`kindraw-kind kindraw-kind--${kindKey}`}>
+                    {KIND_LABEL[kindKey]}
+                  </span>
+                  <span className="kindraw-cmdk__item-folder">
+                    {folderNameForItem(item.folderId)}
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+        ) : (
+          <div className="kindraw-cmdk__empty">
+            {normalizedQuery
+              ? "Nenhum item encontrado."
+              : "Nenhum item no workspace ainda."}
+          </div>
+        )}
+
+        <div className="kindraw-cmdk__foot">
+          ↑↓ navegar · ↵ abrir · esc fechar
         </div>
       </div>
     </div>
@@ -1297,6 +1492,7 @@ export const KindrawApp = () => {
   const [avatarMenuOpen, setAvatarMenuOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [sharedView, setSharedView] = useState<KindrawSharedView>(null);
+  const [paletteOpen, setPaletteOpen] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   const itemsById = Object.fromEntries(
@@ -1362,17 +1558,20 @@ export const KindrawApp = () => {
     }
   }, [route, tree]);
 
-  // ⌘K / Ctrl+K foca a busca
+  // ⌘K / Ctrl+K abre o command palette (busca global) — só no workspace.
   useEffect(() => {
+    if (route.kind !== "workspace") {
+      return;
+    }
     const onKeyDown = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
         event.preventDefault();
-        searchInputRef.current?.focus();
+        setPaletteOpen(true);
       }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, []);
+  }, [route.kind]);
 
   const runMutation = useCallback(
     async (action: () => Promise<void> | void) => {
@@ -1782,7 +1981,14 @@ export const KindrawApp = () => {
             type="search"
             value={searchQuery}
           />
-          <kbd className="kindraw-kbd">⌘K</kbd>
+          <button
+            aria-label="Abrir busca global (⌘K)"
+            className="kindraw-kbd kindraw-kbd--button"
+            onClick={() => setPaletteOpen(true)}
+            type="button"
+          >
+            ⌘K
+          </button>
         </div>
         <KindrawMenuWrap
           button={
@@ -1953,6 +2159,13 @@ export const KindrawApp = () => {
           onClose={closeDialog}
         />
       ) : null}
+
+      <KindrawCommandPalette
+        folders={tree.folders}
+        items={tree.items}
+        onClose={() => setPaletteOpen(false)}
+        open={paletteOpen}
+      />
     </div>
   );
 };
