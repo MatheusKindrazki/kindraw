@@ -406,6 +406,9 @@ const WorkspaceItemCard = ({
   onCloseMenu,
   onRename,
   onDelete,
+  selectionMode,
+  selected,
+  onToggleSelect,
 }: {
   item: KindrawTreeItem;
   menuOpen: boolean;
@@ -413,17 +416,39 @@ const WorkspaceItemCard = ({
   onCloseMenu: () => void;
   onRename: () => void;
   onDelete: () => void;
+  selectionMode: boolean;
+  selected: boolean;
+  onToggleSelect: () => void;
 }) => {
   const kindKey = getItemKindKey(item);
 
   return (
-    <article className="kindraw-card">
+    <article
+      className={`kindraw-card${
+        selectionMode ? " kindraw-card--selectable" : ""
+      }${selected ? " kindraw-card--selected" : ""}`}
+    >
       <button
-        aria-label={`Abrir ${item.title}`}
+        aria-label={
+          selectionMode
+            ? `${selected ? "Desmarcar" : "Selecionar"} ${item.title}`
+            : `Abrir ${item.title}`
+        }
+        aria-pressed={selectionMode ? selected : undefined}
         className="kindraw-card__thumb"
-        onClick={() => openTreeItem(item)}
+        onClick={() => (selectionMode ? onToggleSelect() : openTreeItem(item))}
         type="button"
       >
+        {selectionMode ? (
+          <span
+            aria-hidden="true"
+            className={`kindraw-card__check${
+              selected ? " kindraw-card__check--on" : ""
+            }`}
+          >
+            {selected ? <KindrawIcon name="check" size={14} /> : null}
+          </span>
+        ) : null}
         {item.thumbnailUrl ? (
           <img alt="" src={item.thumbnailUrl} />
         ) : (
@@ -441,49 +466,51 @@ const WorkspaceItemCard = ({
                 <KindrawIcon name="link" size={13} /> público
               </span>
             ) : null}
-            <KindrawMenuWrap
-              button={
+            {selectionMode ? null : (
+              <KindrawMenuWrap
+                button={
+                  <button
+                    aria-expanded={menuOpen}
+                    aria-label={`Ações de ${item.title}`}
+                    className="kindraw-dots"
+                    onClick={onToggleMenu}
+                    type="button"
+                  >
+                    <KindrawIcon name="dots" size={16} />
+                  </button>
+                }
+                onClose={onCloseMenu}
+                open={menuOpen}
+              >
                 <button
-                  aria-expanded={menuOpen}
-                  aria-label={`Ações de ${item.title}`}
-                  className="kindraw-dots"
-                  onClick={onToggleMenu}
+                  className="kindraw-menu__item"
+                  onClick={() => {
+                    onCloseMenu();
+                    onRename();
+                  }}
+                  role="menuitem"
                   type="button"
                 >
-                  <KindrawIcon name="dots" size={16} />
+                  Renomear
                 </button>
-              }
-              onClose={onCloseMenu}
-              open={menuOpen}
-            >
-              <button
-                className="kindraw-menu__item"
-                onClick={() => {
-                  onCloseMenu();
-                  onRename();
-                }}
-                role="menuitem"
-                type="button"
-              >
-                Renomear
-              </button>
-              <button
-                className="kindraw-menu__item kindraw-menu__item--danger"
-                onClick={() => {
-                  onCloseMenu();
-                  onDelete();
-                }}
-                role="menuitem"
-                type="button"
-              >
-                {isKindrawHybridItem(item) ? "Desvincular" : "Excluir"}
-              </button>
-            </KindrawMenuWrap>
+                <button
+                  className="kindraw-menu__item kindraw-menu__item--danger"
+                  onClick={() => {
+                    onCloseMenu();
+                    onDelete();
+                  }}
+                  role="menuitem"
+                  type="button"
+                >
+                  {isKindrawHybridItem(item) ? "Desvincular" : "Excluir"}
+                </button>
+              </KindrawMenuWrap>
+            )}
           </span>
         </div>
         <button
           className="kindraw-card__title"
-          onClick={() => openTreeItem(item)}
+          onClick={() => (selectionMode ? onToggleSelect() : openTreeItem(item))}
           type="button"
         >
           {item.title}
@@ -519,6 +546,9 @@ const WorkspacePage = ({
   onRenameHybridItem,
   onRenameFolder,
   onRenameItem,
+  onBulkDelete,
+  onBulkMove,
+  onBulkMoveToNewFolder,
 }: {
   currentFolderId: string | null;
   searchQuery: string;
@@ -534,11 +564,57 @@ const WorkspacePage = ({
   onRenameFolder: (folder: KindrawFolder) => void;
   onRenameItem: (item: KindrawItem) => void;
   onRenameHybridItem: (item: KindrawHybridItem) => void;
+  onBulkDelete: (items: KindrawTreeItem[]) => Promise<void>;
+  onBulkMove: (
+    items: KindrawTreeItem[],
+    folderId: string | null,
+  ) => Promise<void>;
+  onBulkMoveToNewFolder: (
+    items: KindrawTreeItem[],
+    name: string,
+    parentId: string | null,
+  ) => Promise<void>;
 }) => {
   const [newMenuOpen, setNewMenuOpen] = useState(false);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [moveOpen, setMoveOpen] = useState(false);
+  const [folderQuery, setFolderQuery] = useState("");
+  const [newFolderName, setNewFolderName] = useState("");
+  const [showNewFolderInput, setShowNewFolderInput] = useState(false);
 
   const closeItemMenu = useCallback(() => setOpenMenuId(null), []);
+
+  const exitSelection = useCallback(() => {
+    setSelectionMode(false);
+    setSelectedIds(new Set());
+    setMoveOpen(false);
+    setFolderQuery("");
+    setNewFolderName("");
+    setShowNewFolderInput(false);
+  }, []);
+
+  // Reseta a seleção ao trocar de pasta / visão / busca — seleção não
+  // atravessa contextos (só itens visíveis podem ser selecionados).
+  useEffect(() => {
+    exitSelection();
+  }, [currentFolderId, sharedView, searchQuery, exitSelection]);
+
+  // Esc cancela o modo seleção (quando o popover de mover está fechado;
+  // o KindrawMenuWrap já trata Esc para fechar o popover).
+  useEffect(() => {
+    if (!selectionMode) {
+      return;
+    }
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !moveOpen) {
+        exitSelection();
+      }
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [selectionMode, moveOpen, exitSelection]);
 
   const currentFolder = sharedView
     ? null
@@ -575,6 +651,81 @@ const WorkspacePage = ({
       ? "Links públicos"
       : "Sessões ao vivo"
     : currentFolder?.name || "Biblioteca";
+
+  // Seleção só existe no workspace autenticado, fora de visões compartilhadas.
+  const canSelect = !sharedView && visibleItems.length > 0;
+  const selectedItems = visibleItems.filter((item) => selectedIds.has(item.id));
+  const selectedCount = selectedItems.length;
+  const allSelected =
+    visibleItems.length > 0 && selectedCount === visibleItems.length;
+
+  const toggleSelect = useCallback((id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  }, []);
+
+  const toggleSelectAll = useCallback(() => {
+    setSelectedIds((prev) =>
+      prev.size === visibleItems.length
+        ? new Set()
+        : new Set(visibleItems.map((item) => item.id)),
+    );
+  }, [visibleItems]);
+
+  const filteredFolders = (() => {
+    const q = folderQuery.trim().toLowerCase();
+    const list = q
+      ? tree.folders.filter((folder) => folder.name.toLowerCase().includes(q))
+      : tree.folders;
+    return [...list].sort((a, b) =>
+      a.name.localeCompare(b.name, "pt-BR", { sensitivity: "base" }),
+    );
+  })();
+
+  const handleBulkDelete = useCallback(async () => {
+    const items = visibleItems.filter((item) => selectedIds.has(item.id));
+    if (!items.length) {
+      return;
+    }
+    await onBulkDelete(items);
+    exitSelection();
+  }, [visibleItems, selectedIds, onBulkDelete, exitSelection]);
+
+  const handleBulkMove = useCallback(
+    async (folderId: string | null) => {
+      const items = visibleItems.filter((item) => selectedIds.has(item.id));
+      if (!items.length) {
+        return;
+      }
+      await onBulkMove(items, folderId);
+      exitSelection();
+    },
+    [visibleItems, selectedIds, onBulkMove, exitSelection],
+  );
+
+  const handleBulkMoveToNewFolder = useCallback(async () => {
+    const name = newFolderName.trim();
+    const items = visibleItems.filter((item) => selectedIds.has(item.id));
+    if (!name || !items.length) {
+      return;
+    }
+    await onBulkMoveToNewFolder(items, name, currentFolderId);
+    exitSelection();
+  }, [
+    newFolderName,
+    visibleItems,
+    selectedIds,
+    onBulkMoveToNewFolder,
+    currentFolderId,
+    exitSelection,
+  ]);
 
   return (
     <section className="kindraw-workspace">
@@ -663,62 +814,83 @@ const WorkspacePage = ({
           </p>
         </div>
         <div className="kindraw-main-head__actions">
-          <button
-            className="kindraw-btn kindraw-btn--soft"
-            onClick={() => onCreateFolder(currentFolderId)}
-            type="button"
-          >
-            <KindrawIcon name="folder" size={16} /> Nova pasta
-          </button>
-          <KindrawMenuWrap
-            button={
+          {selectionMode ? (
+            <button
+              className="kindraw-btn kindraw-btn--soft"
+              onClick={exitSelection}
+              type="button"
+            >
+              <KindrawIcon name="close" size={16} /> Cancelar seleção
+            </button>
+          ) : (
+            <>
+              {canSelect ? (
+                <button
+                  className="kindraw-btn kindraw-btn--soft"
+                  onClick={() => setSelectionMode(true)}
+                  type="button"
+                >
+                  <KindrawIcon name="check" size={16} /> Selecionar
+                </button>
+              ) : null}
               <button
-                aria-expanded={newMenuOpen}
-                className="kindraw-btn kindraw-btn--primary"
-                onClick={() => setNewMenuOpen(!newMenuOpen)}
+                className="kindraw-btn kindraw-btn--soft"
+                onClick={() => onCreateFolder(currentFolderId)}
                 type="button"
               >
-                <KindrawIcon name="plus" size={16} /> Novo{" "}
-                <KindrawIcon name="chevD" size={14} />
+                <KindrawIcon name="folder" size={16} /> Nova pasta
               </button>
-            }
-            onClose={() => setNewMenuOpen(false)}
-            open={newMenuOpen}
-          >
-            <button
-              className="kindraw-menu__item"
-              onClick={() => {
-                setNewMenuOpen(false);
-                onCreateItem("drawing", currentFolderId);
-              }}
-              role="menuitem"
-              type="button"
-            >
-              <KindrawIcon name="pen" size={16} /> Drawing
-            </button>
-            <button
-              className="kindraw-menu__item"
-              onClick={() => {
-                setNewMenuOpen(false);
-                onCreateItem("doc", currentFolderId);
-              }}
-              role="menuitem"
-              type="button"
-            >
-              <KindrawIcon name="doc" size={16} /> Doc
-            </button>
-            <button
-              className="kindraw-menu__item"
-              onClick={() => {
-                setNewMenuOpen(false);
-                onCreateHybridItem(currentFolderId);
-              }}
-              role="menuitem"
-              type="button"
-            >
-              <KindrawIcon name="hybrid" size={16} /> Híbrido
-            </button>
-          </KindrawMenuWrap>
+              <KindrawMenuWrap
+                button={
+                  <button
+                    aria-expanded={newMenuOpen}
+                    className="kindraw-btn kindraw-btn--primary"
+                    onClick={() => setNewMenuOpen(!newMenuOpen)}
+                    type="button"
+                  >
+                    <KindrawIcon name="plus" size={16} /> Novo{" "}
+                    <KindrawIcon name="chevD" size={14} />
+                  </button>
+                }
+                onClose={() => setNewMenuOpen(false)}
+                open={newMenuOpen}
+              >
+                <button
+                  className="kindraw-menu__item"
+                  onClick={() => {
+                    setNewMenuOpen(false);
+                    onCreateItem("drawing", currentFolderId);
+                  }}
+                  role="menuitem"
+                  type="button"
+                >
+                  <KindrawIcon name="pen" size={16} /> Drawing
+                </button>
+                <button
+                  className="kindraw-menu__item"
+                  onClick={() => {
+                    setNewMenuOpen(false);
+                    onCreateItem("doc", currentFolderId);
+                  }}
+                  role="menuitem"
+                  type="button"
+                >
+                  <KindrawIcon name="doc" size={16} /> Doc
+                </button>
+                <button
+                  className="kindraw-menu__item"
+                  onClick={() => {
+                    setNewMenuOpen(false);
+                    onCreateHybridItem(currentFolderId);
+                  }}
+                  role="menuitem"
+                  type="button"
+                >
+                  <KindrawIcon name="hybrid" size={16} /> Híbrido
+                </button>
+              </KindrawMenuWrap>
+            </>
+          )}
         </div>
       </div>
 
@@ -809,6 +981,9 @@ const WorkspacePage = ({
                   openMenuId === `item:${item.id}` ? null : `item:${item.id}`,
                 )
               }
+              onToggleSelect={() => toggleSelect(item.id)}
+              selected={selectedIds.has(item.id)}
+              selectionMode={selectionMode}
             />
           ))}
         </div>
@@ -823,6 +998,125 @@ const WorkspacePage = ({
             : "Nenhum drawing, doc ou híbrido nesta pasta."}
         </p>
       )}
+
+      {selectionMode ? (
+        <div className="kindraw-bulkbar" role="toolbar" aria-label="Ações em massa">
+          <span className="kindraw-bulkbar__count">
+            {pluralize(selectedCount, "selecionado", "selecionados")}
+          </span>
+          <button
+            className="kindraw-btn kindraw-btn--ghost kindraw-btn--sm"
+            onClick={toggleSelectAll}
+            type="button"
+          >
+            {allSelected ? "Limpar seleção" : "Selecionar todos"}
+          </button>
+          <span className="kindraw-bulkbar__sep" aria-hidden="true" />
+          <KindrawMenuWrap
+            align="left"
+            button={
+              <button
+                aria-expanded={moveOpen}
+                className="kindraw-btn kindraw-btn--soft kindraw-btn--sm"
+                disabled={selectedCount === 0}
+                onClick={() => setMoveOpen((open) => !open)}
+                type="button"
+              >
+                <KindrawIcon name="move" size={15} /> Mover para pasta
+              </button>
+            }
+            onClose={() => setMoveOpen(false)}
+            open={moveOpen}
+          >
+            <div className="kindraw-movepop">
+              <input
+                aria-label="Buscar pasta"
+                className="kindraw-movepop__search"
+                onChange={(event) => setFolderQuery(event.target.value)}
+                placeholder="Buscar pasta…"
+                type="search"
+                value={folderQuery}
+              />
+              <div className="kindraw-movepop__list">
+                <button
+                  className="kindraw-menu__item"
+                  onClick={() => void handleBulkMove(null)}
+                  role="menuitem"
+                  type="button"
+                >
+                  <KindrawIcon name="home" size={16} /> Raiz (sem pasta)
+                </button>
+                {filteredFolders.map((folder) => (
+                  <button
+                    className="kindraw-menu__item"
+                    key={folder.id}
+                    onClick={() => void handleBulkMove(folder.id)}
+                    role="menuitem"
+                    type="button"
+                  >
+                    <KindrawIcon name="folder" size={16} /> {folder.name}
+                  </button>
+                ))}
+                {filteredFolders.length === 0 ? (
+                  <p className="kindraw-movepop__empty">Nenhuma pasta.</p>
+                ) : null}
+              </div>
+              <div className="kindraw-movepop__foot">
+                {showNewFolderInput ? (
+                  <form
+                    className="kindraw-movepop__newrow"
+                    onSubmit={(event) => {
+                      event.preventDefault();
+                      void handleBulkMoveToNewFolder();
+                    }}
+                  >
+                    <input
+                      aria-label="Nome da nova pasta"
+                      autoFocus
+                      className="kindraw-movepop__search"
+                      onChange={(event) => setNewFolderName(event.target.value)}
+                      placeholder="Nome da pasta"
+                      type="text"
+                      value={newFolderName}
+                    />
+                    <button
+                      className="kindraw-btn kindraw-btn--primary kindraw-btn--sm"
+                      disabled={!newFolderName.trim()}
+                      type="submit"
+                    >
+                      Criar
+                    </button>
+                  </form>
+                ) : (
+                  <button
+                    className="kindraw-menu__item"
+                    onClick={() => setShowNewFolderInput(true)}
+                    role="menuitem"
+                    type="button"
+                  >
+                    <KindrawIcon name="plus" size={16} /> Nova pasta…
+                  </button>
+                )}
+              </div>
+            </div>
+          </KindrawMenuWrap>
+          <button
+            className="kindraw-btn kindraw-btn--danger kindraw-btn--sm"
+            disabled={selectedCount === 0}
+            onClick={() => void handleBulkDelete()}
+            type="button"
+          >
+            <KindrawIcon name="trash" size={15} /> Excluir
+          </button>
+          <button
+            className="kindraw-btn kindraw-btn--ghost kindraw-btn--sm"
+            onClick={exitSelection}
+            type="button"
+          >
+            Cancelar
+          </button>
+        </div>
+      ) : null}
     </section>
   );
 };
@@ -1231,6 +1525,81 @@ export const KindrawApp = () => {
     [refreshTree, route, runMutation],
   );
 
+  const handleBulkDelete = useCallback(
+    (items: KindrawTreeItem[]) => {
+      if (!items.length) {
+        return Promise.resolve();
+      }
+      const hasHybrid = items.some(isKindrawHybridItem);
+      return new Promise<void>((resolve) => {
+        setDialog({
+          type: "confirm",
+          title: "Excluir itens",
+          message: hasHybrid
+            ? `Excluir ${items.length} ${
+                items.length === 1 ? "item" : "itens"
+              }? Híbridos serão desvinculados.`
+            : `Excluir ${items.length} ${
+                items.length === 1 ? "item" : "itens"
+              }?`,
+          confirmLabel: "Excluir",
+          onConfirm: () => {
+            void runMutation(async () => {
+              await Promise.all(
+                items.map((item) =>
+                  isKindrawHybridItem(item)
+                    ? deleteHybridItem(item.id)
+                    : deleteItem(item.id),
+                ),
+              );
+              await refreshTree();
+            }).finally(resolve);
+          },
+        });
+      });
+    },
+    [refreshTree, runMutation],
+  );
+
+  const handleBulkMove = useCallback(
+    (items: KindrawTreeItem[], folderId: string | null) => {
+      if (!items.length) {
+        return Promise.resolve();
+      }
+      return runMutation(async () => {
+        await Promise.all(
+          items.map((item) =>
+            isKindrawHybridItem(item)
+              ? updateHybridItemMeta(item.id, { folderId })
+              : updateItemMeta(item.id, { folderId }),
+          ),
+        );
+        await refreshTree();
+      });
+    },
+    [refreshTree, runMutation],
+  );
+
+  const handleBulkMoveToNewFolder = useCallback(
+    (items: KindrawTreeItem[], name: string, parentId: string | null) => {
+      if (!items.length) {
+        return Promise.resolve();
+      }
+      return runMutation(async () => {
+        const { folderId } = await createFolder(name, parentId);
+        await Promise.all(
+          items.map((item) =>
+            isKindrawHybridItem(item)
+              ? updateHybridItemMeta(item.id, { folderId })
+              : updateItemMeta(item.id, { folderId }),
+          ),
+        );
+        await refreshTree();
+      });
+    },
+    [refreshTree, runMutation],
+  );
+
   const handleLogout = useCallback(async () => {
     await runMutation(async () => {
       await logout();
@@ -1439,6 +1808,9 @@ export const KindrawApp = () => {
           {route.kind === "workspace" ? (
             <WorkspacePage
               currentFolderId={currentFolderId}
+              onBulkDelete={handleBulkDelete}
+              onBulkMove={handleBulkMove}
+              onBulkMoveToNewFolder={handleBulkMoveToNewFolder}
               onCreateHybridItem={handleCreateHybridItem}
               onCreateFolder={handleCreateFolder}
               onCreateItem={handleCreateItem}

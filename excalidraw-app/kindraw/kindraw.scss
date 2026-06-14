@@ -913,6 +913,162 @@
   color: var(--kd-faint);
 }
 
+/* ── Seleção múltipla de cards ────────────────────────────── */
+.kindraw-card--selectable .kindraw-card__thumb,
+.kindraw-card--selectable .kindraw-card__title {
+  cursor: pointer;
+}
+
+.kindraw-card--selected {
+  border-color: var(--kd-amber);
+  box-shadow: 0 0 0 2px var(--kd-amber);
+}
+
+.kindraw-card--selected .kindraw-card__thumb {
+  background: var(--kd-amber-soft);
+}
+
+/* Checkbox sobreposto no canto superior esquerdo do thumb */
+.kindraw-card__check {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  border: 1.5px solid var(--kd-line);
+  background: var(--kd-surface);
+  color: #fff;
+  box-shadow: 0 1px 3px rgba(60, 48, 24, 0.16);
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+
+.kindraw-card__check--on {
+  background: var(--kd-amber);
+  border-color: var(--kd-amber);
+  color: var(--kd-ink);
+}
+
+/* ── Barra flutuante de ações em massa ────────────────────── */
+.kindraw-bulkbar {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  transform: translateX(-50%);
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  max-width: calc(100vw - 32px);
+  padding: 10px 14px;
+  background: var(--kd-surface);
+  border: 1px solid var(--kd-line);
+  border-radius: 14px;
+  box-shadow: var(--kd-shadow-popover);
+  animation: kindraw-bulkbar-in 0.15s ease;
+}
+
+@keyframes kindraw-bulkbar-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 8px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
+
+.kindraw-bulkbar__count {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--kd-ink);
+  padding: 0 4px;
+  white-space: nowrap;
+}
+
+.kindraw-bulkbar__sep {
+  width: 1px;
+  align-self: stretch;
+  margin: 2px 2px;
+  background: var(--kd-line);
+}
+
+/* O popover "Mover" abre acima do botão da bulkbar (rodapé). */
+.kindraw-bulkbar .kindraw-popover--menu-left {
+  top: auto;
+  bottom: calc(100% + 8px);
+}
+
+/* ── Popover "Mover para pasta" ───────────────────────────── */
+.kindraw-movepop {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 248px;
+  max-width: calc(100vw - 32px);
+}
+
+.kindraw-movepop__search {
+  width: 100%;
+  height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--kd-line);
+  border-radius: var(--kd-r-btn);
+  background: var(--kd-surface);
+  color: var(--kd-ink);
+  font-family: var(--kd-font);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.kindraw-movepop__search:focus {
+  outline: none;
+  border-color: #d9b36a;
+  box-shadow: 0 0 0 3px var(--kd-amber-soft);
+}
+
+.kindraw-movepop__list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.kindraw-movepop__list .kindraw-menu__item > svg {
+  color: var(--kd-amber);
+}
+
+.kindraw-movepop__empty {
+  margin: 0;
+  padding: 8px 10px;
+  font-size: 12.5px;
+  color: var(--kd-faint);
+}
+
+.kindraw-movepop__foot {
+  border-top: 1px solid var(--kd-line-soft);
+  padding-top: 6px;
+}
+
+.kindraw-movepop__newrow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.kindraw-movepop__newrow .kindraw-movepop__search {
+  flex: 1;
+  min-width: 0;
+}
+
 /* ─────────────────────────────────────────────────────────
    Login (card 430px centrado)
    ───────────────────────────────────────────────────────── */
@@ -1940,5 +2096,18 @@
   .kindraw-public-view__canvas {
     height: 100dvh;
     min-height: 100dvh;
+  }
+
+  .kindraw-bulkbar {
+    left: 16px;
+    right: 16px;
+    bottom: 16px;
+    max-width: none;
+    transform: none;
+    animation: none;
+  }
+
+  .kindraw-bulkbar__sep {
+    display: none;
   }
 }

@@ -23,6 +23,9 @@ export type KindrawIconName =
   | "share"
   | "copy"
   | "check"
+  | "close"
+  | "trash"
+  | "move"
   | "github";
 
 const KINDRAW_ICON_BODY: Record<KindrawIconName, ReactNode> = {
@@ -107,6 +110,21 @@ const KINDRAW_ICON_BODY: Record<KindrawIconName, ReactNode> = {
     </g>
   ),
   check: <path d="M5 12.5l4.5 4.5L19 7.5" />,
+  close: <path d="M6 6l12 12M18 6L6 18" />,
+  trash: (
+    <g>
+      <path d="M4.5 6.5h15" />
+      <path d="M9 6.5V4.8a1.3 1.3 0 0 1 1.3-1.3h3.4A1.3 1.3 0 0 1 15 4.8v1.7" />
+      <path d="M6.5 6.5l1 12.2a1.4 1.4 0 0 0 1.4 1.3h6.2a1.4 1.4 0 0 0 1.4-1.3l1-12.2" />
+      <path d="M10 10.5v6M14 10.5v6" />
+    </g>
+  ),
+  move: (
+    <g>
+      <path d="M3 7.5A1.5 1.5 0 0 1 4.5 6h4.4l2 2.2h8.6A1.5 1.5 0 0 1 21 9.7v7.8a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 17.5z" />
+      <path d="M9.5 13.5h6M13 11l2.5 2.5L13 16" />
+    </g>
+  ),
   github: (
     <path
       fill="currentColor"
