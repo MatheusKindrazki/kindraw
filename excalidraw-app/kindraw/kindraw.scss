@@ -696,6 +696,11 @@
   min-width: 0;
   padding: 24px 28px;
   overflow-y: auto;
+  // Reserva o espaço da scrollbar sempre, mesmo quando ela não aparece.
+  // Sem isto, entrar/sair do modo seleção (ou qualquer mudança de altura)
+  // faz a scrollbar surgir/sumir, mudando o clientWidth e reflowando o grid
+  // auto-fill — o que causava o "pisca/encolhe" dos cards.
+  scrollbar-gutter: stable;
 }
 
 .kindraw-main-head {
@@ -823,13 +828,17 @@
   position: relative;
   display: flex;
   flex-direction: column;
+  box-sizing: border-box;
   width: 100%;
   // teto para a faixa em que o auto-fill só comporta 1 coluna larga
   max-width: 460px;
   background: var(--kd-surface);
   border: 1px solid var(--kd-line);
   border-radius: var(--kd-r-card);
-  transition: box-shadow 0.15s ease;
+  // anel sempre presente (transparente) para que selecionar troque só a cor,
+  // sem nunca alterar a caixa do card
+  box-shadow: 0 0 0 2px transparent;
+  transition: box-shadow 0.15s ease, border-color 0.15s ease;
 }
 
 .kindraw-card:hover {
@@ -919,9 +928,11 @@
   cursor: pointer;
 }
 
-.kindraw-card--selected {
+.kindraw-card--selected,
+.kindraw-card--selected:hover {
   border-color: var(--kd-amber);
-  box-shadow: 0 0 0 2px var(--kd-amber);
+  // anel âmbar + elevação no hover (mantém o anel mesmo com o mouse em cima)
+  box-shadow: 0 0 0 2px var(--kd-amber), var(--kd-shadow-card-hover);
 }
 
 .kindraw-card--selected .kindraw-card__thumb {
