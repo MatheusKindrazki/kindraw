@@ -5,13 +5,16 @@ import type {
   KindrawApiTokenSecret,
   KindrawCollaborationBootstrapResponse,
   KindrawCollaborationRoom,
+  KindrawFolderShare,
   KindrawHybridItemResponse,
   KindrawHybridView,
   KindrawItemKind,
   KindrawItemResponse,
   KindrawPublicItemResponse,
   KindrawSession,
+  KindrawShareRole,
   KindrawTreeResponse,
+  KindrawUser,
   KindrawWorkspaceTreeResponse,
 } from "./types";
 
@@ -113,6 +116,51 @@ export const renameFolder = (folderId: string, name: string) =>
 
 export const deleteFolder = (folderId: string) =>
   requestJson<void>(`/api/folders/${folderId}`, {
+    method: "DELETE",
+  });
+
+/* ────────────────────────────────────────────────────────
+   Compartilhamento de pastas com usuários específicos
+   ──────────────────────────────────────────────────────── */
+
+export const searchKindrawUsers = (q: string) =>
+  requestJson<{ users: KindrawUser[] }>(
+    `/api/users/search?q=${encodeURIComponent(q)}`,
+  );
+
+export const listFolderShares = (folderId: string) =>
+  requestJson<{ shares: KindrawFolderShare[] }>(
+    `/api/folders/${folderId}/shares`,
+  );
+
+export const grantFolderShare = (
+  folderId: string,
+  login: string,
+  role: KindrawShareRole,
+) =>
+  requestJson<{ share: KindrawFolderShare }>(
+    `/api/folders/${folderId}/shares`,
+    {
+      method: "POST",
+      body: { login, role },
+    },
+  );
+
+export const updateFolderShareRole = (
+  folderId: string,
+  shareId: string,
+  role: KindrawShareRole,
+) =>
+  requestJson<{ share: KindrawFolderShare }>(
+    `/api/folders/${folderId}/shares/${shareId}`,
+    {
+      method: "PATCH",
+      body: { role },
+    },
+  );
+
+export const revokeFolderShare = (folderId: string, shareId: string) =>
+  requestJson<void>(`/api/folders/${folderId}/shares/${shareId}`, {
     method: "DELETE",
   });
 

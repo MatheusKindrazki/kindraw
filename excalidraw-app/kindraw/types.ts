@@ -13,12 +13,30 @@ export type KindrawSession = {
   user: KindrawUser;
 };
 
+export type KindrawShareRole = "viewer" | "editor";
+
+export type KindrawFolderShare = {
+  id: string;
+  role: KindrawShareRole;
+  user: KindrawUser;
+  createdAt: string;
+};
+
+export type KindrawFolderSharedMeta = {
+  role: KindrawShareRole;
+  ownerId: string;
+  ownerLogin: string;
+  ownerName: string;
+};
+
 export type KindrawFolder = {
   id: string;
   name: string;
   parentId: string | null;
   createdAt: string;
   updatedAt: string;
+  /** Presente apenas quando a pasta foi compartilhada COMIGO (ausente = pasta própria). */
+  shared?: KindrawFolderSharedMeta;
 };
 
 export type KindrawShareLink = {
@@ -73,6 +91,8 @@ export type KindrawItem = {
   hybrid?: KindrawHybridMetadata | null;
   /** Preview do conteúdo gerado no autosave (geração ainda não implementada). */
   thumbnailUrl?: string | null;
+  /** Presente quando o item pertence a uma pasta compartilhada COMIGO (ausente = item próprio, acesso total). */
+  sharedRole?: KindrawShareRole;
 };
 
 export type KindrawHybridItem = {
@@ -90,6 +110,8 @@ export type KindrawHybridItem = {
   drawingItemId: string;
   /** Preview do conteúdo gerado no autosave (geração ainda não implementada). */
   thumbnailUrl?: string | null;
+  /** Presente quando o item pertence a uma pasta compartilhada COMIGO (ausente = item próprio, acesso total). */
+  sharedRole?: KindrawShareRole;
 };
 
 export type KindrawTreeItem = KindrawItem | KindrawHybridItem;

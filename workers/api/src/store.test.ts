@@ -54,11 +54,30 @@ type HybridItemRow = {
   updated_at: string;
 };
 
+type UserRow = {
+  id: string;
+  github_login: string;
+  name: string;
+  avatar_url: string | null;
+};
+
+type FolderShareRow = {
+  id: string;
+  folder_id: string;
+  user_id: string;
+  role: "viewer" | "editor";
+  granted_by_user_id: string;
+  created_at: string;
+  updated_at: string;
+};
+
 type FakeState = {
   folders: FolderRow[];
   items: ItemRow[];
   shareLinks: ShareLinkRow[];
   hybridItems: HybridItemRow[];
+  users: UserRow[];
+  folderShares: FolderShareRow[];
 };
 
 const normalizeQuery = (query: string) => query.replace(/\s+/g, " ").trim();
@@ -113,6 +132,96 @@ class FakeStatement implements D1PreparedStatement {
       return (this.state.items.find(
         (item) => item.id === itemId && item.owner_id === ownerId,
       ) || null) as T | null;
+    }
+
+    if (query === "SELECT * FROM items WHERE id = ?") {
+      const [itemId] = this.values as [string];
+      return (this.state.items.find((item) => item.id === itemId) ||
+        null) as T | null;
+    }
+
+    if (query === "SELECT owner_id FROM folders WHERE id = ?") {
+      const [folderId] = this.values as [string];
+      const folder = this.state.folders.find((entry) => entry.id === folderId);
+      return (folder ? { owner_id: folder.owner_id } : null) as T | null;
+    }
+
+    if (
+      query ===
+      "SELECT role FROM folder_shares WHERE folder_id = ? AND user_id = ?"
+    ) {
+      const [folderId, userId] = this.values as [string, string];
+      const share = this.state.folderShares.find(
+        (entry) => entry.folder_id === folderId && entry.user_id === userId,
+      );
+      return (share ? { role: share.role } : null) as T | null;
+    }
+
+    if (
+      query ===
+      "SELECT * FROM folder_shares WHERE folder_id = ? AND user_id = ?"
+    ) {
+      const [folderId, userId] = this.values as [string, string];
+      return (this.state.folderShares.find(
+        (entry) => entry.folder_id === folderId && entry.user_id === userId,
+      ) || null) as T | null;
+    }
+
+    if (
+      query ===
+      "SELECT id, github_login, name, avatar_url FROM users WHERE github_login = ? COLLATE NOCASE LIMIT 1"
+    ) {
+      const [login] = this.values as [string];
+      const user = this.state.users.find(
+        (entry) =>
+          entry.github_login.toLowerCase() === login.toLowerCase(),
+      );
+      return (user
+        ? {
+            id: user.id,
+            github_login: user.github_login,
+            name: user.name,
+            avatar_url: user.avatar_url,
+          }
+        : null) as T | null;
+    }
+
+    if (
+      normalizeQuery(query) ===
+      normalizeQuery(
+        `SELECT
+           folder_shares.id AS share_id,
+           folder_shares.role AS share_role,
+           folder_shares.created_at AS share_created_at,
+           users.id AS user_id,
+           users.github_login AS github_login,
+           users.name AS user_name,
+           users.avatar_url AS avatar_url
+         FROM folder_shares
+         JOIN users ON users.id = folder_shares.user_id
+         WHERE folder_shares.id = ?`,
+      )
+    ) {
+      const [shareId] = this.values as [string];
+      const share = this.state.folderShares.find(
+        (entry) => entry.id === shareId,
+      );
+      if (!share) {
+        return null;
+      }
+      const user = this.state.users.find((entry) => entry.id === share.user_id);
+      if (!user) {
+        return null;
+      }
+      return {
+        share_id: share.id,
+        share_role: share.role,
+        share_created_at: share.created_at,
+        user_id: user.id,
+        github_login: user.github_login,
+        user_name: user.name,
+        avatar_url: user.avatar_url,
+      } as T;
     }
 
     if (query === "SELECT * FROM hybrid_items WHERE id = ? AND owner_id = ?") {
@@ -337,6 +446,172 @@ class FakeStatement implements D1PreparedStatement {
       return { results: results as T[] };
     }
 
+    // getTree: folders shared WITH this user (incoming shares) + owner data.
+    if (
+      query.startsWith("SELECT folder_shares.role AS share_role") &&
+      query.includes("FROM folder_shares JOIN folders")
+    ) {
+      const [userId] = this.values as [string];
+      const results = this.state.folderShares
+        .filter((share) => share.user_id === userId)
+        .map((share) => {
+          const folder = this.state.folders.find(
+            (entry) => entry.id === share.folder_id,
+          );
+          const owner = this.state.users.find(
+            (entry) => entry.id === folder?.owner_id,
+          );
+          if (!folder || !owner) {
+            return null;
+          }
+          return {
+            share_role: share.role,
+            folder_id: folder.id,
+            folder_owner_id: folder.owner_id,
+            folder_parent_id: folder.parent_id,
+            folder_name: folder.name,
+            folder_created_at: folder.created_at,
+            folder_updated_at: folder.updated_at,
+            owner_login: owner.github_login,
+            owner_name: owner.name,
+          };
+        })
+        .filter((row): row is NonNullable<typeof row> => row !== null)
+        .sort((left, right) => {
+          const byName = left.folder_name.localeCompare(right.folder_name);
+          return byName || left.folder_created_at.localeCompare(right.folder_created_at);
+        });
+      return { results: results as T[] };
+    }
+
+    // getTree: items in shared folders (folder_id IN (...)).
+    if (
+      query.startsWith("SELECT * FROM items WHERE folder_id IN (") &&
+      query.includes("ORDER BY title")
+    ) {
+      const folderIds = this.values as string[];
+      const set = new Set(folderIds);
+      const results = this.state.items
+        .filter((entry) => entry.folder_id !== null && set.has(entry.folder_id))
+        .sort((left, right) => {
+          const byTitle = left.title.localeCompare(right.title);
+          return byTitle || left.created_at.localeCompare(right.created_at);
+        });
+      return { results: results as T[] };
+    }
+
+    // getTree: share_links of items in shared folders.
+    if (
+      query.startsWith("SELECT share_links.* FROM share_links JOIN items") &&
+      query.includes("WHERE items.folder_id IN (")
+    ) {
+      const folderIds = this.values as string[];
+      const set = new Set(folderIds);
+      const results = this.state.shareLinks
+        .filter((entry) => {
+          const item = this.state.items.find(
+            (candidate) => candidate.id === entry.item_id,
+          );
+          return (
+            entry.revoked_at === null &&
+            item?.folder_id !== null &&
+            item !== undefined &&
+            item.folder_id !== null &&
+            set.has(item.folder_id)
+          );
+        })
+        .sort((left, right) => right.created_at.localeCompare(left.created_at));
+      return { results: results as T[] };
+    }
+
+    // getTree: hybrid_items whose doc-root lives in a shared folder.
+    if (
+      query.startsWith("SELECT hybrid_items.* FROM hybrid_items JOIN items") &&
+      query.includes("WHERE doc.folder_id IN (")
+    ) {
+      const folderIds = this.values as string[];
+      const set = new Set(folderIds);
+      const results = this.state.hybridItems
+        .filter((hybrid) => {
+          const doc = this.state.items.find(
+            (entry) => entry.id === hybrid.doc_item_id,
+          );
+          return (
+            doc?.folder_id !== null &&
+            doc !== undefined &&
+            doc.folder_id !== null &&
+            set.has(doc.folder_id)
+          );
+        })
+        .sort((left, right) => {
+          const byUpdated = right.updated_at.localeCompare(left.updated_at);
+          return byUpdated || right.created_at.localeCompare(left.created_at);
+        });
+      return { results: results as T[] };
+    }
+
+    // searchUsers
+    if (
+      query.startsWith(
+        "SELECT id, github_login, name, avatar_url FROM users WHERE id != ?",
+      )
+    ) {
+      const [excludeUserId, pattern, , limit] = this.values as [
+        string,
+        string,
+        string,
+        number,
+      ];
+      // Translate the escaped SQL LIKE pattern back into a matcher. The store
+      // wraps the term in %...% and escapes \ % _ with a leading backslash.
+      const inner = pattern.slice(1, -1); // strip surrounding %
+      const term = inner.replace(/\\([\\%_])/g, "$1").toLowerCase();
+      const results = this.state.users
+        .filter((entry) => entry.id !== excludeUserId)
+        .filter(
+          (entry) =>
+            entry.github_login.toLowerCase().includes(term) ||
+            entry.name.toLowerCase().includes(term),
+        )
+        .sort((left, right) =>
+          left.github_login.localeCompare(right.github_login),
+        )
+        .slice(0, limit)
+        .map((entry) => ({
+          id: entry.id,
+          github_login: entry.github_login,
+          name: entry.name,
+          avatar_url: entry.avatar_url,
+        }));
+      return { results: results as T[] };
+    }
+
+    // listFolderShares
+    if (
+      query.startsWith("SELECT folder_shares.id AS share_id") &&
+      query.includes("WHERE folder_shares.folder_id = ?")
+    ) {
+      const [folderId] = this.values as [string];
+      const results = this.state.folderShares
+        .filter((share) => share.folder_id === folderId)
+        .sort((left, right) => left.created_at.localeCompare(right.created_at))
+        .map((share) => {
+          const user = this.state.users.find(
+            (entry) => entry.id === share.user_id,
+          );
+          return {
+            share_id: share.id,
+            share_role: share.role,
+            share_created_at: share.created_at,
+            user_id: user?.id ?? share.user_id,
+            github_login: user?.github_login ?? "",
+            user_name: user?.name ?? "",
+            avatar_url: user?.avatar_url ?? null,
+          };
+        });
+      return { results: results as T[] };
+    }
+
     throw new Error(`Unsupported all() query in test double: ${query}`);
   }
 
@@ -524,6 +799,95 @@ class FakeStatement implements D1PreparedStatement {
         item.updated_at = updatedAt;
       }
       return {};
+    }
+
+    if (query === "UPDATE items SET updated_at = ? WHERE id = ?") {
+      const [updatedAt, itemId] = this.values as [string, string];
+      const item = this.state.items.find((entry) => entry.id === itemId);
+      if (item) {
+        item.updated_at = updatedAt;
+      }
+      return { meta: { changes: item ? 1 : 0 } };
+    }
+
+    if (
+      query ===
+      "INSERT INTO folder_shares (id, folder_id, user_id, role, granted_by_user_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)"
+    ) {
+      const [
+        id,
+        folderId,
+        userId,
+        role,
+        grantedBy,
+        createdAt,
+        updatedAt,
+      ] = this.values as [
+        string,
+        string,
+        string,
+        "viewer" | "editor",
+        string,
+        string,
+        string,
+      ];
+      this.state.folderShares.push({
+        id,
+        folder_id: folderId,
+        user_id: userId,
+        role,
+        granted_by_user_id: grantedBy,
+        created_at: createdAt,
+        updated_at: updatedAt,
+      });
+      return { meta: { changes: 1 } };
+    }
+
+    if (
+      query === "UPDATE folder_shares SET role = ?, updated_at = ? WHERE id = ?"
+    ) {
+      const [role, updatedAt, id] = this.values as [
+        "viewer" | "editor",
+        string,
+        string,
+      ];
+      const share = this.state.folderShares.find((entry) => entry.id === id);
+      if (share) {
+        share.role = role;
+        share.updated_at = updatedAt;
+      }
+      return { meta: { changes: share ? 1 : 0 } };
+    }
+
+    if (
+      query ===
+      "UPDATE folder_shares SET role = ?, updated_at = ? WHERE id = ? AND folder_id = ?"
+    ) {
+      const [role, updatedAt, id, folderId] = this.values as [
+        "viewer" | "editor",
+        string,
+        string,
+        string,
+      ];
+      const share = this.state.folderShares.find(
+        (entry) => entry.id === id && entry.folder_id === folderId,
+      );
+      if (share) {
+        share.role = role;
+        share.updated_at = updatedAt;
+      }
+      return { meta: { changes: share ? 1 : 0 } };
+    }
+
+    if (
+      query === "DELETE FROM folder_shares WHERE id = ? AND folder_id = ?"
+    ) {
+      const [id, folderId] = this.values as [string, string];
+      const before = this.state.folderShares.length;
+      this.state.folderShares = this.state.folderShares.filter(
+        (entry) => !(entry.id === id && entry.folder_id === folderId),
+      );
+      return { meta: { changes: before - this.state.folderShares.length } };
     }
 
     if (
@@ -747,6 +1111,8 @@ const createStore = (state?: Partial<FakeState>) => {
     items: state?.items ?? [],
     shareLinks: state?.shareLinks ?? [],
     hybridItems: state?.hybridItems ?? [],
+    users: state?.users ?? [],
+    folderShares: state?.folderShares ?? [],
   };
   const blobs = new FakeR2Bucket();
   return {
@@ -1445,5 +1811,567 @@ describe("KindrawStore", () => {
       (entry) => entry.item_id === "item-1" && entry.revoked_at === null,
     );
     expect(activeLinks).toEqual([]);
+  });
+});
+
+describe("KindrawStore folder sharing", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-03-09T12:00:00.000Z"));
+  });
+
+  const baseUsers: UserRow[] = [
+    {
+      id: "owner-1",
+      github_login: "octocat",
+      name: "Octo Cat",
+      avatar_url: "https://avatar.test/octocat.png",
+    },
+    {
+      id: "guest-1",
+      github_login: "hubot",
+      name: "Hu Bot",
+      avatar_url: null,
+    },
+    {
+      id: "guest-2",
+      github_login: "monalisa",
+      name: "Mona Lisa",
+      avatar_url: null,
+    },
+  ];
+
+  it("searchUsers acha por login e por name, exclui o proprio e escapa LIKE", async () => {
+    const { store } = createStore({
+      users: [
+        ...baseUsers,
+        {
+          id: "guest-3",
+          github_login: "weird_name",
+          name: "100% Real",
+          avatar_url: null,
+        },
+      ],
+    });
+
+    // por login
+    const byLogin = await store.searchUsers("hub", "owner-1");
+    expect(byLogin.map((u) => u.id)).toEqual(["guest-1"]);
+    expect(byLogin[0]).toEqual({
+      id: "guest-1",
+      githubLogin: "hubot",
+      name: "Hu Bot",
+      avatarUrl: null,
+    });
+
+    // por name (case-insensitive)
+    const byName = await store.searchUsers("mona", "owner-1");
+    expect(byName.map((u) => u.id)).toEqual(["guest-2"]);
+
+    // exclui o proprio usuario
+    const excludesSelf = await store.searchUsers("octo", "owner-1");
+    expect(excludesSelf).toEqual([]);
+
+    // o "%" literal e tratado como texto (escape), nao como wildcard
+    const literalPercent = await store.searchUsers("100%", "owner-1");
+    expect(literalPercent.map((u) => u.id)).toEqual(["guest-3"]);
+
+    // o "_" literal nao casa qualquer caractere
+    const literalUnderscore = await store.searchUsers("weird_name", "owner-1");
+    expect(literalUnderscore.map((u) => u.id)).toEqual(["guest-3"]);
+    const wouldMatchIfWildcard = await store.searchUsers("weirdXname", "owner-1");
+    expect(wouldMatchIfWildcard).toEqual([]);
+  });
+
+  it("getUserByLogin resolve login exato case-insensitive ou null", async () => {
+    const { store } = createStore({ users: baseUsers });
+
+    await expect(store.getUserByLogin("HUBOT")).resolves.toEqual({
+      id: "guest-1",
+      githubLogin: "hubot",
+      name: "Hu Bot",
+      avatarUrl: null,
+    });
+    await expect(store.getUserByLogin("ghost")).resolves.toBeNull();
+  });
+
+  it("grantFolderAccess faz upsert, valida ownership e bloqueia self-share", async () => {
+    const uuidSpy = vi
+      .spyOn(crypto, "randomUUID")
+      .mockReturnValueOnce("00000000-0000-0000-0000-0000000000aa");
+    const { store, state } = createStore({
+      users: baseUsers,
+      folders: [
+        {
+          id: "folder-1",
+          owner_id: "owner-1",
+          parent_id: null,
+          name: "Shared",
+          created_at: "2026-03-09T10:00:00.000Z",
+          updated_at: "2026-03-09T10:00:00.000Z",
+        },
+      ],
+    });
+
+    const share = await store.grantFolderAccess(
+      "owner-1",
+      "folder-1",
+      "guest-1",
+      "viewer",
+    );
+    expect(share).toEqual({
+      id: "00000000-0000-0000-0000-0000000000aa",
+      role: "viewer",
+      createdAt: "2026-03-09T12:00:00.000Z",
+      user: {
+        id: "guest-1",
+        githubLogin: "hubot",
+        name: "Hu Bot",
+        avatarUrl: null,
+      },
+    });
+    expect(state.folderShares).toHaveLength(1);
+    expect(state.folderShares[0]?.granted_by_user_id).toBe("owner-1");
+
+    // upsert: re-conceder a mesma pessoa atualiza o role, sem nova linha
+    const upserted = await store.grantFolderAccess(
+      "owner-1",
+      "folder-1",
+      "guest-1",
+      "editor",
+    );
+    expect(upserted.id).toBe("00000000-0000-0000-0000-0000000000aa");
+    expect(upserted.role).toBe("editor");
+    expect(state.folderShares).toHaveLength(1);
+
+    // self-share bloqueado
+    await expect(
+      store.grantFolderAccess("owner-1", "folder-1", "owner-1", "viewer"),
+    ).rejects.toMatchObject({ status: 400 });
+
+    // pasta de outro dono => 404 (ownership)
+    await expect(
+      store.grantFolderAccess("guest-1", "folder-1", "guest-2", "viewer"),
+    ).rejects.toMatchObject({ status: 404 });
+
+    uuidSpy.mockRestore();
+  });
+
+  it("updateFolderAccessRole e revokeFolderAccess validam ownership e existencia", async () => {
+    const { store, state } = createStore({
+      users: baseUsers,
+      folders: [
+        {
+          id: "folder-1",
+          owner_id: "owner-1",
+          parent_id: null,
+          name: "Shared",
+          created_at: "2026-03-09T10:00:00.000Z",
+          updated_at: "2026-03-09T10:00:00.000Z",
+        },
+      ],
+      folderShares: [
+        {
+          id: "share-1",
+          folder_id: "folder-1",
+          user_id: "guest-1",
+          role: "viewer",
+          granted_by_user_id: "owner-1",
+          created_at: "2026-03-09T11:00:00.000Z",
+          updated_at: "2026-03-09T11:00:00.000Z",
+        },
+      ],
+    });
+
+    const updated = await store.updateFolderAccessRole(
+      "owner-1",
+      "folder-1",
+      "share-1",
+      "editor",
+    );
+    expect(updated.role).toBe("editor");
+    expect(state.folderShares[0]?.role).toBe("editor");
+
+    // share inexistente => 404
+    await expect(
+      store.updateFolderAccessRole("owner-1", "folder-1", "nope", "viewer"),
+    ).rejects.toMatchObject({ status: 404 });
+
+    // nao-dono nao pode revogar (404 na pasta)
+    await expect(
+      store.revokeFolderAccess("guest-2", "folder-1", "share-1"),
+    ).rejects.toMatchObject({ status: 404 });
+
+    await store.revokeFolderAccess("owner-1", "folder-1", "share-1");
+    expect(state.folderShares).toEqual([]);
+  });
+
+  it("listFolderShares lista pessoas com acesso (JOIN users)", async () => {
+    const { store } = createStore({
+      users: baseUsers,
+      folders: [
+        {
+          id: "folder-1",
+          owner_id: "owner-1",
+          parent_id: null,
+          name: "Shared",
+          created_at: "2026-03-09T10:00:00.000Z",
+          updated_at: "2026-03-09T10:00:00.000Z",
+        },
+      ],
+      folderShares: [
+        {
+          id: "share-1",
+          folder_id: "folder-1",
+          user_id: "guest-1",
+          role: "viewer",
+          granted_by_user_id: "owner-1",
+          created_at: "2026-03-09T11:00:00.000Z",
+          updated_at: "2026-03-09T11:00:00.000Z",
+        },
+        {
+          id: "share-2",
+          folder_id: "folder-1",
+          user_id: "guest-2",
+          role: "editor",
+          granted_by_user_id: "owner-1",
+          created_at: "2026-03-09T11:30:00.000Z",
+          updated_at: "2026-03-09T11:30:00.000Z",
+        },
+      ],
+    });
+
+    const shares = await store.listFolderShares("owner-1", "folder-1");
+    expect(shares).toEqual([
+      {
+        id: "share-1",
+        role: "viewer",
+        createdAt: "2026-03-09T11:00:00.000Z",
+        user: {
+          id: "guest-1",
+          githubLogin: "hubot",
+          name: "Hu Bot",
+          avatarUrl: null,
+        },
+      },
+      {
+        id: "share-2",
+        role: "editor",
+        createdAt: "2026-03-09T11:30:00.000Z",
+        user: {
+          id: "guest-2",
+          githubLogin: "monalisa",
+          name: "Mona Lisa",
+          avatarUrl: null,
+        },
+      },
+    ]);
+
+    // nao-dono => 404 na pasta
+    await expect(
+      store.listFolderShares("guest-1", "folder-1"),
+    ).rejects.toMatchObject({ status: 404 });
+  });
+
+  it("getTree do convidado inclui a pasta compartilhada (shared) e seus itens (sharedRole)", async () => {
+    const { store, blobs } = createStore({
+      users: baseUsers,
+      folders: [
+        {
+          id: "folder-own",
+          owner_id: "guest-1",
+          parent_id: null,
+          name: "My stuff",
+          created_at: "2026-03-09T09:00:00.000Z",
+          updated_at: "2026-03-09T09:00:00.000Z",
+        },
+        {
+          id: "folder-shared",
+          owner_id: "owner-1",
+          parent_id: null,
+          name: "Team",
+          created_at: "2026-03-09T08:00:00.000Z",
+          updated_at: "2026-03-09T08:30:00.000Z",
+        },
+      ],
+      items: [
+        {
+          id: "own-item",
+          owner_id: "guest-1",
+          folder_id: "folder-own",
+          kind: "doc",
+          title: "Personal",
+          content_blob_key: "users/guest-1/items/own-item/current.md",
+          archived_at: null,
+          collaboration_room_key: null,
+          collaboration_enabled_at: null,
+          created_at: "2026-03-09T09:00:00.000Z",
+          updated_at: "2026-03-09T09:00:00.000Z",
+        },
+        {
+          id: "shared-item",
+          owner_id: "owner-1",
+          folder_id: "folder-shared",
+          kind: "drawing",
+          title: "Roadmap",
+          content_blob_key: "users/owner-1/items/shared-item/current.excalidraw",
+          archived_at: null,
+          collaboration_room_key: null,
+          collaboration_enabled_at: null,
+          created_at: "2026-03-09T08:00:00.000Z",
+          updated_at: "2026-03-09T08:00:00.000Z",
+        },
+      ],
+      folderShares: [
+        {
+          id: "share-1",
+          folder_id: "folder-shared",
+          user_id: "guest-1",
+          role: "viewer",
+          granted_by_user_id: "owner-1",
+          created_at: "2026-03-09T11:00:00.000Z",
+          updated_at: "2026-03-09T11:00:00.000Z",
+        },
+      ],
+    });
+    await blobs.put("users/guest-1/items/own-item/current.md", "# Personal");
+
+    const tree = await store.getTree("guest-1");
+
+    // a pasta propria nao tem `shared`; a compartilhada tem
+    const ownFolder = tree.folders.find((f) => f.id === "folder-own");
+    const sharedFolder = tree.folders.find((f) => f.id === "folder-shared");
+    expect(ownFolder?.shared).toBeUndefined();
+    expect(sharedFolder?.shared).toEqual({
+      role: "viewer",
+      ownerId: "owner-1",
+      ownerLogin: "octocat",
+      ownerName: "Octo Cat",
+    });
+    // pasta compartilhada vira raiz na arvore do convidado
+    expect(sharedFolder?.parentId).toBeNull();
+
+    // item proprio sem sharedRole; item da pasta compartilhada com sharedRole
+    const ownItem = tree.items.find((i) => i.id === "own-item") as {
+      sharedRole?: string;
+    };
+    const sharedItem = tree.items.find((i) => i.id === "shared-item") as {
+      sharedRole?: string;
+    };
+    expect(ownItem?.sharedRole).toBeUndefined();
+    expect(sharedItem?.sharedRole).toBe("viewer");
+
+    // o dono ve a propria pasta SEM marcacao shared
+    const ownerTree = await store.getTree("owner-1");
+    const ownerFolder = ownerTree.folders.find((f) => f.id === "folder-shared");
+    expect(ownerFolder?.shared).toBeUndefined();
+    const ownerItem = ownerTree.items.find((i) => i.id === "shared-item") as {
+      sharedRole?: string;
+    };
+    expect(ownerItem?.sharedRole).toBeUndefined();
+  });
+
+  it("getTree inclui hybrid cujo doc-root vive numa pasta compartilhada", async () => {
+    const { store, blobs } = createStore({
+      users: baseUsers,
+      folders: [
+        {
+          id: "folder-shared",
+          owner_id: "owner-1",
+          parent_id: null,
+          name: "Team",
+          created_at: "2026-03-09T08:00:00.000Z",
+          updated_at: "2026-03-09T08:00:00.000Z",
+        },
+      ],
+      items: [
+        {
+          id: "doc-1",
+          owner_id: "owner-1",
+          folder_id: "folder-shared",
+          kind: "doc",
+          title: "Spec",
+          content_blob_key: "users/owner-1/items/doc-1/current.md",
+          archived_at: null,
+          collaboration_room_key: null,
+          collaboration_enabled_at: null,
+          created_at: "2026-03-09T08:00:00.000Z",
+          updated_at: "2026-03-09T08:00:00.000Z",
+        },
+        {
+          id: "drawing-1",
+          owner_id: "owner-1",
+          folder_id: "folder-shared",
+          kind: "drawing",
+          title: "Spec",
+          content_blob_key: "users/owner-1/items/drawing-1/current.excalidraw",
+          archived_at: null,
+          collaboration_room_key: null,
+          collaboration_enabled_at: null,
+          created_at: "2026-03-09T08:00:00.000Z",
+          updated_at: "2026-03-09T08:00:00.000Z",
+        },
+      ],
+      hybridItems: [
+        {
+          id: "hybrid-1",
+          owner_id: "owner-1",
+          doc_item_id: "doc-1",
+          drawing_item_id: "drawing-1",
+          default_view: "both",
+          created_at: "2026-03-09T08:00:00.000Z",
+          updated_at: "2026-03-09T08:00:00.000Z",
+        },
+      ],
+      folderShares: [
+        {
+          id: "share-1",
+          folder_id: "folder-shared",
+          user_id: "guest-1",
+          role: "editor",
+          granted_by_user_id: "owner-1",
+          created_at: "2026-03-09T11:00:00.000Z",
+          updated_at: "2026-03-09T11:00:00.000Z",
+        },
+      ],
+    });
+    await blobs.put("users/owner-1/items/doc-1/current.md", "# Spec");
+
+    const tree = await store.getTree("guest-1");
+    // o par colapsa em uma unica entrada hybrid, marcada como editor
+    const hybridEntries = tree.items.filter((i) => i.kind === "hybrid");
+    expect(hybridEntries).toHaveLength(1);
+    expect(hybridEntries[0]?.id).toBe("hybrid-1");
+    expect((hybridEntries[0] as { sharedRole?: string }).sharedRole).toBe(
+      "editor",
+    );
+    // doc/drawing individuais nao aparecem soltos
+    expect(tree.items.some((i) => i.id === "doc-1")).toBe(false);
+    expect(tree.items.some((i) => i.id === "drawing-1")).toBe(false);
+  });
+
+  it("permissao de escrita: editor pode criar/editar; viewer e estranho nao", async () => {
+    const uuidSpy = vi
+      .spyOn(crypto, "randomUUID")
+      .mockReturnValue("00000000-0000-0000-0000-0000000000ff");
+    const { store, state, blobs } = createStore({
+      users: baseUsers,
+      folders: [
+        {
+          id: "folder-shared",
+          owner_id: "owner-1",
+          parent_id: null,
+          name: "Team",
+          created_at: "2026-03-09T08:00:00.000Z",
+          updated_at: "2026-03-09T08:00:00.000Z",
+        },
+      ],
+      items: [
+        {
+          id: "shared-item",
+          owner_id: "owner-1",
+          folder_id: "folder-shared",
+          kind: "drawing",
+          title: "Roadmap",
+          content_blob_key: "users/owner-1/items/shared-item/current.excalidraw",
+          archived_at: null,
+          collaboration_room_key: null,
+          collaboration_enabled_at: null,
+          created_at: "2026-03-09T08:00:00.000Z",
+          updated_at: "2026-03-09T08:00:00.000Z",
+        },
+      ],
+      folderShares: [
+        {
+          id: "share-editor",
+          folder_id: "folder-shared",
+          user_id: "guest-1",
+          role: "editor",
+          granted_by_user_id: "owner-1",
+          created_at: "2026-03-09T11:00:00.000Z",
+          updated_at: "2026-03-09T11:00:00.000Z",
+        },
+        {
+          id: "share-viewer",
+          folder_id: "folder-shared",
+          user_id: "guest-2",
+          role: "viewer",
+          granted_by_user_id: "owner-1",
+          created_at: "2026-03-09T11:00:00.000Z",
+          updated_at: "2026-03-09T11:00:00.000Z",
+        },
+      ],
+    });
+    await blobs.put(
+      "users/owner-1/items/shared-item/current.excalidraw",
+      '{"elements":[]}',
+    );
+
+    // EDITOR pode criar item dentro da pasta compartilhada; o item pertence a ele
+    const createdId = await store.createItem("guest-1", {
+      kind: "doc",
+      title: "Notes",
+      folderId: "folder-shared",
+      content: "# Notes",
+    });
+    const created = state.items.find((i) => i.id === createdId);
+    expect(created?.owner_id).toBe("guest-1");
+    expect(created?.folder_id).toBe("folder-shared");
+
+    // EDITOR pode editar conteudo de item do dono dentro da pasta
+    await store.putItemContent("guest-1", "shared-item", '{"elements":[1]}');
+    expect(
+      blobs.objects.get("users/owner-1/items/shared-item/current.excalidraw"),
+    ).toBe('{"elements":[1]}');
+
+    // EDITOR pode editar metadados (titulo) de item do dono — owner_id preservado
+    await store.patchItemMeta("guest-1", "shared-item", { title: "Roadmap v2" });
+    const editedByEditor = state.items.find((i) => i.id === "shared-item");
+    expect(editedByEditor?.title).toBe("Roadmap v2");
+    expect(editedByEditor?.owner_id).toBe("owner-1");
+
+    // VIEWER nao pode criar dentro da pasta
+    await expect(
+      store.createItem("guest-2", {
+        kind: "doc",
+        title: "Sneaky",
+        folderId: "folder-shared",
+        content: "x",
+      }),
+    ).rejects.toMatchObject({ status: 404 });
+
+    // VIEWER nao pode escrever conteudo
+    await expect(
+      store.putItemContent("guest-2", "shared-item", "nope"),
+    ).rejects.toMatchObject({ status: 404 });
+
+    // VIEWER nao pode editar metadados
+    await expect(
+      store.patchItemMeta("guest-2", "shared-item", { title: "hacked" }),
+    ).rejects.toMatchObject({ status: 404 });
+
+    // VIEWER PODE ler
+    await expect(store.getItem("guest-2", "shared-item")).resolves.toMatchObject(
+      { item: { id: "shared-item" } },
+    );
+
+    // ESTRANHO (sem share) nao le nem escreve => 404
+    const stranger = "guest-3";
+    await expect(
+      store.getItem(stranger, "shared-item"),
+    ).rejects.toMatchObject({ status: 404 });
+    await expect(
+      store.putItemContent(stranger, "shared-item", "x"),
+    ).rejects.toMatchObject({ status: 404 });
+    await expect(
+      store.createItem(stranger, {
+        kind: "doc",
+        title: "x",
+        folderId: "folder-shared",
+        content: "x",
+      }),
+    ).rejects.toMatchObject({ status: 404 });
+
+    uuidSpy.mockRestore();
   });
 });

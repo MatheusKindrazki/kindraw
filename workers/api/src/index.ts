@@ -797,6 +797,16 @@ export const routeRequest = async (request: Request, env: Env) => {
     }
   }
 
+  // User search for the share invite UI (by @login / name). Authenticated.
+  if (pathname === "/api/users/search" && request.method === "GET") {
+    const { auth, store } = await requireAuth(request, env);
+    const q = (url.searchParams.get("q") || "").trim();
+    if (!q) {
+      throw new HttpError(400, "Search query `q` is required.");
+    }
+    return json({ users: await store.searchUsers(q, auth.user.id) });
+  }
+
   if (pathname === "/api/folders" && request.method === "POST") {
     const { auth, store } = await requireAuth(request, env);
     const input = await readJson<CreateFolderInput>(request);
@@ -806,6 +816,70 @@ export const routeRequest = async (request: Request, env: Env) => {
       },
       { status: 201 },
     );
+  }
+
+  // --- Folder shares (people with access to a folder) ------------------------
+  // Matched BEFORE the generic /api/folders/:id handler so the longer paths win.
+  if (pathname.match(/^\/api\/folders\/[^/]+\/shares(\/[^/]+)?$/)) {
+    const rest = pathname.replace("/api/folders/", "");
+    const [folderId, sharesSegment, shareId] = rest.split("/");
+    const { auth, store } = await requireAuth(request, env);
+
+    // /api/folders/:folderId/shares
+    if (sharesSegment === "shares" && !shareId) {
+      if (request.method === "GET") {
+        return json({
+          shares: await store.listFolderShares(auth.user.id, folderId),
+        });
+      }
+      if (request.method === "POST") {
+        const input = await readJson<{
+          login?: string;
+          role?: string;
+        }>(request);
+        const login = (input.login || "").trim();
+        if (!login) {
+          throw new HttpError(400, "`login` is required.");
+        }
+        const role = input.role;
+        if (role !== "viewer" && role !== "editor") {
+          throw new HttpError(400, "`role` must be 'viewer' or 'editor'.");
+        }
+        const target = await store.getUserByLogin(login);
+        if (!target) {
+          throw new HttpError(404, `No user found with login @${login}.`);
+        }
+        const share = await store.grantFolderAccess(
+          auth.user.id,
+          folderId,
+          target.id,
+          role,
+        );
+        return json({ share }, { status: 201 });
+      }
+    }
+
+    // /api/folders/:folderId/shares/:shareId
+    if (sharesSegment === "shares" && shareId) {
+      if (request.method === "PATCH") {
+        const input = await readJson<{ role?: string }>(request);
+        const role = input.role;
+        if (role !== "viewer" && role !== "editor") {
+          throw new HttpError(400, "`role` must be 'viewer' or 'editor'.");
+        }
+        const share = await store.updateFolderAccessRole(
+          auth.user.id,
+          folderId,
+          shareId,
+          role,
+        );
+        return json({ share });
+      }
+      if (request.method === "DELETE") {
+        await store.revokeFolderAccess(auth.user.id, folderId, shareId);
+        return new Response(null, { status: 204 });
+      }
+    }
   }
 
   if (pathname.startsWith("/api/folders/")) {

@@ -27,6 +27,7 @@ import { DocEditorPage } from "./DocEditorPage";
 import { DrawingEditorPage } from "./DrawingEditorPage";
 import { HybridEditorPage } from "./HybridEditorPage";
 import { HybridPublicShareView } from "./HybridPublicShareView";
+import { ShareFolderModal } from "./ShareFolderModal";
 import { KindrawIcon } from "./icons";
 import { createInitialItemContent } from "./content";
 import {
@@ -166,7 +167,7 @@ const openTreeItem = (item: KindrawTreeItem) => {
   }
 };
 
-type KindrawSharedView = "links" | "live" | null;
+type KindrawSharedView = "links" | "live" | "shared-with-me" | null;
 
 /* ────────────────────────────────────────────────────────
    Menus (popover) e modal temático
@@ -608,9 +609,7 @@ const CardThumb = ({
   kindKey: KindrawIconName;
 }) => {
   const ref = useRef<HTMLSpanElement>(null);
-  const [thumb, setThumb] = useState<KindrawThumbnail | null | "loading">(
-    null,
-  );
+  const [thumb, setThumb] = useState<KindrawThumbnail | null | "loading">(null);
 
   const canPreview = isKindrawHybridItem(item) || item.kind === "drawing";
   const cacheKey = `${item.id}:${item.updatedAt}`;
@@ -713,6 +712,7 @@ const WorkspaceItemCard = ({
   selectionMode,
   selected,
   onToggleSelect,
+  readOnly = false,
 }: {
   item: KindrawTreeItem;
   menuOpen: boolean;
@@ -723,6 +723,7 @@ const WorkspaceItemCard = ({
   selectionMode: boolean;
   selected: boolean;
   onToggleSelect: () => void;
+  readOnly?: boolean;
 }) => {
   const kindKey = getItemKindKey(item);
 
@@ -761,12 +762,17 @@ const WorkspaceItemCard = ({
             {KIND_LABEL[kindKey]}
           </span>
           <span className="kindraw-card__topright">
+            {readOnly ? (
+              <span className="kindraw-card__readonly" title="Somente leitura">
+                <KindrawIcon name="users" size={13} /> leitura
+              </span>
+            ) : null}
             {item.shareLinks.length ? (
               <span className="kindraw-card__shared">
                 <KindrawIcon name="link" size={13} /> público
               </span>
             ) : null}
-            {selectionMode ? null : (
+            {selectionMode || readOnly ? null : (
               <KindrawMenuWrap
                 button={
                   <button
@@ -810,7 +816,9 @@ const WorkspaceItemCard = ({
         </div>
         <button
           className="kindraw-card__title"
-          onClick={() => (selectionMode ? onToggleSelect() : openTreeItem(item))}
+          onClick={() =>
+            selectionMode ? onToggleSelect() : openTreeItem(item)
+          }
           type="button"
         >
           {item.title}
@@ -843,9 +851,11 @@ const WorkspacePage = ({
   onDeleteFolder,
   onDeleteItem,
   onNavigateFolder,
+  onNavigateSharedWithMe,
   onRenameHybridItem,
   onRenameFolder,
   onRenameItem,
+  onShareFolder,
   onBulkDelete,
   onBulkMove,
   onBulkMoveToNewFolder,
@@ -861,9 +871,11 @@ const WorkspacePage = ({
   onDeleteItem: (item: KindrawItem) => void;
   onDeleteHybridItem: (item: KindrawHybridItem) => void;
   onNavigateFolder: (folderId: string | null) => void;
+  onNavigateSharedWithMe: () => void;
   onRenameFolder: (folder: KindrawFolder) => void;
   onRenameItem: (item: KindrawItem) => void;
   onRenameHybridItem: (item: KindrawHybridItem) => void;
+  onShareFolder: (folder: KindrawFolder) => void;
   onBulkDelete: (items: KindrawTreeItem[]) => Promise<void>;
   onBulkMove: (
     items: KindrawTreeItem[],
@@ -922,9 +934,20 @@ const WorkspacePage = ({
   const folderTrail = getFolderTrail(tree.folders, currentFolderId);
   const itemCounts = countItemsByFolder(tree.items);
 
-  const visibleFolders = sharedView
-    ? []
-    : getFolderChildren(tree.folders, currentFolderId);
+  // Pastas compartilhadas COMIGO (têm `shared` definido pelo backend).
+  const sharedWithMeFolders = tree.folders.filter((folder) => folder.shared);
+
+  // Read-only quando estou dentro de uma pasta compartilhada comigo como
+  // viewer. Editor mantém as ações; pasta própria nunca é read-only.
+  const isReadOnlyFolder = currentFolder?.shared?.role === "viewer";
+  const isSharedFolder = Boolean(currentFolder?.shared);
+
+  const visibleFolders =
+    sharedView === "shared-with-me"
+      ? sharedWithMeFolders
+      : sharedView
+      ? []
+      : getFolderChildren(tree.folders, currentFolderId);
 
   let scopedItems: KindrawTreeItem[];
   if (sharedView === "links") {
@@ -933,6 +956,10 @@ const WorkspacePage = ({
     scopedItems = tree.items.filter(
       (item) => !isKindrawHybridItem(item) && item.collaborationRoomId !== null,
     );
+  } else if (sharedView === "shared-with-me") {
+    // O índice de "compartilhados comigo" mostra apenas as pastas; os itens
+    // aparecem ao navegar para dentro de cada pasta compartilhada.
+    scopedItems = [];
   } else {
     scopedItems = tree.items.filter(
       (item) => item.folderId === currentFolderId,
@@ -947,18 +974,21 @@ const WorkspacePage = ({
     : scopedItems;
   // mais recentes primeiro (por última atualização)
   const visibleItems = [...filteredItems].sort(
-    (a, b) =>
-      new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
+    (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
   );
 
   const heading = sharedView
     ? sharedView === "links"
       ? "Links públicos"
-      : "Sessões ao vivo"
+      : sharedView === "live"
+      ? "Sessões ao vivo"
+      : "Compartilhados comigo"
     : currentFolder?.name || "Biblioteca";
 
-  // Seleção só existe no workspace autenticado, fora de visões compartilhadas.
-  const canSelect = !sharedView && visibleItems.length > 0;
+  // Seleção só existe no workspace autenticado, fora de visões compartilhadas
+  // e fora de pastas compartilhadas comigo (não posso renomear/mover itens
+  // alheios em massa pela UI).
+  const canSelect = !sharedView && !isSharedFolder && visibleItems.length > 0;
   const selectedItems = visibleItems.filter((item) => selectedIds.has(item.id));
   const selectedCount = selectedItems.length;
   const allSelected =
@@ -1039,6 +1069,13 @@ const WorkspacePage = ({
           <nav aria-label="Caminho" className="kindraw-crumb">
             {sharedView ? (
               <span>Compartilhados</span>
+            ) : isSharedFolder ? (
+              <>
+                <button onClick={() => onNavigateSharedWithMe()} type="button">
+                  Compartilhados comigo
+                </button>
+                {currentFolder ? <span>/ {currentFolder.name}</span> : null}
+              </>
             ) : (
               <>
                 <button onClick={() => onNavigateFolder(null)} type="button">
@@ -1061,7 +1098,7 @@ const WorkspacePage = ({
           </nav>
           <div className="kindraw-main-head__title">
             <h1>{heading}</h1>
-            {currentFolder ? (
+            {currentFolder && !isSharedFolder ? (
               <KindrawMenuWrap
                 button={
                   <button
@@ -1087,6 +1124,17 @@ const WorkspacePage = ({
                   className="kindraw-menu__item"
                   onClick={() => {
                     closeItemMenu();
+                    onShareFolder(currentFolder);
+                  }}
+                  role="menuitem"
+                  type="button"
+                >
+                  Compartilhar
+                </button>
+                <button
+                  className="kindraw-menu__item"
+                  onClick={() => {
+                    closeItemMenu();
                     onRenameFolder(currentFolder);
                   }}
                   role="menuitem"
@@ -1107,9 +1155,24 @@ const WorkspacePage = ({
                 </button>
               </KindrawMenuWrap>
             ) : null}
+            {currentFolder?.shared ? (
+              <span
+                className={`kindraw-sharebadge${
+                  isReadOnlyFolder ? " kindraw-sharebadge--viewer" : ""
+                }`}
+              >
+                <KindrawIcon name="users" size={13} /> de @
+                {currentFolder.shared.ownerLogin} ·{" "}
+                {isReadOnlyFolder ? "Visualizador" : "Editor"}
+              </span>
+            ) : null}
           </div>
           <p className="kindraw-main-head__meta">
-            {sharedView
+            {sharedView === "shared-with-me"
+              ? pluralize(visibleFolders.length, "pasta", "pastas")
+              : sharedView
+              ? pluralize(visibleItems.length, "item", "itens")
+              : isSharedFolder
               ? pluralize(visibleItems.length, "item", "itens")
               : `${pluralize(
                   visibleFolders.length,
@@ -1119,7 +1182,8 @@ const WorkspacePage = ({
           </p>
         </div>
         <div className="kindraw-main-head__actions">
-          {selectionMode ? (
+          {sharedView === "shared-with-me" ||
+          isReadOnlyFolder ? null : selectionMode ? (
             <button
               className="kindraw-btn kindraw-btn--soft"
               onClick={exitSelection}
@@ -1202,62 +1266,90 @@ const WorkspacePage = ({
       {visibleFolders.length ? (
         <div className="kindraw-folderrow">
           {visibleFolders.map((folder) => (
-            <div className="kindraw-folderchip" key={folder.id}>
+            <div
+              className={`kindraw-folderchip${
+                folder.shared ? " kindraw-folderchip--shared" : ""
+              }`}
+              key={folder.id}
+            >
               <button
                 className="kindraw-folderchip__main"
                 onClick={() => onNavigateFolder(folder.id)}
                 type="button"
               >
                 <KindrawIcon name="folder" size={18} />
-                <span>{folder.name}</span>
+                <span className="kindraw-folderchip__name">
+                  {folder.name}
+                  {folder.shared ? (
+                    <em className="kindraw-folderchip__from">
+                      de @{folder.shared.ownerLogin} ·{" "}
+                      {folder.shared.role === "viewer"
+                        ? "Visualizador"
+                        : "Editor"}
+                    </em>
+                  ) : null}
+                </span>
                 <em className="kindraw-folderchip__count">
                   {itemCounts.get(folder.id) || 0}
                 </em>
               </button>
-              <KindrawMenuWrap
-                button={
+              {folder.shared ? null : (
+                <KindrawMenuWrap
+                  button={
+                    <button
+                      aria-expanded={openMenuId === `folder:${folder.id}`}
+                      aria-label={`Ações da pasta ${folder.name}`}
+                      className="kindraw-dots"
+                      onClick={() =>
+                        setOpenMenuId(
+                          openMenuId === `folder:${folder.id}`
+                            ? null
+                            : `folder:${folder.id}`,
+                        )
+                      }
+                      type="button"
+                    >
+                      <KindrawIcon name="dots" size={16} />
+                    </button>
+                  }
+                  onClose={closeItemMenu}
+                  open={openMenuId === `folder:${folder.id}`}
+                >
                   <button
-                    aria-expanded={openMenuId === `folder:${folder.id}`}
-                    aria-label={`Ações da pasta ${folder.name}`}
-                    className="kindraw-dots"
-                    onClick={() =>
-                      setOpenMenuId(
-                        openMenuId === `folder:${folder.id}`
-                          ? null
-                          : `folder:${folder.id}`,
-                      )
-                    }
+                    className="kindraw-menu__item"
+                    onClick={() => {
+                      closeItemMenu();
+                      onShareFolder(folder);
+                    }}
+                    role="menuitem"
                     type="button"
                   >
-                    <KindrawIcon name="dots" size={16} />
+                    Compartilhar
                   </button>
-                }
-                onClose={closeItemMenu}
-                open={openMenuId === `folder:${folder.id}`}
-              >
-                <button
-                  className="kindraw-menu__item"
-                  onClick={() => {
-                    closeItemMenu();
-                    onRenameFolder(folder);
-                  }}
-                  role="menuitem"
-                  type="button"
-                >
-                  Renomear
-                </button>
-                <button
-                  className="kindraw-menu__item kindraw-menu__item--danger"
-                  onClick={() => {
-                    closeItemMenu();
-                    onDeleteFolder(folder);
-                  }}
-                  role="menuitem"
-                  type="button"
-                >
-                  Excluir
-                </button>
-              </KindrawMenuWrap>
+                  <button
+                    className="kindraw-menu__item"
+                    onClick={() => {
+                      closeItemMenu();
+                      onRenameFolder(folder);
+                    }}
+                    role="menuitem"
+                    type="button"
+                  >
+                    Renomear
+                  </button>
+                  <button
+                    className="kindraw-menu__item kindraw-menu__item--danger"
+                    onClick={() => {
+                      closeItemMenu();
+                      onDeleteFolder(folder);
+                    }}
+                    role="menuitem"
+                    type="button"
+                  >
+                    Excluir
+                  </button>
+                </KindrawMenuWrap>
+              )}
             </div>
           ))}
         </div>
@@ -1287,12 +1379,13 @@ const WorkspacePage = ({
                 )
               }
               onToggleSelect={() => toggleSelect(item.id)}
+              readOnly={isReadOnlyFolder || item.sharedRole === "viewer"}
               selected={selectedIds.has(item.id)}
               selectionMode={selectionMode}
             />
           ))}
         </div>
-      ) : (
+      ) : sharedView === "shared-with-me" && visibleFolders.length ? null : (
         <p className="kindraw-empty">
           {normalizedQuery
             ? "Nenhum item corresponde à busca."
@@ -1300,12 +1393,18 @@ const WorkspacePage = ({
             ? "Nenhum item com link público ainda."
             : sharedView === "live"
             ? "Nenhuma sessão ao vivo ativa."
+            : sharedView === "shared-with-me"
+            ? "Nenhuma pasta foi compartilhada com você ainda."
             : "Nenhum drawing, doc ou híbrido nesta pasta."}
         </p>
       )}
 
       {selectionMode ? (
-        <div className="kindraw-bulkbar" role="toolbar" aria-label="Ações em massa">
+        <div
+          className="kindraw-bulkbar"
+          role="toolbar"
+          aria-label="Ações em massa"
+        >
           <span className="kindraw-bulkbar__count">
             {pluralize(selectedCount, "selecionado", "selecionados")}
           </span>
@@ -1506,6 +1605,7 @@ export const KindrawApp = () => {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isMutating, setIsMutating] = useState(false);
   const [dialog, setDialog] = useState<KindrawDialog | null>(null);
+  const [shareFolder, setShareFolder] = useState<KindrawFolder | null>(null);
   const [avatarMenuOpen, setAvatarMenuOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [sharedView, setSharedView] = useState<KindrawSharedView>(null);
@@ -1749,6 +1849,14 @@ export const KindrawApp = () => {
     [refreshTree, route, runMutation],
   );
 
+  const handleShareFolder = useCallback((folder: KindrawFolder) => {
+    // Só o dono compartilha — pastas compartilhadas comigo não abrem o modal.
+    if (folder.shared) {
+      return;
+    }
+    setShareFolder(folder);
+  }, []);
+
   const handleRenameItem = useCallback(
     (item: KindrawItem) => {
       setDialog({
@@ -1986,6 +2094,9 @@ export const KindrawApp = () => {
   const publicLinksCount = tree.items.filter(
     (item) => item.shareLinks.length > 0,
   ).length;
+  const sharedWithMeCount = tree.folders.filter(
+    (folder) => folder.shared,
+  ).length;
   const isWorkspaceRoute = route.kind === "workspace";
 
   return (
@@ -2092,6 +2203,19 @@ export const KindrawApp = () => {
           <div className="kindraw-sidebar__label">Compartilhados</div>
           <button
             className={`kindraw-tree__button${
+              isWorkspaceRoute && sharedView === "shared-with-me"
+                ? " kindraw-tree__button--active"
+                : ""
+            }`}
+            onClick={() => openSharedView("shared-with-me")}
+            type="button"
+          >
+            <KindrawIcon name="users" size={16} />
+            <span className="kindraw-tree__label">Compartilhados comigo</span>
+            <em className="kindraw-tree__count">{sharedWithMeCount}</em>
+          </button>
+          <button
+            className={`kindraw-tree__button${
               isWorkspaceRoute && sharedView === "links"
                 ? " kindraw-tree__button--active"
                 : ""
@@ -2142,9 +2266,11 @@ export const KindrawApp = () => {
               onDeleteFolder={handleDeleteFolder}
               onDeleteItem={handleDeleteItem}
               onNavigateFolder={navigateToFolder}
+              onNavigateSharedWithMe={() => openSharedView("shared-with-me")}
               onRenameHybridItem={handleRenameHybridItem}
               onRenameFolder={handleRenameFolder}
               onRenameItem={handleRenameItem}
+              onShareFolder={handleShareFolder}
               searchQuery={searchQuery}
               sharedView={sharedView}
               tree={tree}
@@ -2181,6 +2307,15 @@ export const KindrawApp = () => {
             dialog.title + (dialog.type === "prompt" ? dialog.initialValue : "")
           }
           onClose={closeDialog}
+        />
+      ) : null}
+
+      {shareFolder ? (
+        <ShareFolderModal
+          folder={shareFolder}
+          key={shareFolder.id}
+          onChange={() => void refreshTree()}
+          onClose={() => setShareFolder(null)}
         />
       ) : null}
 

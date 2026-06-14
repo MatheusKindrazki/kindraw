@@ -31,6 +31,12 @@ const { mockStore, mockOpenAIChatCreate, mockOpenAIConstructor } = vi.hoisted(
       getPublicItem: vi.fn(),
       upsertGithubUser: vi.fn(),
       createSession: vi.fn(),
+      searchUsers: vi.fn(),
+      getUserByLogin: vi.fn(),
+      grantFolderAccess: vi.fn(),
+      updateFolderAccessRole: vi.fn(),
+      revokeFolderAccess: vi.fn(),
+      listFolderShares: vi.fn(),
     },
     mockOpenAIChatCreate: vi.fn(),
     mockOpenAIConstructor: vi.fn(),
@@ -775,5 +781,263 @@ describe("routeRequest", () => {
     expect(mockCollabNamespace.get).toHaveBeenCalled();
     expect(mockCollabStub.fetch).toHaveBeenCalled();
     expect(response.status).toBe(204);
+  });
+
+  it("searches users by query for an authenticated user", async () => {
+    mockStore.resolveSession.mockResolvedValue(authenticatedSession());
+    mockStore.searchUsers.mockResolvedValue([
+      { id: "u-2", githubLogin: "hubot", name: "Hu Bot", avatarUrl: null },
+    ]);
+
+    const response = await worker.fetch(
+      new Request("http://localhost:8787/api/users/search?q=hub", {
+        headers: {
+          Cookie: "kindraw_session=s-1",
+          Origin: "http://localhost:3001",
+        },
+      }),
+      env,
+    );
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      users: [
+        { id: "u-2", githubLogin: "hubot", name: "Hu Bot", avatarUrl: null },
+      ],
+    });
+    expect(mockStore.searchUsers).toHaveBeenCalledWith("hub", "u-1");
+  });
+
+  it("rejects an empty user search query", async () => {
+    mockStore.resolveSession.mockResolvedValue(authenticatedSession());
+
+    const response = await worker.fetch(
+      new Request("http://localhost:8787/api/users/search?q=", {
+        headers: {
+          Cookie: "kindraw_session=s-1",
+          Origin: "http://localhost:3001",
+        },
+      }),
+      env,
+    );
+
+    expect(response.status).toBe(400);
+    expect(mockStore.searchUsers).not.toHaveBeenCalled();
+  });
+
+  it("lists folder shares for an authenticated owner", async () => {
+    mockStore.resolveSession.mockResolvedValue(authenticatedSession());
+    mockStore.listFolderShares.mockResolvedValue([
+      {
+        id: "share-1",
+        role: "viewer",
+        createdAt: "2026-03-09T11:00:00.000Z",
+        user: { id: "u-2", githubLogin: "hubot", name: "Hu Bot", avatarUrl: null },
+      },
+    ]);
+
+    const response = await worker.fetch(
+      new Request("http://localhost:8787/api/folders/folder-1/shares", {
+        headers: {
+          Cookie: "kindraw_session=s-1",
+          Origin: "http://localhost:3001",
+        },
+      }),
+      env,
+    );
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      shares: [
+        {
+          id: "share-1",
+          role: "viewer",
+          createdAt: "2026-03-09T11:00:00.000Z",
+          user: {
+            id: "u-2",
+            githubLogin: "hubot",
+            name: "Hu Bot",
+            avatarUrl: null,
+          },
+        },
+      ],
+    });
+    expect(mockStore.listFolderShares).toHaveBeenCalledWith("u-1", "folder-1");
+  });
+
+  it("grants folder access by login and role", async () => {
+    mockStore.resolveSession.mockResolvedValue(authenticatedSession());
+    mockStore.getUserByLogin.mockResolvedValue({
+      id: "u-2",
+      githubLogin: "hubot",
+      name: "Hu Bot",
+      avatarUrl: null,
+    });
+    mockStore.grantFolderAccess.mockResolvedValue({
+      id: "share-1",
+      role: "editor",
+      createdAt: "2026-03-09T12:00:00.000Z",
+      user: { id: "u-2", githubLogin: "hubot", name: "Hu Bot", avatarUrl: null },
+    });
+
+    const response = await worker.fetch(
+      new Request("http://localhost:8787/api/folders/folder-1/shares", {
+        method: "POST",
+        headers: {
+          Cookie: "kindraw_session=s-1",
+          Origin: "http://localhost:3001",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ login: "hubot", role: "editor" }),
+      }),
+      env,
+    );
+
+    expect(response.status).toBe(201);
+    expect(await response.json()).toEqual({
+      share: {
+        id: "share-1",
+        role: "editor",
+        createdAt: "2026-03-09T12:00:00.000Z",
+        user: {
+          id: "u-2",
+          githubLogin: "hubot",
+          name: "Hu Bot",
+          avatarUrl: null,
+        },
+      },
+    });
+    expect(mockStore.getUserByLogin).toHaveBeenCalledWith("hubot");
+    expect(mockStore.grantFolderAccess).toHaveBeenCalledWith(
+      "u-1",
+      "folder-1",
+      "u-2",
+      "editor",
+    );
+  });
+
+  it("returns 404 when granting access to an unknown login", async () => {
+    mockStore.resolveSession.mockResolvedValue(authenticatedSession());
+    mockStore.getUserByLogin.mockResolvedValue(null);
+
+    const response = await worker.fetch(
+      new Request("http://localhost:8787/api/folders/folder-1/shares", {
+        method: "POST",
+        headers: {
+          Cookie: "kindraw_session=s-1",
+          Origin: "http://localhost:3001",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ login: "ghost", role: "viewer" }),
+      }),
+      env,
+    );
+
+    expect(response.status).toBe(404);
+    expect(mockStore.grantFolderAccess).not.toHaveBeenCalled();
+  });
+
+  it("rejects an invalid role when granting access", async () => {
+    mockStore.resolveSession.mockResolvedValue(authenticatedSession());
+
+    const response = await worker.fetch(
+      new Request("http://localhost:8787/api/folders/folder-1/shares", {
+        method: "POST",
+        headers: {
+          Cookie: "kindraw_session=s-1",
+          Origin: "http://localhost:3001",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ login: "hubot", role: "admin" }),
+      }),
+      env,
+    );
+
+    expect(response.status).toBe(400);
+    expect(mockStore.getUserByLogin).not.toHaveBeenCalled();
+    expect(mockStore.grantFolderAccess).not.toHaveBeenCalled();
+  });
+
+  it("updates a folder share role", async () => {
+    mockStore.resolveSession.mockResolvedValue(authenticatedSession());
+    mockStore.updateFolderAccessRole.mockResolvedValue({
+      id: "share-1",
+      role: "viewer",
+      createdAt: "2026-03-09T12:00:00.000Z",
+      user: { id: "u-2", githubLogin: "hubot", name: "Hu Bot", avatarUrl: null },
+    });
+
+    const response = await worker.fetch(
+      new Request(
+        "http://localhost:8787/api/folders/folder-1/shares/share-1",
+        {
+          method: "PATCH",
+          headers: {
+            Cookie: "kindraw_session=s-1",
+            Origin: "http://localhost:3001",
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ role: "viewer" }),
+        },
+      ),
+      env,
+    );
+
+    expect(response.status).toBe(200);
+    expect(mockStore.updateFolderAccessRole).toHaveBeenCalledWith(
+      "u-1",
+      "folder-1",
+      "share-1",
+      "viewer",
+    );
+  });
+
+  it("revokes a folder share", async () => {
+    mockStore.resolveSession.mockResolvedValue(authenticatedSession());
+    mockStore.revokeFolderAccess.mockResolvedValue(undefined);
+
+    const response = await worker.fetch(
+      new Request(
+        "http://localhost:8787/api/folders/folder-1/shares/share-1",
+        {
+          method: "DELETE",
+          headers: {
+            Cookie: "kindraw_session=s-1",
+            Origin: "http://localhost:3001",
+          },
+        },
+      ),
+      env,
+    );
+
+    expect(response.status).toBe(204);
+    expect(mockStore.revokeFolderAccess).toHaveBeenCalledWith(
+      "u-1",
+      "folder-1",
+      "share-1",
+    );
+  });
+
+  it("does not treat /shares paths as a plain folder patch/delete", async () => {
+    mockStore.resolveSession.mockResolvedValue(authenticatedSession());
+    mockStore.revokeFolderAccess.mockResolvedValue(undefined);
+
+    const response = await worker.fetch(
+      new Request(
+        "http://localhost:8787/api/folders/folder-1/shares/share-1",
+        {
+          method: "DELETE",
+          headers: {
+            Cookie: "kindraw_session=s-1",
+            Origin: "http://localhost:3001",
+          },
+        },
+      ),
+      env,
+    );
+
+    expect(response.status).toBe(204);
+    // the generic folder DELETE handler must NOT have fired
+    expect(mockStore.deleteFolder).not.toHaveBeenCalled();
   });
 });

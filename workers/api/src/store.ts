@@ -21,6 +21,9 @@ import type {
   KindrawPublicItemResponse,
   KindrawSession,
   KindrawShareLink,
+  KindrawShareRole,
+  KindrawFolderShare,
+  KindrawUser,
   KindrawTreeResponse,
   PatchFolderInput,
   PatchHybridItemMetaInput,
@@ -97,6 +100,16 @@ type HybridItemRow = {
   doc_item_id: string;
   drawing_item_id: string;
   default_view: KindrawHybridView;
+  created_at: string;
+  updated_at: string;
+};
+
+type FolderShareRow = {
+  id: string;
+  folder_id: string;
+  user_id: string;
+  role: KindrawShareRole;
+  granted_by_user_id: string;
   created_at: string;
   updated_at: string;
 };
@@ -215,6 +228,23 @@ const toHybridItem = (
 });
 
 const isoNow = () => new Date().toISOString();
+
+const toKindrawUser = (row: {
+  id: string;
+  github_login: string;
+  name: string;
+  avatar_url: string | null;
+}): KindrawUser => ({
+  id: row.id,
+  githubLogin: row.github_login,
+  name: row.name,
+  avatarUrl: row.avatar_url,
+});
+
+// Escapa os wildcards do LIKE (%, _) e o próprio caractere de escape, para que
+// uma busca por "100%" não vire um match-tudo. Pareado com `ESCAPE '\\'` na SQL.
+const escapeLike = (value: string) =>
+  value.replace(/[\\%_]/g, (char) => `\\${char}`);
 
 const base64UrlEncode = (bytes: Uint8Array): string => {
   let binary = "";
@@ -688,6 +718,7 @@ export class KindrawStore {
       { results: itemRows },
       { results: shareRows },
       { results: hybridRows },
+      { results: incomingShareRows },
     ] = await Promise.all([
       this.db
         .prepare(
@@ -723,20 +754,140 @@ export class KindrawStore {
         )
         .bind(ownerId)
         .all<HybridItemRow>(),
+      // Pastas compartilhadas COM este usuário (ele é o destinatário do share),
+      // junto com os dados do dono original da pasta.
+      this.db
+        .prepare(
+          `SELECT
+             folder_shares.role AS share_role,
+             folders.id AS folder_id,
+             folders.owner_id AS folder_owner_id,
+             folders.parent_id AS folder_parent_id,
+             folders.name AS folder_name,
+             folders.created_at AS folder_created_at,
+             folders.updated_at AS folder_updated_at,
+             owner.github_login AS owner_login,
+             owner.name AS owner_name
+           FROM folder_shares
+           JOIN folders ON folders.id = folder_shares.folder_id
+           JOIN users AS owner ON owner.id = folders.owner_id
+           WHERE folder_shares.user_id = ?
+           ORDER BY folders.name COLLATE NOCASE ASC, folders.created_at ASC`,
+        )
+        .bind(ownerId)
+        .all<{
+          share_role: KindrawShareRole;
+          folder_id: string;
+          folder_owner_id: string;
+          folder_parent_id: string | null;
+          folder_name: string;
+          folder_created_at: string;
+          folder_updated_at: string;
+          owner_login: string;
+          owner_name: string;
+        }>(),
     ]);
 
-    const shareMap = groupShareLinks(shareRows.map(toShareLink));
+    // Map de pasta-compartilhada-comigo -> papel + dono. As pastas próprias
+    // (folder.owner_id === ownerId) nunca entram aqui — o grant bloqueia
+    // self-share, mas dedupamos por garantia abaixo.
+    const sharedFolders = new Map<
+      string,
+      { role: KindrawShareRole; ownerId: string; ownerLogin: string; ownerName: string }
+    >();
+    for (const row of incomingShareRows) {
+      if (row.folder_owner_id === ownerId) {
+        continue; // dedupe defensivo: dono não recebe share da própria pasta
+      }
+      sharedFolders.set(row.folder_id, {
+        role: row.share_role,
+        ownerId: row.folder_owner_id,
+        ownerLogin: row.owner_login,
+        ownerName: row.owner_name,
+      });
+    }
+
+    // Itens que vivem DIRETAMENTE numa pasta compartilhada comigo (de qualquer
+    // dono). Não descemos em subpastas: compartilhar uma pasta dá acesso só aos
+    // itens com folder_id == aquela pasta (limitação documentada).
+    let sharedItemRows: ItemRow[] = [];
+    let sharedShareRows: ShareLinkRow[] = [];
+    let sharedHybridRows: HybridItemRow[] = [];
+    const sharedFolderIds = [...sharedFolders.keys()];
+    if (sharedFolderIds.length) {
+      const placeholders = sharedFolderIds.map(() => "?").join(", ");
+      const [itemsResult, sharesResult, hybridResult] = await Promise.all([
+        this.db
+          .prepare(
+            `SELECT * FROM items
+               WHERE folder_id IN (${placeholders})
+               ORDER BY title COLLATE NOCASE ASC, created_at ASC`,
+          )
+          .bind(...sharedFolderIds)
+          .all<ItemRow>(),
+        this.db
+          .prepare(
+            `SELECT share_links.*
+               FROM share_links
+               JOIN items ON items.id = share_links.item_id
+               WHERE items.folder_id IN (${placeholders})
+                 AND share_links.revoked_at IS NULL
+               ORDER BY share_links.created_at DESC`,
+          )
+          .bind(...sharedFolderIds)
+          .all<ShareLinkRow>(),
+        // Hybrids cujo doc-root vive numa pasta compartilhada. O folder_id do
+        // par mora nos itens (doc/drawing), então cruzamos via doc_item_id.
+        this.db
+          .prepare(
+            `SELECT hybrid_items.*
+               FROM hybrid_items
+               JOIN items AS doc ON doc.id = hybrid_items.doc_item_id
+               WHERE doc.folder_id IN (${placeholders})
+               ORDER BY hybrid_items.updated_at DESC, hybrid_items.created_at DESC`,
+          )
+          .bind(...sharedFolderIds)
+          .all<HybridItemRow>(),
+      ]);
+      sharedItemRows = itemsResult.results;
+      sharedShareRows = sharesResult.results;
+      sharedHybridRows = hybridResult.results;
+    }
+
+    // Conjunto combinado, deduplicando por id (um item próprio nunca também é
+    // "compartilhado comigo", mas mantemos a regra explícita).
+    const ownItemIds = new Set(itemRows.map((row) => row.id));
+    const combinedItemRows = [
+      ...itemRows,
+      ...sharedItemRows.filter((row) => !ownItemIds.has(row.id)),
+    ];
+    const ownHybridIds = new Set(hybridRows.map((row) => row.id));
+    const combinedHybridRows = [
+      ...hybridRows,
+      ...sharedHybridRows.filter((row) => !ownHybridIds.has(row.id)),
+    ];
+
+    const shareMap = groupShareLinks(
+      [...shareRows, ...sharedShareRows].map(toShareLink),
+    );
     const hybridByDocId = new Map(
-      hybridRows.map((row) => [row.doc_item_id, row] as const),
+      combinedHybridRows.map((row) => [row.doc_item_id, row] as const),
     );
     const hybridByDrawingId = new Map(
-      hybridRows.map((row) => [row.drawing_item_id, row] as const),
+      combinedHybridRows.map((row) => [row.drawing_item_id, row] as const),
     );
-    const itemById = new Map(itemRows.map((row) => [row.id, row] as const));
+    const itemById = new Map(
+      combinedItemRows.map((row) => [row.id, row] as const),
+    );
     const collapsedItemIds = new Set<string>();
     const treeItems: KindrawTreeResponse["items"] = [];
 
-    for (const row of itemRows) {
+    // Papel de compartilhamento de um item = papel da pasta compartilhada onde
+    // ele vive. Itens fora de pasta compartilhada (própria) => undefined.
+    const sharedRoleForItem = (row: ItemRow): KindrawShareRole | undefined =>
+      row.folder_id ? sharedFolders.get(row.folder_id)?.role : undefined;
+
+    for (const row of combinedItemRows) {
       if (collapsedItemIds.has(row.id)) {
         continue;
       }
@@ -751,34 +902,309 @@ export class KindrawStore {
         const drawingRow = itemById.get(hybridRow.drawing_item_id);
 
         if (docRow && drawingRow) {
-          treeItems.push(
-            toHybridItem(
-              hybridRow,
-              docRow,
-              shareMap.get(hybridRow.doc_item_id) || [],
-            ),
+          const hybridItem = toHybridItem(
+            hybridRow,
+            docRow,
+            shareMap.get(hybridRow.doc_item_id) || [],
           );
+          const sharedRole = sharedRoleForItem(docRow);
+          if (sharedRole) {
+            hybridItem.sharedRole = sharedRole;
+          }
+          treeItems.push(hybridItem);
           collapsedItemIds.add(docRow.id);
           collapsedItemIds.add(drawingRow.id);
           continue;
         }
       }
 
-      treeItems.push(toItem(row, shareMap.get(row.id) || []));
+      const item = toItem(row, shareMap.get(row.id) || []);
+      const sharedRole = sharedRoleForItem(row);
+      if (sharedRole) {
+        item.sharedRole = sharedRole;
+      }
+      treeItems.push(item);
+    }
+
+    const folders: KindrawTreeResponse["folders"] = folderRows.map((row) => {
+      const folder = toFolder(row);
+      return {
+        id: folder.id,
+        name: folder.name,
+        parentId: folder.parentId,
+        createdAt: folder.createdAt,
+        updatedAt: folder.updatedAt,
+      };
+    });
+
+    // Pastas compartilhadas comigo aparecem na árvore como raízes (parentId
+    // null, já que a hierarquia original do dono não é minha), marcadas com
+    // metadados `shared`.
+    for (const [folderId, meta] of sharedFolders) {
+      const row = incomingShareRows.find((entry) => entry.folder_id === folderId);
+      if (!row) {
+        continue;
+      }
+      folders.push({
+        id: row.folder_id,
+        name: row.folder_name,
+        parentId: null,
+        createdAt: row.folder_created_at,
+        updatedAt: row.folder_updated_at,
+        shared: {
+          role: meta.role,
+          ownerId: meta.ownerId,
+          ownerLogin: meta.ownerLogin,
+          ownerName: meta.ownerName,
+        },
+      });
     }
 
     return {
-      folders: folderRows.map((row) => {
-        const folder = toFolder(row);
-        return {
-          id: folder.id,
-          name: folder.name,
-          parentId: folder.parentId,
-          createdAt: folder.createdAt,
-          updatedAt: folder.updatedAt,
-        };
-      }),
+      folders,
       items: treeItems,
+    };
+  }
+
+  // --- Folder sharing (convite por @login do GitHub) ------------------------
+
+  // Busca usuários por github_login ou name (LIKE case-insensitive), excluindo
+  // o próprio usuário. Só expõe os 4 campos públicos (KindrawUser).
+  async searchUsers(
+    query: string,
+    excludeUserId: string,
+    limit = 8,
+  ): Promise<KindrawUser[]> {
+    const trimmed = query.trim();
+    if (!trimmed) {
+      return [];
+    }
+    const safeLimit = Math.max(1, Math.min(limit, 50));
+    const pattern = `%${escapeLike(trimmed)}%`;
+    const { results } = await this.db
+      .prepare(
+        `SELECT id, github_login, name, avatar_url
+           FROM users
+           WHERE id != ?
+             AND (github_login LIKE ? ESCAPE '\\' OR name LIKE ? ESCAPE '\\')
+           ORDER BY github_login COLLATE NOCASE ASC
+           LIMIT ?`,
+      )
+      .bind(excludeUserId, pattern, pattern, safeLimit)
+      .all<{
+        id: string;
+        github_login: string;
+        name: string;
+        avatar_url: string | null;
+      }>();
+
+    return results.map(toKindrawUser);
+  }
+
+  // Resolve um @login exato (case-insensitive) para o usuário, ou null.
+  async getUserByLogin(login: string): Promise<KindrawUser | null> {
+    const trimmed = login.trim();
+    if (!trimmed) {
+      return null;
+    }
+    const row = await this.db
+      .prepare(
+        `SELECT id, github_login, name, avatar_url
+           FROM users
+           WHERE github_login = ? COLLATE NOCASE
+           LIMIT 1`,
+      )
+      .bind(trimmed)
+      .first<{
+        id: string;
+        github_login: string;
+        name: string;
+        avatar_url: string | null;
+      }>();
+
+    return row ? toKindrawUser(row) : null;
+  }
+
+  // Concede (ou atualiza) acesso de targetUserId à pasta de ownerId.
+  // UPSERT por (folder_id, user_id): se já existe, atualiza role + updated_at.
+  async grantFolderAccess(
+    ownerId: string,
+    folderId: string,
+    targetUserId: string,
+    role: KindrawShareRole,
+  ): Promise<KindrawFolderShare> {
+    await this.requireFolder(ownerId, folderId);
+
+    if (targetUserId === ownerId) {
+      throw new HttpError(400, "You cannot share a folder with yourself.");
+    }
+    if (role !== "viewer" && role !== "editor") {
+      throw new HttpError(400, "Invalid role.");
+    }
+
+    const now = isoNow();
+    const existing = await this.db
+      .prepare(
+        "SELECT * FROM folder_shares WHERE folder_id = ? AND user_id = ?",
+      )
+      .bind(folderId, targetUserId)
+      .first<FolderShareRow>();
+
+    if (existing) {
+      await this.db
+        .prepare(
+          `UPDATE folder_shares
+             SET role = ?, updated_at = ?
+           WHERE id = ?`,
+        )
+        .bind(role, now, existing.id)
+        .run();
+      return this.getFolderShareById(existing.id);
+    }
+
+    const shareId = crypto.randomUUID();
+    await this.db
+      .prepare(
+        `INSERT INTO folder_shares
+           (id, folder_id, user_id, role, granted_by_user_id, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .bind(shareId, folderId, targetUserId, role, ownerId, now, now)
+      .run();
+
+    return this.getFolderShareById(shareId);
+  }
+
+  async updateFolderAccessRole(
+    ownerId: string,
+    folderId: string,
+    shareId: string,
+    role: KindrawShareRole,
+  ): Promise<KindrawFolderShare> {
+    await this.requireFolder(ownerId, folderId);
+    if (role !== "viewer" && role !== "editor") {
+      throw new HttpError(400, "Invalid role.");
+    }
+
+    const result = await this.db
+      .prepare(
+        `UPDATE folder_shares
+           SET role = ?, updated_at = ?
+         WHERE id = ? AND folder_id = ?`,
+      )
+      .bind(role, isoNow(), shareId, folderId)
+      .run();
+
+    if (!(result as { meta?: { changes?: number } }).meta?.changes) {
+      throw new HttpError(404, "Folder share not found.");
+    }
+
+    return this.getFolderShareById(shareId);
+  }
+
+  async revokeFolderAccess(
+    ownerId: string,
+    folderId: string,
+    shareId: string,
+  ): Promise<void> {
+    await this.requireFolder(ownerId, folderId);
+    const result = await this.db
+      .prepare("DELETE FROM folder_shares WHERE id = ? AND folder_id = ?")
+      .bind(shareId, folderId)
+      .run();
+
+    if (!(result as { meta?: { changes?: number } }).meta?.changes) {
+      throw new HttpError(404, "Folder share not found.");
+    }
+  }
+
+  // Lista todas as pessoas (não-donos) com acesso à pasta de ownerId.
+  async listFolderShares(
+    ownerId: string,
+    folderId: string,
+  ): Promise<KindrawFolderShare[]> {
+    await this.requireFolder(ownerId, folderId);
+    const { results } = await this.db
+      .prepare(
+        `SELECT
+           folder_shares.id AS share_id,
+           folder_shares.role AS share_role,
+           folder_shares.created_at AS share_created_at,
+           users.id AS user_id,
+           users.github_login AS github_login,
+           users.name AS user_name,
+           users.avatar_url AS avatar_url
+         FROM folder_shares
+         JOIN users ON users.id = folder_shares.user_id
+         WHERE folder_shares.folder_id = ?
+         ORDER BY folder_shares.created_at ASC`,
+      )
+      .bind(folderId)
+      .all<{
+        share_id: string;
+        share_role: KindrawShareRole;
+        share_created_at: string;
+        user_id: string;
+        github_login: string;
+        user_name: string;
+        avatar_url: string | null;
+      }>();
+
+    return results.map((row) => ({
+      id: row.share_id,
+      role: row.share_role,
+      createdAt: row.share_created_at,
+      user: {
+        id: row.user_id,
+        githubLogin: row.github_login,
+        name: row.user_name,
+        avatarUrl: row.avatar_url,
+      },
+    }));
+  }
+
+  private async getFolderShareById(
+    shareId: string,
+  ): Promise<KindrawFolderShare> {
+    const row = await this.db
+      .prepare(
+        `SELECT
+           folder_shares.id AS share_id,
+           folder_shares.role AS share_role,
+           folder_shares.created_at AS share_created_at,
+           users.id AS user_id,
+           users.github_login AS github_login,
+           users.name AS user_name,
+           users.avatar_url AS avatar_url
+         FROM folder_shares
+         JOIN users ON users.id = folder_shares.user_id
+         WHERE folder_shares.id = ?`,
+      )
+      .bind(shareId)
+      .first<{
+        share_id: string;
+        share_role: KindrawShareRole;
+        share_created_at: string;
+        user_id: string;
+        github_login: string;
+        user_name: string;
+        avatar_url: string | null;
+      }>();
+
+    if (!row) {
+      throw new HttpError(404, "Folder share not found.");
+    }
+
+    return {
+      id: row.share_id,
+      role: row.share_role,
+      createdAt: row.share_created_at,
+      user: {
+        id: row.user_id,
+        githubLogin: row.github_login,
+        name: row.user_name,
+        avatarUrl: row.avatar_url,
+      },
     };
   }
 
@@ -881,8 +1307,11 @@ export class KindrawStore {
       throw new HttpError(400, "Item title is required.");
     }
 
+    // Permite criar dentro de uma pasta própria OU de uma pasta compartilhada
+    // onde o usuário é editor. O item criado pertence a QUEM cria (owner_id =
+    // ownerId), mas vive na pasta compartilhada (aparece p/ ambos via getTree).
     if (input.folderId) {
-      await this.requireFolder(ownerId, input.folderId);
+      await this.requireFolderWrite(ownerId, input.folderId);
     }
 
     const itemId = crypto.randomUUID();
@@ -934,7 +1363,7 @@ export class KindrawStore {
     }
 
     if (input.folderId) {
-      await this.requireFolder(ownerId, input.folderId);
+      await this.requireFolderWrite(ownerId, input.folderId);
     }
 
     const docItemId = await this.createItem(ownerId, {
@@ -977,7 +1406,9 @@ export class KindrawStore {
   }
 
   async getItem(ownerId: string, itemId: string): Promise<KindrawItemResponse> {
-    const item = await this.requireItem(ownerId, itemId);
+    // Leitura aberta a dono OU a quem tem qualquer share (viewer/editor) na
+    // pasta do item. requireItemRead retorna 404 para recursos sem relação.
+    const item = await this.requireItemRead(ownerId, itemId);
     const content = await this.getContent(item.contentBlobKey);
     const shareLinks = await this.listShareLinksForItem(itemId);
     const hybridRow = await this.findHybridRowByItemId(ownerId, itemId);
@@ -1094,7 +1525,11 @@ export class KindrawStore {
     itemId: string,
     input: PatchItemMetaInput,
   ) {
-    const item = await this.requireItem(ownerId, itemId);
+    // Edição de metadados: dono do item OU editor da pasta que o contém.
+    const item = await this.requireItemWrite(ownerId, itemId);
+    // owner_id REAL do item (pode diferir de quem edita, quando é um editor de
+    // pasta compartilhada). Os UPDATEs abaixo filtram por este owner real.
+    const itemOwnerId = item.ownerId;
     const title =
       typeof input.title === "string" ? input.title.trim() : item.title;
     if (!title) {
@@ -1103,8 +1538,11 @@ export class KindrawStore {
 
     const folderId =
       "folderId" in input ? input.folderId ?? null : item.folderId;
+    // Mover PARA uma pasta: precisa de acesso de escrita ao destino (dono ou
+    // editor). Mover para a raiz (null) é sempre permitido para quem já pode
+    // editar o item.
     if (folderId) {
-      await this.requireFolder(ownerId, folderId);
+      await this.requireFolderWrite(ownerId, folderId);
     }
 
     const archivedAt =
@@ -1114,7 +1552,7 @@ export class KindrawStore {
           : null
         : item.archivedAt;
 
-    const hybridRow = await this.findHybridRowByItemId(ownerId, itemId);
+    const hybridRow = await this.findHybridRowByItemId(undefined, itemId);
     const now = isoNow();
 
     await this.db
@@ -1123,7 +1561,7 @@ export class KindrawStore {
          SET title = ?, folder_id = ?, archived_at = ?, updated_at = ?
          WHERE id = ? AND owner_id = ?`,
       )
-      .bind(title, folderId, archivedAt, now, itemId, ownerId)
+      .bind(title, folderId, archivedAt, now, itemId, itemOwnerId)
       .run();
 
     if (!hybridRow) {
@@ -1142,7 +1580,7 @@ export class KindrawStore {
            SET title = ?, folder_id = ?, updated_at = ?
            WHERE id = ? AND owner_id = ?`,
         )
-        .bind(title, folderId, now, companionItemId, ownerId)
+        .bind(title, folderId, now, companionItemId, itemOwnerId)
         .run(),
       this.db
         .prepare(
@@ -1150,7 +1588,7 @@ export class KindrawStore {
            SET updated_at = ?
            WHERE id = ? AND owner_id = ?`,
         )
-        .bind(now, hybridRow.id, ownerId)
+        .bind(now, hybridRow.id, itemOwnerId)
         .run(),
     ]);
   }
@@ -1207,16 +1645,19 @@ export class KindrawStore {
   }
 
   async putItemContent(ownerId: string, itemId: string, content: string) {
-    const item = await this.requireItem(ownerId, itemId);
+    // Escrita de conteúdo: dono do item OU editor da pasta que o contém.
+    const item = await this.requireItemWrite(ownerId, itemId);
     await this.blobs.put(item.contentBlobKey, content, {
       httpMetadata: {
         contentType: blobContentType(item.kind),
       },
     });
 
+    // updated_at é atualizado pelo id do item (não filtramos por owner_id, pois
+    // um editor de pasta compartilhada não é o dono — a autorização já passou).
     await this.db
-      .prepare("UPDATE items SET updated_at = ? WHERE id = ? AND owner_id = ?")
-      .bind(isoNow(), itemId, ownerId)
+      .prepare("UPDATE items SET updated_at = ? WHERE id = ?")
+      .bind(isoNow(), itemId)
       .run();
   }
 
@@ -1539,6 +1980,108 @@ export class KindrawStore {
     }
 
     return toFolder(row);
+  }
+
+  // Papel efetivo de userId sobre a pasta (independente do dono): 'owner' se é
+  // o dono, ou o role do folder_share, ou null se nenhum vínculo existe.
+  private async folderAccessRole(
+    userId: string,
+    folderId: string,
+  ): Promise<"owner" | KindrawShareRole | null> {
+    const folder = await this.db
+      .prepare("SELECT owner_id FROM folders WHERE id = ?")
+      .bind(folderId)
+      .first<{ owner_id: string }>();
+
+    if (!folder) {
+      return null;
+    }
+    if (folder.owner_id === userId) {
+      return "owner";
+    }
+
+    const share = await this.db
+      .prepare(
+        "SELECT role FROM folder_shares WHERE folder_id = ? AND user_id = ?",
+      )
+      .bind(folderId, userId)
+      .first<{ role: KindrawShareRole }>();
+
+    return share ? share.role : null;
+  }
+
+  // Permite escrever na pasta se userId é dono OU editor (não viewer). Usado
+  // antes de criar/mover um item PARA dentro de uma pasta.
+  private async requireFolderWrite(userId: string, folderId: string) {
+    const role = await this.folderAccessRole(userId, folderId);
+    if (role === "owner" || role === "editor") {
+      return;
+    }
+    // viewer ou sem vínculo => a pasta "não existe" para fins de escrita (404),
+    // sem revelar a diferença entre não-autorizado e inexistente.
+    throw new HttpError(404, "Folder not found.");
+  }
+
+  // Carrega um item para LEITURA permitindo: dono do item OU qualquer share
+  // (viewer/editor) na pasta que o contém. Recursos sem relação => 404.
+  private async requireItemRead(userId: string, itemId: string) {
+    const row = await this.db
+      .prepare("SELECT * FROM items WHERE id = ?")
+      .bind(itemId)
+      .first<ItemRow>();
+
+    if (!row) {
+      throw new HttpError(404, "Item not found.");
+    }
+
+    if (row.owner_id !== userId) {
+      const role = row.folder_id
+        ? await this.folderAccessRole(userId, row.folder_id)
+        : null;
+      // Apenas itens dentro de uma pasta compartilhada comigo são legíveis.
+      if (role !== "viewer" && role !== "editor") {
+        throw new HttpError(404, "Item not found.");
+      }
+    }
+
+    return this.itemRecordFromRow(row);
+  }
+
+  // Carrega um item para ESCRITA permitindo: dono do item OU editor da pasta
+  // que o contém. Viewer e sem-relação => 404.
+  private async requireItemWrite(userId: string, itemId: string) {
+    const row = await this.db
+      .prepare("SELECT * FROM items WHERE id = ?")
+      .bind(itemId)
+      .first<ItemRow>();
+
+    if (!row) {
+      throw new HttpError(404, "Item not found.");
+    }
+
+    if (row.owner_id !== userId) {
+      const role = row.folder_id
+        ? await this.folderAccessRole(userId, row.folder_id)
+        : null;
+      if (role !== "editor") {
+        throw new HttpError(404, "Item not found.");
+      }
+    }
+
+    return this.itemRecordFromRow(row);
+  }
+
+  // Monta um ItemRecord (com hybrid link) a partir de uma row já carregada,
+  // sem reaplicar o filtro de ownership (a autorização já foi feita acima).
+  private async itemRecordFromRow(row: ItemRow) {
+    const hybridRow = await this.findHybridRowByItemId(undefined, row.id);
+    const hybrid =
+      hybridRow && hybridRow.doc_item_id === row.id
+        ? toHybridLink(hybridRow, "doc")
+        : hybridRow
+        ? toHybridLink(hybridRow, "drawing")
+        : null;
+    return toItemRecord(row, hybrid);
   }
 
   private async requireItem(ownerId: string, itemId: string) {

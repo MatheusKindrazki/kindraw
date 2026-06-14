@@ -12,12 +12,34 @@ export type KindrawSession = {
   user: KindrawUser;
 };
 
+export type KindrawShareRole = "viewer" | "editor";
+
+// Metadados anexados a uma pasta do tree quando ela foi COMPARTILHADA com o
+// usuário atual (i.e. não é dele). Pastas próprias nunca têm este campo.
+export type KindrawFolderSharedMeta = {
+  role: KindrawShareRole;
+  ownerId: string;
+  ownerLogin: string;
+  ownerName: string;
+};
+
+// Uma pessoa (que não o dono) com acesso a uma pasta. Retornado por
+// listFolderShares / grantFolderAccess.
+export type KindrawFolderShare = {
+  id: string;
+  role: KindrawShareRole;
+  user: KindrawUser;
+  createdAt: string;
+};
+
 export type KindrawFolder = {
   id: string;
   name: string;
   parentId: string | null;
   createdAt: string;
   updatedAt: string;
+  // Presente apenas quando a pasta foi compartilhada com o usuário atual.
+  shared?: KindrawFolderSharedMeta;
 };
 
 export type KindrawShareLink = {
@@ -54,6 +76,10 @@ export type KindrawItem = {
   collaborationRoomId: string | null;
   collaborationEnabledAt: string | null;
   hybrid: KindrawHybridLink | null;
+  // Presente apenas quando o item vive numa pasta compartilhada com o usuário
+  // atual (não é dele). 'viewer' => read-only; 'editor' => pode editar.
+  // Ausente => item próprio, acesso total.
+  sharedRole?: KindrawShareRole;
 };
 
 export type KindrawHybridItem = {
@@ -69,6 +95,8 @@ export type KindrawHybridItem = {
   docItemId: string;
   drawingItemId: string;
   defaultView: KindrawHybridView;
+  // Vide KindrawItem.sharedRole — mesma semântica para hybrids compartilhados.
+  sharedRole?: KindrawShareRole;
 };
 
 export type KindrawTreeEntry = KindrawItem | KindrawHybridItem;
