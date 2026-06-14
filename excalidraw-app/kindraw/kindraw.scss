@@ -2175,17 +2175,29 @@
 }
 
 /* Dentro do painel de seção do híbrido o editor é mais compacto */
+// Na seção do híbrido o editor não estica via flex — o usuário controla a
+// altura pela alça de resize do surface. Por isso o .kindraw-rte deixa de ser
+// flex-stretch e o surface vira um bloco com altura própria + resize.
 .kindraw-hybrid-doc__editor .kindraw-rte {
   flex: none;
+  display: block;
+  height: auto;
+  overflow: visible;
 }
 
 .kindraw-hybrid-doc__editor .kindraw-rte__surface {
-  min-height: 220px;
-  max-height: 420px;
+  // alça de resize no canto inferior: o usuário arrasta para aumentar a altura
+  flex: none;
+  display: block;
+  resize: vertical;
+  height: 240px;
+  min-height: 160px;
+  max-height: 80vh;
+  overflow: auto;
 }
 
 .kindraw-hybrid-doc__editor .kindraw-rte__content {
-  min-height: 220px;
+  min-height: 100%;
   padding: 16px 18px;
   font-size: 14px;
 }
