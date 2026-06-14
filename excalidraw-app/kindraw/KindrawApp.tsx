@@ -39,8 +39,11 @@ import {
   navigateKindraw,
   subscribeToLocation,
 } from "./router";
+import { getKindrawThumbnail } from "./thumbnails";
 import { isKindrawHybridItem } from "./types";
 import { getErrorMessage } from "./utils";
+
+import type { KindrawThumbnail } from "./thumbnails";
 
 import "./kindraw.scss";
 
@@ -399,6 +402,100 @@ const FolderTree = ({
    Cards de item
    ──────────────────────────────────────────────────────── */
 
+// Preview do canvas, renderizado no client e só quando o card entra na
+// viewport (IntersectionObserver). Drawings/híbridos geram um SVG do conteúdo;
+// docs e canvas vazios caem no fallback (ícone do tipo + "Vazio").
+const CardThumb = ({
+  item,
+  kindKey,
+}: {
+  item: KindrawTreeItem;
+  kindKey: KindrawIconName;
+}) => {
+  const ref = useRef<HTMLSpanElement>(null);
+  const [thumb, setThumb] = useState<KindrawThumbnail | null | "loading">(
+    null,
+  );
+
+  const canPreview = isKindrawHybridItem(item) || item.kind === "drawing";
+  const cacheKey = `${item.id}:${item.updatedAt}`;
+
+  useEffect(() => {
+    if (!canPreview) {
+      return;
+    }
+    setThumb("loading");
+
+    const node = ref.current;
+    if (!node) {
+      return;
+    }
+
+    let cancelled = false;
+    let observer: IntersectionObserver | null = null;
+
+    const load = () => {
+      void getKindrawThumbnail(item).then((result) => {
+        if (!cancelled) {
+          setThumb(result);
+        }
+      });
+    };
+
+    if (typeof IntersectionObserver === "undefined") {
+      load();
+    } else {
+      observer = new IntersectionObserver(
+        (entries) => {
+          if (entries.some((entry) => entry.isIntersecting)) {
+            observer?.disconnect();
+            load();
+          }
+        },
+        { rootMargin: "200px" },
+      );
+      observer.observe(node);
+    }
+
+    return () => {
+      cancelled = true;
+      observer?.disconnect();
+    };
+    // cacheKey muda quando o item é atualizado, regenerando o preview
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cacheKey, canPreview]);
+
+  if (item.thumbnailUrl) {
+    return (
+      <span className="kindraw-card__thumb-inner" ref={ref}>
+        <img alt="" src={item.thumbnailUrl} />
+      </span>
+    );
+  }
+
+  if (thumb && thumb !== "loading" && thumb.status === "ready") {
+    return (
+      <span className="kindraw-card__thumb-inner" ref={ref}>
+        <img alt="" className="kindraw-card__thumb-svg" src={thumb.dataUri} />
+      </span>
+    );
+  }
+
+  const isEmpty =
+    canPreview && thumb !== "loading" && thumb?.status === "empty";
+
+  return (
+    <span className="kindraw-card__thumb-inner" ref={ref}>
+      <span className="kindraw-card__thumb-fallback">
+        <KindrawIcon name={kindKey} size={34} />
+        {isEmpty ? (
+          <span className="kindraw-card__thumb-empty">Vazio</span>
+        ) : null}
+      </span>
+    </span>
+  );
+};
+
 const WorkspaceItemCard = ({
   item,
   menuOpen,
@@ -449,11 +546,7 @@ const WorkspaceItemCard = ({
             {selected ? <KindrawIcon name="check" size={14} /> : null}
           </span>
         ) : null}
-        {item.thumbnailUrl ? (
-          <img alt="" src={item.thumbnailUrl} />
-        ) : (
-          <KindrawIcon name={KIND_ICON[kindKey]} size={34} />
-        )}
+        <CardThumb item={item} kindKey={KIND_ICON[kindKey]} />
       </button>
       <div className="kindraw-card__body">
         <div className="kindraw-card__top">

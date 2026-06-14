@@ -861,11 +861,41 @@
   cursor: pointer;
 }
 
+.kindraw-card__thumb-inner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+}
+
 .kindraw-card__thumb img {
   width: 100%;
   height: 100%;
   object-fit: cover;
   display: block;
+}
+
+// preview SVG do canvas: contain (mostra o desenho inteiro) sobre o papel
+.kindraw-card__thumb-svg {
+  object-fit: contain;
+  padding: 10px;
+}
+
+.kindraw-card__thumb-fallback {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  color: var(--kd-faint);
+}
+
+.kindraw-card__thumb-empty {
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--kd-faint);
 }
 
 .kindraw-card__body {
