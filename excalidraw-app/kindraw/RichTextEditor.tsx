@@ -1,10 +1,14 @@
 import { useEffect, useRef } from "react";
 import { EditorContent, useEditor } from "@tiptap/react";
-import { BubbleMenu, FloatingMenu } from "@tiptap/react/menus";
+import { BubbleMenu } from "@tiptap/react/menus";
 import StarterKit from "@tiptap/starter-kit";
+import Highlight from "@tiptap/extension-highlight";
+import TaskList from "@tiptap/extension-task-list";
+import TaskItem from "@tiptap/extension-task-item";
 import { Markdown } from "tiptap-markdown";
 
 import { KindrawIcon } from "./icons";
+import { SlashCommand } from "./SlashCommand";
 
 import type { Editor } from "@tiptap/react";
 
@@ -72,11 +76,18 @@ export const RichTextEditor = ({
   const editor = useEditor({
     editable,
     extensions: [
+      // StarterKit 3 já traz underline e horizontalRule embutidos.
       StarterKit.configure({
         link: {
           openOnClick: false,
         },
       }),
+      Highlight,
+      // nested: true permite aninhar tarefas; o tiptap-markdown serializa
+      // task items como "- [ ]" / "- [x]", então sobrevivem ao round-trip.
+      TaskList,
+      TaskItem.configure({ nested: true }),
+      SlashCommand,
       Markdown.configure({
         html: false,
         linkify: true,
@@ -170,11 +181,25 @@ export const RichTextEditor = ({
               <em>I</em>
             </MenuButton>
             <MenuButton
+              active={editor.isActive("underline")}
+              label="Sublinhado"
+              onClick={() => editor.chain().focus().toggleUnderline().run()}
+            >
+              <span style={{ textDecoration: "underline" }}>U</span>
+            </MenuButton>
+            <MenuButton
               active={editor.isActive("strike")}
               label="Riscado"
               onClick={() => editor.chain().focus().toggleStrike().run()}
             >
               <s>S</s>
+            </MenuButton>
+            <MenuButton
+              active={editor.isActive("highlight")}
+              label="Realce"
+              onClick={() => editor.chain().focus().toggleHighlight().run()}
+            >
+              <mark className="kindraw-rte__menu-mark">H</mark>
             </MenuButton>
             <MenuButton
               active={editor.isActive("code")}
@@ -210,69 +235,6 @@ export const RichTextEditor = ({
               <KindrawIcon name="link" size={14} />
             </MenuButton>
           </BubbleMenu>
-
-          <FloatingMenu
-            editor={editor}
-            className="kindraw-rte__floating"
-            options={{ placement: "left-start" }}
-          >
-            <MenuButton
-              active={editor.isActive("heading", { level: 1 })}
-              label="Título 1"
-              onClick={() =>
-                editor.chain().focus().toggleHeading({ level: 1 }).run()
-              }
-            >
-              H1
-            </MenuButton>
-            <MenuButton
-              active={editor.isActive("heading", { level: 2 })}
-              label="Título 2"
-              onClick={() =>
-                editor.chain().focus().toggleHeading({ level: 2 }).run()
-              }
-            >
-              H2
-            </MenuButton>
-            <MenuButton
-              active={editor.isActive("heading", { level: 3 })}
-              label="Título 3"
-              onClick={() =>
-                editor.chain().focus().toggleHeading({ level: 3 }).run()
-              }
-            >
-              H3
-            </MenuButton>
-            <span className="kindraw-rte__menu-sep" />
-            <MenuButton
-              active={editor.isActive("bulletList")}
-              label="Lista"
-              onClick={() => editor.chain().focus().toggleBulletList().run()}
-            >
-              <KindrawIcon name="dots" size={16} />
-            </MenuButton>
-            <MenuButton
-              active={editor.isActive("orderedList")}
-              label="Lista numerada"
-              onClick={() => editor.chain().focus().toggleOrderedList().run()}
-            >
-              1.
-            </MenuButton>
-            <MenuButton
-              active={editor.isActive("blockquote")}
-              label="Citação"
-              onClick={() => editor.chain().focus().toggleBlockquote().run()}
-            >
-              &ldquo;
-            </MenuButton>
-            <MenuButton
-              active={editor.isActive("codeBlock")}
-              label="Bloco de código"
-              onClick={() => editor.chain().focus().toggleCodeBlock().run()}
-            >
-              {"{}"}
-            </MenuButton>
-          </FloatingMenu>
         </>
       ) : null}
       <EditorContent className="kindraw-rte__surface" editor={editor} />

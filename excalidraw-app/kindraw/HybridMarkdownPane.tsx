@@ -257,11 +257,20 @@ export const HybridMarkdownPane = ({
                 </div>
               </div>
             ) : (
-              <MarkdownPreview
-                itemsById={itemsById}
-                markdown={section.markdown}
-                onNavigate={onNavigate}
-              />
+              // Duplo-clique no corpo/preview abre edição. Fica só no corpo —
+              // não no cabeçalho clicável da seção vinculada (que é onClick
+              // simples e leva ao desenho), então não há conflito.
+              <div
+                className="kindraw-hybrid-doc__preview"
+                onDoubleClick={() => setEditingSectionId(section.id)}
+                title="Clique duas vezes para editar"
+              >
+                <MarkdownPreview
+                  itemsById={itemsById}
+                  markdown={section.markdown}
+                  onNavigate={onNavigate}
+                />
+              </div>
             )}
           </article>
         );

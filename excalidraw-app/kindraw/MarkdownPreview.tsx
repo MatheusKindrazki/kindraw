@@ -405,7 +405,10 @@ const renderBlockTokens = (
         return (
           <ListTag key={key}>
             {(token.items || []).map((item, itemIndex) => (
-              <li key={`${key}-item-${itemIndex}`}>
+              <li
+                className={item.task ? "kindraw-markdown__task" : undefined}
+                key={`${key}-item-${itemIndex}`}
+              >
                 {item.task ? (
                   <input
                     checked={item.checked}
