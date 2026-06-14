@@ -43,6 +43,7 @@ import { ShareLinksPanel } from "./ShareLinksPanel";
 import { getKindrawDraft, setKindrawDraft } from "./storage";
 import { getErrorMessage, isDraftNewer } from "./utils";
 import {
+  appendHybridSection,
   buildKindrawSectionLink,
   parseHybridMarkdownSections,
   parseKindrawSectionLink,
@@ -122,6 +123,7 @@ export const HybridEditorPage = ({
   const [activeSectionId, setActiveSectionId] = useState<string | null>(
     initialSectionId,
   );
+  const [linkingSectionId, setLinkingSectionId] = useState<string | null>(null);
   const [selectedElementIds, setSelectedElementIds] = useState<
     Record<string, true>
   >({});
@@ -535,21 +537,25 @@ export const HybridEditorPage = ({
     [activeSectionId, hybridId, response],
   );
 
-  const handleLinkSelection = useCallback(
-    (sectionId: string) => {
+  /**
+   * Aplica o link kindraw aos elementos cujos ids estão em `selectedIds`.
+   * Retorna `true` se ao menos um elemento foi vinculado.
+   */
+  const linkElementsToSection = useCallback(
+    (sectionId: string, selectedIds: string[]) => {
       if (!sceneElements.length || !sceneAppState) {
         setStatusMessage("Canvas ainda nao esta pronto.");
-        return;
+        return false;
       }
 
-      const selectedIds = Object.keys(selectedElementIds);
       if (!selectedIds.length) {
         setStatusMessage("Selecione ao menos um elemento no canvas.");
-        return;
+        return false;
       }
 
+      const selectedSet = new Set(selectedIds);
       const nextElements = sceneElements.map((element) =>
-        selectedIds.includes(element.id)
+        selectedSet.has(element.id)
           ? newElementWith(element, {
               link: buildKindrawSectionLink(hybridId, sectionId),
             })
@@ -563,10 +569,123 @@ export const HybridEditorPage = ({
       setSerializedDrawing(
         serializeAsJSON(nextElements, sceneAppState, sceneFiles, "local"),
       );
-      setStatusMessage("Selecao vinculada a secao.");
+      return true;
     },
-    [hybridId, sceneAppState, sceneElements, sceneFiles, selectedElementIds],
+    [hybridId, sceneAppState, sceneElements, sceneFiles],
   );
+
+  /**
+   * Ação "Vincular" da seção. Se já há seleção no canvas, vincula na hora;
+   * caso contrário entra no "modo vincular" e espera a próxima seleção.
+   */
+  const handleLinkSelection = useCallback(
+    (sectionId: string) => {
+      // Toggle: clicar de novo na seção que já está aguardando cancela o modo.
+      if (linkingSectionId === sectionId) {
+        setLinkingSectionId(null);
+        return;
+      }
+
+      const selectedIds = Object.keys(selectedElementIds);
+      if (selectedIds.length > 0) {
+        if (linkElementsToSection(sectionId, selectedIds)) {
+          setLinkingSectionId(null);
+          setStatusMessage("Selecao vinculada a secao.");
+        }
+        return;
+      }
+
+      // Sem seleção: entra no modo vincular e garante canvas visível.
+      setLinkingSectionId(sectionId);
+      setActiveSectionId(sectionId);
+      void setView("both", sectionId);
+      setStatusMessage("Selecione elementos no canvas para vincular.");
+    },
+    [linkElementsToSection, linkingSectionId, selectedElementIds, setView],
+  );
+
+  const handleAddSection = useCallback(() => {
+    const { markdown: nextMarkdown, sectionId } = appendHybridSection(
+      markdown,
+      "Nova seção",
+    );
+    setMarkdown(nextMarkdown);
+    setActiveSectionId(sectionId);
+    setStatusMessage("Nova secao criada.");
+    return sectionId;
+  }, [markdown]);
+
+  const handleFocusSectionOnCanvas = useCallback(
+    (sectionId: string) => {
+      setActiveSectionId(sectionId);
+      void setView("both", sectionId);
+
+      const linked = sceneElements.filter((element) => {
+        if (!element.link) {
+          return false;
+        }
+        const target = parseKindrawSectionLink(element.link);
+        return target?.hybridId === hybridId && target.sectionId === sectionId;
+      });
+
+      if (!linked.length) {
+        return;
+      }
+
+      const linkedIds = linked.map((element) => element.id);
+
+      // O setView pode trocar o layout (mostrar o canvas) e remontar o canvas
+      // antes do zoom rodar; damos um tempo para a API estar pronta e usamos os
+      // elementos ATUAIS da cena (por id) para garantir referências válidas.
+      window.setTimeout(() => {
+        const api = excalidrawAPIRef.current;
+        if (!api) {
+          return;
+        }
+        const targets = api
+          .getSceneElements()
+          .filter((element: ExcalidrawElement) =>
+            linkedIds.includes(element.id),
+          );
+        if (!targets.length) {
+          return;
+        }
+        api.updateScene({
+          appState: {
+            selectedElementIds: Object.fromEntries(
+              targets.map((element: ExcalidrawElement) => [element.id, true]),
+            ),
+          },
+        });
+        // o zoom precisa rodar depois da seleção assentar, senão o
+        // scrollToContent é engolido pelo updateScene do mesmo tick.
+        window.setTimeout(() => {
+          api.scrollToContent(targets, {
+            fitToContent: true,
+            animate: true,
+            duration: 500,
+          });
+        }, 60);
+      }, 80);
+    },
+    [hybridId, sceneElements, setView],
+  );
+
+  // Esc cancela o modo vincular.
+  useEffect(() => {
+    if (!linkingSectionId) {
+      return;
+    }
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setLinkingSectionId(null);
+      }
+    };
+
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [linkingSectionId]);
 
   const handleCanvasLinkOpen = useCallback<
     NonNullable<ExcalidrawProps["onLinkOpen"]>
@@ -671,6 +790,39 @@ export const HybridEditorPage = ({
     [activeSectionId, linkedSectionIds, sections],
   );
 
+  const linkingSection = useMemo(
+    () =>
+      linkingSectionId
+        ? sections.find((section) => section.id === linkingSectionId) || null
+        : null,
+    [linkingSectionId, sections],
+  );
+
+  // Modo vincular: assim que o usuário seleciona ≥1 elemento no canvas, vincula
+  // automaticamente à seção aguardando. Como só entramos no modo quando NÃO havia
+  // seleção (ver handleLinkSelection), qualquer seleção observada aqui é nova.
+  useEffect(() => {
+    if (!linkingSectionId) {
+      return;
+    }
+
+    const selectedIds = Object.keys(selectedElementIds);
+    if (!selectedIds.length) {
+      return;
+    }
+
+    const sectionTitle = linkingSection?.title || "secao";
+    if (linkElementsToSection(linkingSectionId, selectedIds)) {
+      setLinkingSectionId(null);
+      setStatusMessage(`Selecao vinculada a ${sectionTitle}.`);
+    }
+  }, [
+    linkElementsToSection,
+    linkingSection,
+    linkingSectionId,
+    selectedElementIds,
+  ]);
+
   if (errorMessage) {
     return (
       <div className="kindraw-empty-state">
@@ -703,7 +855,10 @@ export const HybridEditorPage = ({
         hybridId={hybridId}
         itemsById={hybridItemsById}
         linkedSectionIds={linkedSectionIds}
+        linkingSectionId={linkingSectionId}
         markdown={markdown}
+        onAddSection={handleAddSection}
+        onFocusSectionOnCanvas={handleFocusSectionOnCanvas}
         onLinkSelection={handleLinkSelection}
         onMarkdownChange={setMarkdown}
         onNavigate={navigateKindraw}
@@ -717,7 +872,22 @@ export const HybridEditorPage = ({
   );
   const canvasPane = (
     <section className="kindraw-hybrid-shell__canvas">
-      {activeLinkedSection ? (
+      {linkingSection ? (
+        <div className="kindraw-linkbar" role="status">
+          <span className="kindraw-linkbar__text">
+            <KindrawIcon name="link" size={13} /> Selecione elementos no canvas
+            para vincular à <strong>{linkingSection.title}</strong>
+          </span>
+          <button
+            className="kindraw-linkbar__cancel"
+            onClick={() => setLinkingSectionId(null)}
+            type="button"
+          >
+            Cancelar
+          </button>
+        </div>
+      ) : null}
+      {activeLinkedSection && !linkingSection ? (
         <span className="kindraw-canvas-chip">
           <KindrawIcon name="link" size={11} /> Seção:{" "}
           {activeLinkedSection.title}

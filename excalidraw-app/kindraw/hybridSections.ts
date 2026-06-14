@@ -155,6 +155,75 @@ export const replaceHybridMarkdownSection = (
     .concat("\n");
 };
 
+/**
+ * Separa o markdown de uma seção em { heading, body }.
+ * `heading` é a primeira linha de título (ex.: "## Título") — vazio na intro;
+ * `body` é o resto. Permite editar só o corpo no WYSIWYG sem mexer no heading
+ * (que mistura título e corpo e era perdido pelo editor rico).
+ */
+export const splitSectionHeadingBody = (
+  sectionMarkdown: string,
+): { heading: string; body: string } => {
+  const match = sectionMarkdown.match(/^(\s*#{1,6}\s+[^\n]*)\n?([\s\S]*)$/);
+  if (!match) {
+    return { heading: "", body: sectionMarkdown.trim() };
+  }
+  return { heading: match[1].trim(), body: (match[2] || "").trim() };
+};
+
+/**
+ * Recompõe o markdown de uma seção a partir do heading preservado + corpo novo.
+ */
+export const composeSectionMarkdown = (heading: string, body: string) => {
+  const trimmedBody = body.trim();
+  if (!heading) {
+    return trimmedBody ? `${trimmedBody}\n` : "";
+  }
+  return trimmedBody ? `${heading}\n\n${trimmedBody}\n` : `${heading}\n`;
+};
+
+/**
+ * Anexa uma nova seção (heading depth 2) ao fim do markdown e devolve o markdown
+ * resultante junto com o id da seção criada.
+ *
+ * O id de uma seção depende de duplicatas de título (sufixos -2, -3...). Por isso,
+ * em vez de prever o id por slug, anexamos o heading, re-parseamos com
+ * parseHybridMarkdownSections e pegamos o id da ÚLTIMA seção cujo título bate —
+ * garantindo que o id retornado é exatamente o que o parser vai usar.
+ */
+export const appendHybridSection = (
+  markdown: string,
+  title: string,
+): { markdown: string; sectionId: string } => {
+  const safeTitle = title.trim() || "Nova seção";
+  const base = markdown.trimEnd();
+
+  // O heading novo precisa virar uma seção de nível raiz (não uma subseção do
+  // último heading). O parser trata um heading com depth maior que o da seção
+  // corrente como subseção, então usamos o MENOR depth de topo já existente
+  // (limitado a 2 por padrão) para garantir que a nova seção fica no mesmo nível.
+  const existingSections = base
+    ? parseHybridMarkdownSections(base).filter((section) => !section.isIntro)
+    : [];
+  const topDepth = existingSections.reduce(
+    (min, section) => Math.min(min, section.depth || 2),
+    2,
+  );
+  const depth = Math.max(1, topDepth);
+  const heading = `${"#".repeat(depth)} ${safeTitle}`;
+  const appended = base ? `${base}\n\n${heading}\n\n` : `${heading}\n\n`;
+
+  const sections = parseHybridMarkdownSections(appended);
+  const created = [...sections]
+    .reverse()
+    .find((section) => !section.isIntro && section.title === safeTitle);
+
+  return {
+    markdown: appended,
+    sectionId: created?.id || slugify(safeTitle),
+  };
+};
+
 export const buildKindrawSectionLink = (hybridId: string, sectionId: string) =>
   `kindraw://section/${hybridId}/${sectionId}`;
 

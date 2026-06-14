@@ -5,8 +5,10 @@ import { MarkdownPreview } from "./MarkdownPreview";
 import { RichTextEditor } from "./RichTextEditor";
 import {
   buildKindrawSectionLink,
+  composeSectionMarkdown,
   parseHybridMarkdownSections,
   replaceHybridMarkdownSection,
+  splitSectionHeadingBody,
 } from "./hybridSections";
 
 import type { KindrawItem } from "./types";
@@ -18,10 +20,13 @@ type HybridMarkdownPaneProps = {
   activeSectionId: string | null;
   canLinkSelection: boolean;
   linkedSectionIds?: ReadonlySet<string>;
+  linkingSectionId?: string | null;
   onMarkdownChange: (nextMarkdown: string) => void;
   onNavigate: (pathname: string) => void;
   onOpenCanvas: (sectionId: string) => void;
   onLinkSelection: (sectionId: string) => void;
+  onAddSection: () => string | null;
+  onFocusSectionOnCanvas: (sectionId: string) => void;
   onStatusMessage: (message: string) => void;
 };
 
@@ -34,10 +39,13 @@ export const HybridMarkdownPane = ({
   activeSectionId,
   canLinkSelection,
   linkedSectionIds,
+  linkingSectionId,
   onMarkdownChange,
   onNavigate,
   onOpenCanvas,
   onLinkSelection,
+  onAddSection,
+  onFocusSectionOnCanvas,
   onStatusMessage,
 }: HybridMarkdownPaneProps) => {
   const sections = useMemo(
@@ -46,6 +54,7 @@ export const HybridMarkdownPane = ({
   );
   const [editingSectionId, setEditingSectionId] = useState<string | null>(null);
   const [draftMarkdown, setDraftMarkdown] = useState("");
+  const [draftTitle, setDraftTitle] = useState("");
   const sectionRefs = useRef<Record<string, HTMLElement | null>>({});
 
   useEffect(() => {
@@ -65,9 +74,19 @@ export const HybridMarkdownPane = ({
       return;
     }
 
+    // edita só o CORPO da seção; o título vai num input separado, para o
+    // WYSIWYG não mesclar/perder o heading da seção.
     const section = sections.find((entry) => entry.id === editingSectionId);
-    setDraftMarkdown(section?.markdown || "");
+    setDraftMarkdown(splitSectionHeadingBody(section?.markdown || "").body);
+    setDraftTitle(section?.isIntro ? "" : section?.title || "");
   }, [editingSectionId, sections]);
+
+  const handleAddSection = () => {
+    const newSectionId = onAddSection();
+    if (newSectionId) {
+      setEditingSectionId(newSectionId);
+    }
+  };
 
   let sectionNumber = 0;
 
@@ -93,19 +112,40 @@ export const HybridMarkdownPane = ({
             }}
           >
             <div className="kindraw-hybrid-doc__section-header">
-              <div className="kindraw-hybrid-doc__section-heading">
-                <span className="kindraw-hybrid-doc__eyebrow">
-                  {section.isIntro
-                    ? "Intro"
-                    : `Seção ${formatSectionNumber(sectionNumber)}`}
-                </span>
-                <h3>{section.title}</h3>
-                {isLinked ? (
-                  <span className="kindraw-sectionchip">
-                    <KindrawIcon name="link" size={11} /> vinculada ao canvas
+              {isLinked ? (
+                <div
+                  className="kindraw-hybrid-doc__section-heading kindraw-hybrid-doc__section-heading--linked"
+                  onClick={() => onFocusSectionOnCanvas(section.id)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      onFocusSectionOnCanvas(section.id);
+                    }
+                  }}
+                  role="button"
+                  tabIndex={0}
+                  title="Ir ao desenho desta seção"
+                >
+                  <span className="kindraw-hybrid-doc__eyebrow">
+                    {section.isIntro
+                      ? "Intro"
+                      : `Seção ${formatSectionNumber(sectionNumber)}`}
                   </span>
-                ) : null}
-              </div>
+                  <h3>{section.title}</h3>
+                  <span className="kindraw-sectionchip">
+                    <KindrawIcon name="link" size={11} /> ir ao desenho
+                  </span>
+                </div>
+              ) : (
+                <div className="kindraw-hybrid-doc__section-heading">
+                  <span className="kindraw-hybrid-doc__eyebrow">
+                    {section.isIntro
+                      ? "Intro"
+                      : `Seção ${formatSectionNumber(sectionNumber)}`}
+                  </span>
+                  <h3>{section.title}</h3>
+                </div>
+              )}
               <div className="kindraw-hybrid-doc__actions">
                 <button
                   className="kindraw-hybrid-doc__action"
@@ -122,12 +162,18 @@ export const HybridMarkdownPane = ({
                   Canvas
                 </button>
                 <button
-                  className="kindraw-hybrid-doc__action"
+                  className={`kindraw-hybrid-doc__action${
+                    linkingSectionId === section.id
+                      ? " kindraw-hybrid-doc__action--linking"
+                      : ""
+                  }`}
                   disabled={!canLinkSelection}
                   onClick={() => void onLinkSelection(section.id)}
                   type="button"
                 >
-                  Vincular seleção
+                  {linkingSectionId === section.id
+                    ? "Aguardando seleção…"
+                    : "Vincular"}
                 </button>
                 <button
                   className="kindraw-hybrid-doc__action"
@@ -156,6 +202,14 @@ export const HybridMarkdownPane = ({
 
             {isEditing ? (
               <div className="kindraw-hybrid-doc__editor">
+                {section.isIntro ? null : (
+                  <input
+                    className="kindraw-hybrid-doc__title-input"
+                    onChange={(event) => setDraftTitle(event.target.value)}
+                    placeholder="Título da seção"
+                    value={draftTitle}
+                  />
+                )}
                 <RichTextEditor
                   onChange={setDraftMarkdown}
                   placeholder="Escreva o conteúdo da seção…"
@@ -172,11 +226,25 @@ export const HybridMarkdownPane = ({
                   <button
                     className="kindraw-btn kindraw-btn--primary kindraw-btn--sm"
                     onClick={() => {
+                      // recompõe o heading (com o título editado, preservando o
+                      // nível de #) + corpo editado. Intro não tem heading.
+                      const originalHeading = splitSectionHeadingBody(
+                        section.markdown,
+                      ).heading;
+                      let heading = originalHeading;
+                      if (!section.isIntro) {
+                        const hashes =
+                          originalHeading.match(/^#{1,6}/)?.[0] ||
+                          "#".repeat(Math.max(1, section.depth || 2));
+                        const nextTitle =
+                          draftTitle.trim() || section.title || "Seção";
+                        heading = `${hashes} ${nextTitle}`;
+                      }
                       onMarkdownChange(
                         replaceHybridMarkdownSection(
                           markdown,
                           section.id,
-                          draftMarkdown,
+                          composeSectionMarkdown(heading, draftMarkdown),
                         ),
                       );
                       setEditingSectionId(null);
@@ -198,6 +266,13 @@ export const HybridMarkdownPane = ({
           </article>
         );
       })}
+      <button
+        className="kindraw-hybrid-doc__add"
+        onClick={handleAddSection}
+        type="button"
+      >
+        <KindrawIcon name="plus" size={14} /> Nova seção
+      </button>
     </div>
   );
 };

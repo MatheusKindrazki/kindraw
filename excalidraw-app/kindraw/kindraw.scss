@@ -2316,6 +2316,24 @@
   gap: 12px;
 }
 
+.kindraw-hybrid-doc__title-input {
+  width: 100%;
+  border: 1px solid var(--kd-line);
+  border-radius: var(--kd-r-btn);
+  background: var(--kd-surface);
+  padding: 9px 12px;
+  font-family: var(--kd-font);
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--kd-ink);
+}
+
+.kindraw-hybrid-doc__title-input:focus {
+  outline: none;
+  border-color: var(--kd-amber);
+  box-shadow: 0 0 0 3px var(--kd-amber-soft);
+}
+
 .kindraw-hybrid-doc__editor-actions {
   display: flex;
   align-items: center;
@@ -2340,6 +2358,108 @@
   outline: none;
   border-color: #d9b36a;
   box-shadow: 0 0 0 3px var(--kd-amber-soft);
+}
+
+/* Cabeçalho de seção vinculada — clicável, foca no canvas */
+.kindraw-hybrid-doc__section-heading--linked {
+  cursor: pointer;
+  border-radius: 8px;
+  transition: color 0.15s ease;
+}
+
+.kindraw-hybrid-doc__section-heading--linked:hover h3 {
+  color: var(--kd-amber-deep);
+}
+
+.kindraw-hybrid-doc__section-heading--linked:hover .kindraw-sectionchip {
+  background: var(--kd-amber-soft);
+}
+
+.kindraw-hybrid-doc__section-heading--linked:focus-visible {
+  outline: 2px solid var(--kd-amber);
+  outline-offset: 3px;
+}
+
+/* Ação "Vincular" em modo de espera */
+.kindraw-hybrid-doc__action--linking {
+  background: var(--kd-amber-soft);
+  color: var(--kd-amber-deep);
+}
+
+/* Botão "+ Nova seção" no fim do painel de documento */
+.kindraw-hybrid-doc__add {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  padding: 11px 14px;
+  border: 1px dashed var(--kd-line);
+  border-radius: var(--kd-r-card);
+  background: transparent;
+  color: var(--kd-muted);
+  font-family: var(--kd-font);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
+}
+
+.kindraw-hybrid-doc__add:hover {
+  border-color: #d9b36a;
+  background: var(--kd-amber-soft);
+  color: var(--kd-amber-deep);
+}
+
+/* Barra "modo vincular" — flutuante sobre o canvas */
+.kindraw-linkbar {
+  position: absolute;
+  top: 14px;
+  left: 14px;
+  right: 14px;
+  z-index: 12;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 12px;
+  border: 1px solid var(--kd-amber);
+  border-radius: var(--kd-r-card);
+  background: var(--kd-amber-soft);
+  color: var(--kd-amber-deep);
+  box-shadow: var(--kd-shadow-island);
+}
+
+.kindraw-linkbar__text {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  font-family: var(--kd-font);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.kindraw-linkbar__text strong {
+  font-weight: 800;
+}
+
+.kindraw-linkbar__cancel {
+  flex-shrink: 0;
+  border: 1px solid var(--kd-amber);
+  background: transparent;
+  color: var(--kd-amber-deep);
+  font-family: var(--kd-font);
+  font-size: 12px;
+  font-weight: 700;
+  padding: 5px 12px;
+  border-radius: var(--kd-r-pill);
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.kindraw-linkbar__cancel:hover {
+  background: var(--kd-amber-chip);
 }
 
 .kindraw-hybrid-public-view {
