@@ -180,6 +180,7 @@ import {
   parseDrawingContent,
 } from "./kindraw/content";
 import {
+  buildFolderPath,
   buildItemPath,
   getLocationPathname,
   matchKindrawRoute,
@@ -1001,6 +1002,12 @@ const ExcalidrawWrapper = () => {
     kindrawSession,
     pathname,
   ]);
+
+  const handleKindrawBackToLibrary = useCallback(() => {
+    // volta para a pasta de origem do item aberto, ou para a raiz da biblioteca
+    const folderId = kindrawCurrentItem?.folderId ?? null;
+    navigateKindraw(folderId ? buildFolderPath(folderId) : "/");
+  }, [kindrawCurrentItem?.folderId]);
 
   const handleKindrawLogout = useCallback(async () => {
     await runKindrawMutation(async () => {
@@ -2315,6 +2322,7 @@ const ExcalidrawWrapper = () => {
         <AppMainMenu
           currentCanvasStatus={kindrawDrawingStatus}
           currentCanvasTitle={kindrawActiveCanvasTitle}
+          onBackToLibrary={handleKindrawBackToLibrary}
           workspaceShortcutLabel={getShortcutKey(
             KINDRAW_SHORTCUTS.workspace.shortcut,
           )}

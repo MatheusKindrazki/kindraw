@@ -143,6 +143,46 @@
     height: 1.05rem;
   }
 
+  // Botão "voltar à biblioteca" — visível só quando há um canvas aberto.
+  .kindraw-main-menu-back {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    min-height: 2.75rem;
+    padding: 0 0.85rem 0 0.7rem;
+    border: 1px solid var(--kindraw-sidebar-border);
+    border-radius: 0.95rem;
+    background: color-mix(
+      in srgb,
+      var(--color-surface-high) 90%,
+      var(--color-surface-lowest)
+    );
+    color: var(--text-primary-color);
+    font: inherit;
+    font-size: 0.9rem;
+    font-weight: 600;
+    letter-spacing: -0.005em;
+    cursor: pointer;
+    transition: background 160ms ease, border-color 160ms ease,
+      transform 160ms ease;
+  }
+
+  .kindraw-main-menu-back:hover {
+    background: var(--kindraw-sidebar-accent-soft);
+    border-color: color-mix(
+      in srgb,
+      var(--color-primary) 22%,
+      var(--color-surface-lowest)
+    );
+    color: var(--color-primary-darker);
+    transform: translateX(-1px);
+  }
+
+  .kindraw-main-menu-back svg {
+    width: 1.05rem;
+    height: 1.05rem;
+  }
+
   .kindraw-main-menu-shell {
     display: inline-flex;
     align-items: center;
