@@ -2,6 +2,11 @@ import { exportToSvg } from "@excalidraw/excalidraw";
 
 import { getHybridItem, getItem } from "./api";
 import { parseDrawingContent } from "./content";
+import {
+  pruneThumbnails,
+  readCachedThumbnail,
+  writeCachedThumbnail,
+} from "./thumbnailStore";
 
 import { isKindrawHybridItem } from "./types";
 
@@ -10,6 +15,8 @@ import type { KindrawTreeItem } from "./types";
 // Preview de canvas renderizado no client (sem backend): busca o conteúdo do
 // drawing, gera um SVG via exportToSvg e devolve um data-URI. Cacheado por
 // item.id + updatedAt, então o preview invalida sozinho quando o canvas muda.
+// Duas camadas: memória (L1, por sessão) + IndexedDB (L2, persiste entre
+// visitas), pra próxima renderização ser instantânea.
 
 export type KindrawThumbnail =
   | { status: "ready"; dataUri: string }
@@ -20,6 +27,22 @@ const cache = new Map<string, KindrawThumbnail>();
 const inflight = new Map<string, Promise<KindrawThumbnail>>();
 
 const cacheKey = (item: KindrawTreeItem) => `${item.id}:${item.updatedAt}`;
+
+// Só drawings e híbridos têm canvas; docs não (o card mostra o ícone do tipo).
+const supportsThumbnail = (item: KindrawTreeItem) =>
+  isKindrawHybridItem(item) || item.kind === "drawing";
+
+// Remove do IndexedDB thumbnails de versões antigas/itens removidos, mantendo
+// só as chaves dos itens vivos que suportam preview.
+export const pruneKindrawThumbnails = (items: KindrawTreeItem[]) => {
+  const valid = new Set<string>();
+  for (const item of items) {
+    if (supportsThumbnail(item)) {
+      valid.add(cacheKey(item));
+    }
+  }
+  void pruneThumbnails(valid);
+};
 
 const svgToDataUri = (svg: SVGSVGElement) => {
   const serialized = new XMLSerializer().serializeToString(svg);
@@ -56,10 +79,6 @@ const renderDrawingThumbnail = async (
   return { status: "ready", dataUri: svgToDataUri(svg) };
 };
 
-// Só drawings e híbridos têm canvas; docs não (o card mostra o ícone do tipo).
-const supportsThumbnail = (item: KindrawTreeItem) =>
-  isKindrawHybridItem(item) || item.kind === "drawing";
-
 export const getKindrawThumbnail = async (
   item: KindrawTreeItem,
 ): Promise<KindrawThumbnail | null> => {
@@ -68,6 +87,8 @@ export const getKindrawThumbnail = async (
   }
 
   const key = cacheKey(item);
+
+  // L1: memória (mais rápido)
   const cached = cache.get(key);
   if (cached) {
     return cached;
@@ -80,11 +101,20 @@ export const getKindrawThumbnail = async (
 
   const task = (async (): Promise<KindrawThumbnail> => {
     try {
+      // L2: IndexedDB (persiste entre visitas) — evita re-renderizar
+      const persisted = await readCachedThumbnail(key);
+      if (persisted) {
+        cache.set(key, persisted);
+        return persisted;
+      }
+
       const content = isKindrawHybridItem(item)
         ? (await getHybridItem(item.id)).drawing.content
         : (await getItem(item.id)).content;
       const thumbnail = await renderDrawingThumbnail(content);
       cache.set(key, thumbnail);
+      // grava no IDB em background; não bloqueia o retorno
+      void writeCachedThumbnail(key, item.id, thumbnail);
       return thumbnail;
     } catch (error) {
       // 404/erro de rede/parse: não trava o card em "loading" — cai no

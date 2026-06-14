@@ -39,7 +39,7 @@ import {
   navigateKindraw,
   subscribeToLocation,
 } from "./router";
-import { getKindrawThumbnail } from "./thumbnails";
+import { getKindrawThumbnail, pruneKindrawThumbnails } from "./thumbnails";
 import { isKindrawHybridItem } from "./types";
 import { getErrorMessage } from "./utils";
 
@@ -627,9 +627,15 @@ const CardThumb = ({
     }
 
     let cancelled = false;
+    let loaded = false;
     let observer: IntersectionObserver | null = null;
 
     const load = () => {
+      if (loaded) {
+        return;
+      }
+      loaded = true;
+      observer?.disconnect();
       void getKindrawThumbnail(item).then((result) => {
         if (!cancelled) {
           setThumb(result);
@@ -643,13 +649,19 @@ const CardThumb = ({
       observer = new IntersectionObserver(
         (entries) => {
           if (entries.some((entry) => entry.isIntersecting)) {
-            observer?.disconnect();
             load();
           }
         },
         { rootMargin: "200px" },
       );
       observer.observe(node);
+      // fallback: se o card já está visível no mount (caso comum no reload),
+      // o callback do observer pode não disparar de forma confiável — checa
+      // a posição e carrega direto.
+      const rect = node.getBoundingClientRect();
+      if (rect.top < window.innerHeight + 200 && rect.bottom > -200) {
+        load();
+      }
     }
 
     return () => {
@@ -928,11 +940,16 @@ const WorkspacePage = ({
   }
 
   const normalizedQuery = searchQuery.trim().toLowerCase();
-  const visibleItems = normalizedQuery
+  const filteredItems = normalizedQuery
     ? scopedItems.filter((item) =>
         item.title.toLowerCase().includes(normalizedQuery),
       )
     : scopedItems;
+  // mais recentes primeiro (por última atualização)
+  const visibleItems = [...filteredItems].sort(
+    (a, b) =>
+      new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
+  );
 
   const heading = sharedView
     ? sharedView === "links"
@@ -1557,6 +1574,14 @@ export const KindrawApp = () => {
       navigateKindraw("/", { replace: true });
     }
   }, [route, tree]);
+
+  // Limpa thumbnails obsoletas (versões antigas / itens removidos) do cache
+  // persistente sempre que a árvore muda.
+  useEffect(() => {
+    if (tree) {
+      pruneKindrawThumbnails(tree.items);
+    }
+  }, [tree]);
 
   // ⌘K / Ctrl+K abre o command palette (busca global) — só no workspace.
   useEffect(() => {
