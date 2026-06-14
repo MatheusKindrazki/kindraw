@@ -2143,7 +2143,6 @@ export const KindrawApp = () => {
             <DocEditorPage
               folders={tree.folders}
               itemId={route.itemId}
-              itemsById={itemsById}
               onTreeRefresh={refreshTree}
             />
           ) : null}

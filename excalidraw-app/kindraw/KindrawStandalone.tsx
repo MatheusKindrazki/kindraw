@@ -158,11 +158,7 @@ export const KindrawDocScreen = ({ itemId }: KindrawDocScreenProps) => {
 
   return (
     <div className="kindraw-doc-screen">
-      <DocEditorPage
-        itemId={itemId}
-        itemsById={createItemsById(tree)}
-        onTreeRefresh={refreshTree}
-      />
+      <DocEditorPage itemId={itemId} onTreeRefresh={refreshTree} />
     </div>
   );
 };

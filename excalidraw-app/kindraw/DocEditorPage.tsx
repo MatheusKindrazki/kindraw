@@ -1,11 +1,4 @@
-import {
-  useCallback,
-  useDeferredValue,
-  useEffect,
-  useState,
-  startTransition,
-} from "react";
-import CodeMirrorEditor from "@excalidraw/excalidraw/components/TTDDialog/CodeMirrorEditor";
+import { useCallback, useEffect, useState, startTransition } from "react";
 
 import {
   createShareLink,
@@ -15,7 +8,7 @@ import {
   updateItemMeta,
 } from "./api";
 import { KindrawIcon } from "./icons";
-import { MarkdownPreview } from "./MarkdownPreview";
+import { RichTextEditor } from "./RichTextEditor";
 import { buildFolderPath, buildHybridPath, navigateKindraw } from "./router";
 import { ShareLinksPanel } from "./ShareLinksPanel";
 import { getKindrawDraft, setKindrawDraft } from "./storage";
@@ -25,14 +18,12 @@ import type { KindrawFolder, KindrawItem, KindrawItemResponse } from "./types";
 
 type DocEditorPageProps = {
   itemId: string;
-  itemsById: Record<string, KindrawItem>;
   onTreeRefresh: () => Promise<void> | void;
   folders?: KindrawFolder[];
 };
 
 export const DocEditorPage = ({
   itemId,
-  itemsById,
   onTreeRefresh,
   folders,
 }: DocEditorPageProps) => {
@@ -47,7 +38,6 @@ export const DocEditorPage = ({
     "idle",
   );
   const [lastSavedContent, setLastSavedContent] = useState("");
-  const deferredMarkdown = useDeferredValue(markdown);
 
   const loadItem = useCallback(async () => {
     setErrorMessage(null);
@@ -312,23 +302,12 @@ export const DocEditorPage = ({
       </header>
 
       <div className="kindraw-editor-body kindraw-editor-body--doc">
-        <div className="kindraw-doc-layout">
-          <section className="kindraw-doc-layout__editor">
-            <CodeMirrorEditor
-              onChange={setMarkdown}
-              placeholder="Escreva em Markdown..."
-              theme="light"
-              value={markdown}
-            />
-          </section>
-          <section className="kindraw-doc-layout__preview">
-            <MarkdownPreview
-              emptyMessage="Comece escrevendo para ver o preview."
-              itemsById={itemsById}
-              markdown={deferredMarkdown}
-              onNavigate={(pathname) => navigateKindraw(pathname)}
-            />
-          </section>
+        <div className="kindraw-doc-layout kindraw-doc-layout--rte">
+          <RichTextEditor
+            onChange={setMarkdown}
+            placeholder="Escreva aqui…"
+            value={markdown}
+          />
         </div>
       </div>
     </div>

@@ -814,28 +814,6 @@ export const HybridEditorPage = ({
               <div className="kindraw-popover kindraw-popover--menu">
                 <div className="kindraw-menu" role="menu">
                   <button
-                    className="kindraw-menu__item"
-                    onClick={() => {
-                      setHeaderMenuOpen(false);
-                      navigateKindraw(buildItemPath(response.document.item));
-                    }}
-                    role="menuitem"
-                    type="button"
-                  >
-                    <KindrawIcon name="doc" size={15} /> Abrir doc legado
-                  </button>
-                  <button
-                    className="kindraw-menu__item"
-                    onClick={() => {
-                      setHeaderMenuOpen(false);
-                      navigateKindraw(buildItemPath(response.drawing.item));
-                    }}
-                    role="menuitem"
-                    type="button"
-                  >
-                    <KindrawIcon name="pen" size={15} /> Abrir canvas legado
-                  </button>
-                  <button
                     className="kindraw-menu__item kindraw-menu__item--danger"
                     onClick={() => {
                       setHeaderMenuOpen(false);

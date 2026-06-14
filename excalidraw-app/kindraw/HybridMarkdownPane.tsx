@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { KindrawIcon } from "./icons";
 import { MarkdownPreview } from "./MarkdownPreview";
+import { RichTextEditor } from "./RichTextEditor";
 import {
   buildKindrawSectionLink,
   parseHybridMarkdownSections,
@@ -155,9 +156,9 @@ export const HybridMarkdownPane = ({
 
             {isEditing ? (
               <div className="kindraw-hybrid-doc__editor">
-                <textarea
-                  className="kindraw-hybrid-doc__textarea"
-                  onChange={(event) => setDraftMarkdown(event.target.value)}
+                <RichTextEditor
+                  onChange={setDraftMarkdown}
+                  placeholder="Escreva o conteúdo da seção…"
                   value={draftMarkdown}
                 />
                 <div className="kindraw-hybrid-doc__editor-actions">

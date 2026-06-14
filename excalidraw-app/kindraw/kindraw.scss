@@ -1849,6 +1849,187 @@
   overflow: auto;
 }
 
+/* ── Editor WYSIWYG (Tiptap) ──────────────────────────────── */
+.kindraw-doc-layout--rte {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.kindraw-rte {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+  border: 1px solid var(--kd-line);
+  border-radius: var(--kd-r-card);
+  background: var(--kd-surface);
+  overflow: hidden;
+}
+
+.kindraw-rte__toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 2px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--kd-line-soft);
+  background: var(--kd-surface-warm);
+}
+
+.kindraw-rte__sep {
+  width: 1px;
+  align-self: stretch;
+  margin: 2px 6px;
+  background: var(--kd-line);
+}
+
+.kindraw-rte__tool {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 30px;
+  height: 30px;
+  padding: 0 8px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--kd-ink-soft);
+  font-family: var(--kd-font);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+
+.kindraw-rte__tool:hover {
+  background: var(--kd-hover);
+}
+
+.kindraw-rte__tool--active {
+  background: var(--kd-amber-soft);
+  color: var(--kd-amber-deep);
+}
+
+.kindraw-rte__tool:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.kindraw-rte__surface {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.kindraw-rte__content {
+  min-height: 100%;
+  padding: 22px 26px;
+  outline: none;
+  font-family: var(--kd-font);
+  font-size: 15px;
+  line-height: 1.65;
+  color: var(--kd-ink);
+}
+
+.kindraw-rte__content:focus {
+  outline: none;
+}
+
+/* placeholder quando vazio (StarterKit não traz placeholder; usamos :empty) */
+.kindraw-rte__content p.is-editor-empty:first-child::before,
+.kindraw-rte__content:empty::before {
+  content: attr(aria-label);
+  color: var(--kd-faint);
+  pointer-events: none;
+  float: left;
+  height: 0;
+}
+
+.kindraw-rte__content > * {
+  margin: 0 0 0.7em;
+}
+
+.kindraw-rte__content h1 {
+  font-size: 25px;
+  font-weight: 800;
+  line-height: 1.2;
+  margin: 0.4em 0 0.45em;
+}
+
+.kindraw-rte__content h2 {
+  font-size: 20px;
+  font-weight: 700;
+  margin: 0.5em 0 0.4em;
+}
+
+.kindraw-rte__content h3 {
+  font-size: 16.5px;
+  font-weight: 700;
+  margin: 0.5em 0 0.35em;
+}
+
+.kindraw-rte__content ul,
+.kindraw-rte__content ol {
+  padding-left: 1.4em;
+}
+
+.kindraw-rte__content li {
+  margin: 0.2em 0;
+}
+
+.kindraw-rte__content blockquote {
+  border-left: 3px solid var(--kd-amber);
+  margin: 0.6em 0;
+  padding: 0.1em 0 0.1em 14px;
+  color: var(--kd-muted);
+}
+
+.kindraw-rte__content code {
+  background: var(--kd-amber-chip);
+  color: var(--kd-amber-deep);
+  padding: 1px 5px;
+  border-radius: 5px;
+  font-size: 0.9em;
+}
+
+.kindraw-rte__content pre {
+  background: var(--kd-ink);
+  color: var(--kd-surface-warm);
+  padding: 12px 14px;
+  border-radius: 10px;
+  overflow: auto;
+}
+
+.kindraw-rte__content pre code {
+  background: transparent;
+  color: inherit;
+  padding: 0;
+}
+
+.kindraw-rte__content a {
+  color: var(--kd-amber-deep);
+  text-decoration: underline;
+}
+
+.kindraw-rte__content hr {
+  border: none;
+  border-top: 1px solid var(--kd-line);
+  margin: 1em 0;
+}
+
+/* Dentro do painel de seção do híbrido o editor é mais compacto */
+.kindraw-hybrid-doc__editor .kindraw-rte {
+  flex: none;
+}
+
+.kindraw-hybrid-doc__editor .kindraw-rte__surface {
+  max-height: 320px;
+}
+
+.kindraw-hybrid-doc__editor .kindraw-rte__content {
+  padding: 14px 16px;
+  font-size: 14px;
+}
+
 /* Markdown render */
 .kindraw-markdown {
   display: flex;
