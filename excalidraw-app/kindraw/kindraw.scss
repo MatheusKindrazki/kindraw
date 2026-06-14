@@ -74,6 +74,15 @@
   font-family: var(--kd-font);
 }
 
+/* Inputs/textareas com width:100% precisam contar padding+borda dentro da
+   caixa, senão estouram o container (default do <input> é content-box). */
+.kindraw-shell input,
+.kindraw-shell textarea,
+.kindraw-modal input,
+.kindraw-cmdk input {
+  box-sizing: border-box;
+}
+
 .kindraw-shell {
   display: flex;
   flex-direction: column;
@@ -2494,6 +2503,7 @@
 }
 
 .kindraw-hybrid-doc__title-input {
+  box-sizing: border-box;
   width: 100%;
   border: 1px solid var(--kd-line);
   border-radius: var(--kd-r-btn);
