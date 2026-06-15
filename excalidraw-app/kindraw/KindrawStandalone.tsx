@@ -237,6 +237,7 @@ export const KindrawHybridScreen = ({
 
   return (
     <HybridEditorPage
+      currentUser={session.user}
       hybridId={hybridId}
       initialSectionId={sectionId}
       initialView={view}
