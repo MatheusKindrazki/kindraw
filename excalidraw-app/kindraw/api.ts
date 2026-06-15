@@ -6,6 +6,7 @@ import type {
   KindrawCollaborationBootstrapResponse,
   KindrawCollaborationRoom,
   KindrawFolderShare,
+  KindrawHybridShare,
   KindrawHybridItemResponse,
   KindrawHybridView,
   KindrawItemKind,
@@ -161,6 +162,46 @@ export const updateFolderShareRole = (
 
 export const revokeFolderShare = (folderId: string, shareId: string) =>
   requestJson<void>(`/api/folders/${folderId}/shares/${shareId}`, {
+    method: "DELETE",
+  });
+
+/* ────────────────────────────────────────────────────────
+   Compartilhamento de documentos híbridos com usuários específicos
+   ──────────────────────────────────────────────────────── */
+
+export const listHybridShares = (hybridId: string) =>
+  requestJson<{ shares: KindrawHybridShare[] }>(
+    `/api/hybrid-items/${hybridId}/shares`,
+  );
+
+export const grantHybridShare = (
+  hybridId: string,
+  login: string,
+  role: KindrawShareRole,
+) =>
+  requestJson<{ share: KindrawHybridShare }>(
+    `/api/hybrid-items/${hybridId}/shares`,
+    {
+      method: "POST",
+      body: { login, role },
+    },
+  );
+
+export const updateHybridShareRole = (
+  hybridId: string,
+  shareId: string,
+  role: KindrawShareRole,
+) =>
+  requestJson<{ share: KindrawHybridShare }>(
+    `/api/hybrid-items/${hybridId}/shares/${shareId}`,
+    {
+      method: "PATCH",
+      body: { role },
+    },
+  );
+
+export const revokeHybridShare = (hybridId: string, shareId: string) =>
+  requestJson<void>(`/api/hybrid-items/${hybridId}/shares/${shareId}`, {
     method: "DELETE",
   });
 

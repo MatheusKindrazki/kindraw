@@ -22,6 +22,9 @@ export type KindrawFolderShare = {
   createdAt: string;
 };
 
+// Mesmo shape do folder share, mas para um documento híbrido.
+export type KindrawHybridShare = KindrawFolderShare;
+
 export type KindrawFolderSharedMeta = {
   role: KindrawShareRole;
   ownerId: string;

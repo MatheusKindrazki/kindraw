@@ -765,6 +765,70 @@ export const routeRequest = async (request: Request, env: Env) => {
     });
   }
 
+  // --- Hybrid shares (pessoas com acesso a um híbrido) -----------------------
+  // Matched ANTES do handler genérico /api/hybrid-items/:id para os paths longos
+  // vencerem (espelha o padrão de /api/folders/:id/shares).
+  if (pathname.match(/^\/api\/hybrid-items\/[^/]+\/shares(\/[^/]+)?$/)) {
+    const rest = pathname.replace("/api/hybrid-items/", "");
+    const [hybridId, sharesSegment, shareId] = rest.split("/");
+    const { auth, store } = await requireAuth(request, env);
+
+    // /api/hybrid-items/:hybridId/shares
+    if (sharesSegment === "shares" && !shareId) {
+      if (request.method === "GET") {
+        return json({
+          shares: await store.listHybridShares(auth.user.id, hybridId),
+        });
+      }
+      if (request.method === "POST") {
+        const input = await readJson<{ login?: string; role?: string }>(
+          request,
+        );
+        const login = (input.login || "").trim();
+        if (!login) {
+          throw new HttpError(400, "`login` is required.");
+        }
+        const role = input.role;
+        if (role !== "viewer" && role !== "editor") {
+          throw new HttpError(400, "`role` must be 'viewer' or 'editor'.");
+        }
+        const target = await store.getUserByLogin(login);
+        if (!target) {
+          throw new HttpError(404, `No user found with login @${login}.`);
+        }
+        const share = await store.grantHybridAccess(
+          auth.user.id,
+          hybridId,
+          target.id,
+          role,
+        );
+        return json({ share }, { status: 201 });
+      }
+    }
+
+    // /api/hybrid-items/:hybridId/shares/:shareId
+    if (sharesSegment === "shares" && shareId) {
+      if (request.method === "PATCH") {
+        const input = await readJson<{ role?: string }>(request);
+        const role = input.role;
+        if (role !== "viewer" && role !== "editor") {
+          throw new HttpError(400, "`role` must be 'viewer' or 'editor'.");
+        }
+        const share = await store.updateHybridAccessRole(
+          auth.user.id,
+          hybridId,
+          shareId,
+          role,
+        );
+        return json({ share });
+      }
+      if (request.method === "DELETE") {
+        await store.revokeHybridAccess(auth.user.id, hybridId, shareId);
+        return new Response(null, { status: 204 });
+      }
+    }
+  }
+
   if (pathname.startsWith("/api/hybrid-items/")) {
     const hybridId = pathname
       .replace("/api/hybrid-items/", "")

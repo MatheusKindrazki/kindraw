@@ -71,6 +71,16 @@ type FolderShareRow = {
   updated_at: string;
 };
 
+type HybridShareRow = {
+  id: string;
+  hybrid_id: string;
+  user_id: string;
+  role: "viewer" | "editor";
+  granted_by_user_id: string;
+  created_at: string;
+  updated_at: string;
+};
+
 type FakeState = {
   folders: FolderRow[];
   items: ItemRow[];
@@ -78,6 +88,7 @@ type FakeState = {
   hybridItems: HybridItemRow[];
   users: UserRow[];
   folderShares: FolderShareRow[];
+  hybridShares: HybridShareRow[];
 };
 
 const normalizeQuery = (query: string) => query.replace(/\s+/g, " ").trim();
@@ -229,6 +240,73 @@ class FakeStatement implements D1PreparedStatement {
       return (this.state.hybridItems.find(
         (item) => item.id === hybridId && item.owner_id === ownerId,
       ) || null) as T | null;
+    }
+
+    if (query === "SELECT owner_id FROM hybrid_items WHERE id = ?") {
+      const [hybridId] = this.values as [string];
+      const hybrid = this.state.hybridItems.find(
+        (entry) => entry.id === hybridId,
+      );
+      return (hybrid ? { owner_id: hybrid.owner_id } : null) as T | null;
+    }
+
+    if (
+      query ===
+      "SELECT role FROM hybrid_shares WHERE hybrid_id = ? AND user_id = ?"
+    ) {
+      const [hybridId, userId] = this.values as [string, string];
+      const share = this.state.hybridShares.find(
+        (entry) => entry.hybrid_id === hybridId && entry.user_id === userId,
+      );
+      return (share ? { role: share.role } : null) as T | null;
+    }
+
+    if (
+      query ===
+      "SELECT * FROM hybrid_shares WHERE hybrid_id = ? AND user_id = ?"
+    ) {
+      const [hybridId, userId] = this.values as [string, string];
+      return (this.state.hybridShares.find(
+        (entry) => entry.hybrid_id === hybridId && entry.user_id === userId,
+      ) || null) as T | null;
+    }
+
+    if (
+      normalizeQuery(query) ===
+      normalizeQuery(
+        `SELECT
+           hybrid_shares.id AS share_id,
+           hybrid_shares.role AS share_role,
+           hybrid_shares.created_at AS share_created_at,
+           users.id AS user_id,
+           users.github_login AS github_login,
+           users.name AS user_name,
+           users.avatar_url AS avatar_url
+         FROM hybrid_shares
+         JOIN users ON users.id = hybrid_shares.user_id
+         WHERE hybrid_shares.id = ?`,
+      )
+    ) {
+      const [shareId] = this.values as [string];
+      const share = this.state.hybridShares.find(
+        (entry) => entry.id === shareId,
+      );
+      if (!share) {
+        return null;
+      }
+      const user = this.state.users.find((entry) => entry.id === share.user_id);
+      if (!user) {
+        return null;
+      }
+      return {
+        share_id: share.id,
+        share_role: share.role,
+        share_created_at: share.created_at,
+        user_id: user.id,
+        github_login: user.github_login,
+        user_name: user.name,
+        avatar_url: user.avatar_url,
+      } as T;
     }
 
     if (
@@ -612,6 +690,93 @@ class FakeStatement implements D1PreparedStatement {
       return { results: results as T[] };
     }
 
+    // listHybridShares
+    if (
+      query.startsWith("SELECT hybrid_shares.id AS share_id") &&
+      query.includes("WHERE hybrid_shares.hybrid_id = ?")
+    ) {
+      const [hybridId] = this.values as [string];
+      const results = this.state.hybridShares
+        .filter((share) => share.hybrid_id === hybridId)
+        .sort((left, right) => left.created_at.localeCompare(right.created_at))
+        .map((share) => {
+          const user = this.state.users.find(
+            (entry) => entry.id === share.user_id,
+          );
+          return {
+            share_id: share.id,
+            share_role: share.role,
+            share_created_at: share.created_at,
+            user_id: user?.id ?? share.user_id,
+            github_login: user?.github_login ?? "",
+            user_name: user?.name ?? "",
+            avatar_url: user?.avatar_url ?? null,
+          };
+        });
+      return { results: results as T[] };
+    }
+
+    // getTree: hybrids shared DIRECTLY with this user (hybrid_shares) + the
+    // hybrid_items row, regardless of folder.
+    if (
+      query.startsWith("SELECT hybrid_shares.role AS share_role") &&
+      query.includes("FROM hybrid_shares JOIN hybrid_items")
+    ) {
+      const [userId] = this.values as [string];
+      const results = this.state.hybridShares
+        .filter((share) => share.user_id === userId)
+        .map((share) => {
+          const hybrid = this.state.hybridItems.find(
+            (entry) => entry.id === share.hybrid_id,
+          );
+          if (!hybrid) {
+            return null;
+          }
+          return {
+            share_role: share.role,
+            hybrid_id: hybrid.id,
+            hybrid_owner_id: hybrid.owner_id,
+            doc_item_id: hybrid.doc_item_id,
+            drawing_item_id: hybrid.drawing_item_id,
+            default_view: hybrid.default_view,
+            hybrid_created_at: hybrid.created_at,
+            hybrid_updated_at: hybrid.updated_at,
+          };
+        })
+        .filter((row): row is NonNullable<typeof row> => row !== null)
+        .sort((left, right) => {
+          const byUpdated = right.hybrid_updated_at.localeCompare(
+            left.hybrid_updated_at,
+          );
+          return (
+            byUpdated ||
+            right.hybrid_created_at.localeCompare(left.hybrid_created_at)
+          );
+        });
+      return { results: results as T[] };
+    }
+
+    // getTree: doc-rows of directly-shared hybrids (id IN (...)).
+    if (query.startsWith("SELECT * FROM items WHERE id IN (")) {
+      const ids = this.values as string[];
+      const set = new Set(ids);
+      const results = this.state.items.filter((entry) => set.has(entry.id));
+      return { results: results as T[] };
+    }
+
+    // getTree: share_links of directly-shared hybrid docs (item_id IN (...)).
+    if (
+      query.startsWith("SELECT share_links.* FROM share_links") &&
+      query.includes("WHERE share_links.item_id IN (")
+    ) {
+      const itemIds = this.values as string[];
+      const set = new Set(itemIds);
+      const results = this.state.shareLinks
+        .filter((entry) => entry.revoked_at === null && set.has(entry.item_id))
+        .sort((left, right) => right.created_at.localeCompare(left.created_at));
+      return { results: results as T[] };
+    }
+
     throw new Error(`Unsupported all() query in test double: ${query}`);
   }
 
@@ -892,6 +1057,86 @@ class FakeStatement implements D1PreparedStatement {
 
     if (
       query ===
+      "INSERT INTO hybrid_shares (id, hybrid_id, user_id, role, granted_by_user_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)"
+    ) {
+      const [
+        id,
+        hybridId,
+        userId,
+        role,
+        grantedBy,
+        createdAt,
+        updatedAt,
+      ] = this.values as [
+        string,
+        string,
+        string,
+        "viewer" | "editor",
+        string,
+        string,
+        string,
+      ];
+      this.state.hybridShares.push({
+        id,
+        hybrid_id: hybridId,
+        user_id: userId,
+        role,
+        granted_by_user_id: grantedBy,
+        created_at: createdAt,
+        updated_at: updatedAt,
+      });
+      return { meta: { changes: 1 } };
+    }
+
+    if (
+      query === "UPDATE hybrid_shares SET role = ?, updated_at = ? WHERE id = ?"
+    ) {
+      const [role, updatedAt, id] = this.values as [
+        "viewer" | "editor",
+        string,
+        string,
+      ];
+      const share = this.state.hybridShares.find((entry) => entry.id === id);
+      if (share) {
+        share.role = role;
+        share.updated_at = updatedAt;
+      }
+      return { meta: { changes: share ? 1 : 0 } };
+    }
+
+    if (
+      query ===
+      "UPDATE hybrid_shares SET role = ?, updated_at = ? WHERE id = ? AND hybrid_id = ?"
+    ) {
+      const [role, updatedAt, id, hybridId] = this.values as [
+        "viewer" | "editor",
+        string,
+        string,
+        string,
+      ];
+      const share = this.state.hybridShares.find(
+        (entry) => entry.id === id && entry.hybrid_id === hybridId,
+      );
+      if (share) {
+        share.role = role;
+        share.updated_at = updatedAt;
+      }
+      return { meta: { changes: share ? 1 : 0 } };
+    }
+
+    if (
+      query === "DELETE FROM hybrid_shares WHERE id = ? AND hybrid_id = ?"
+    ) {
+      const [id, hybridId] = this.values as [string, string];
+      const before = this.state.hybridShares.length;
+      this.state.hybridShares = this.state.hybridShares.filter(
+        (entry) => !(entry.id === id && entry.hybrid_id === hybridId),
+      );
+      return { meta: { changes: before - this.state.hybridShares.length } };
+    }
+
+    if (
+      query ===
       "UPDATE items SET collaboration_room_key = ?, collaboration_enabled_at = ? WHERE id = ? AND owner_id = ?"
     ) {
       const [roomKey, enabledAt, itemId, ownerId] = this.values as [
@@ -1113,6 +1358,7 @@ const createStore = (state?: Partial<FakeState>) => {
     hybridItems: state?.hybridItems ?? [],
     users: state?.users ?? [],
     folderShares: state?.folderShares ?? [],
+    hybridShares: state?.hybridShares ?? [],
   };
   const blobs = new FakeR2Bucket();
   return {
@@ -2484,5 +2730,261 @@ describe("KindrawStore folder sharing", () => {
     ).rejects.toMatchObject({ status: 404 });
 
     uuidSpy.mockRestore();
+  });
+});
+
+describe("KindrawStore hybrid sharing", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-03-09T12:00:00.000Z"));
+  });
+
+  const baseUsers: UserRow[] = [
+    {
+      id: "owner-1",
+      github_login: "octocat",
+      name: "Octo Cat",
+      avatar_url: "https://avatar.test/octocat.png",
+    },
+    {
+      id: "guest-1",
+      github_login: "hubot",
+      name: "Hu Bot",
+      avatar_url: null,
+    },
+    {
+      id: "guest-2",
+      github_login: "monalisa",
+      name: "Mona Lisa",
+      avatar_url: null,
+    },
+  ];
+
+  const baseHybridState = () => ({
+    users: baseUsers,
+    items: [
+      {
+        id: "doc-1",
+        owner_id: "owner-1",
+        folder_id: null,
+        kind: "doc" as const,
+        title: "Portal Cross",
+        content_blob_key: "users/owner-1/items/doc-1/current.md",
+        archived_at: null,
+        collaboration_room_key: null,
+        collaboration_enabled_at: null,
+        created_at: "2026-03-09T08:00:00.000Z",
+        updated_at: "2026-03-09T08:00:00.000Z",
+      },
+      {
+        id: "drawing-1",
+        owner_id: "owner-1",
+        folder_id: null,
+        kind: "drawing" as const,
+        title: "Portal Cross",
+        content_blob_key: "users/owner-1/items/drawing-1/current.excalidraw",
+        archived_at: null,
+        collaboration_room_key: null,
+        collaboration_enabled_at: null,
+        created_at: "2026-03-09T08:00:00.000Z",
+        updated_at: "2026-03-09T08:00:00.000Z",
+      },
+    ],
+    hybridItems: [
+      {
+        id: "hybrid-1",
+        owner_id: "owner-1",
+        doc_item_id: "doc-1",
+        drawing_item_id: "drawing-1",
+        default_view: "both" as const,
+        created_at: "2026-03-09T08:00:00.000Z",
+        updated_at: "2026-03-09T08:00:00.000Z",
+      },
+    ],
+  });
+
+  it("grantHybridAccess faz upsert, valida ownership e bloqueia self-share", async () => {
+    const uuidSpy = vi
+      .spyOn(crypto, "randomUUID")
+      .mockReturnValueOnce("00000000-0000-0000-0000-0000000000aa");
+    const { store, state } = createStore(baseHybridState());
+
+    const share = await store.grantHybridAccess(
+      "owner-1",
+      "hybrid-1",
+      "guest-1",
+      "viewer",
+    );
+    expect(share).toEqual({
+      id: "00000000-0000-0000-0000-0000000000aa",
+      role: "viewer",
+      createdAt: "2026-03-09T12:00:00.000Z",
+      user: {
+        id: "guest-1",
+        githubLogin: "hubot",
+        name: "Hu Bot",
+        avatarUrl: null,
+      },
+    });
+    expect(state.hybridShares).toHaveLength(1);
+    expect(state.hybridShares[0]?.granted_by_user_id).toBe("owner-1");
+
+    // upsert: re-conceder a mesma pessoa atualiza o role, sem nova linha
+    const upserted = await store.grantHybridAccess(
+      "owner-1",
+      "hybrid-1",
+      "guest-1",
+      "editor",
+    );
+    expect(upserted.id).toBe("00000000-0000-0000-0000-0000000000aa");
+    expect(upserted.role).toBe("editor");
+    expect(state.hybridShares).toHaveLength(1);
+
+    // self-share bloqueado
+    await expect(
+      store.grantHybridAccess("owner-1", "hybrid-1", "owner-1", "viewer"),
+    ).rejects.toMatchObject({ status: 400 });
+
+    // hibrido de outro dono => 404 (ownership)
+    await expect(
+      store.grantHybridAccess("guest-1", "hybrid-1", "guest-2", "viewer"),
+    ).rejects.toMatchObject({ status: 404 });
+
+    uuidSpy.mockRestore();
+  });
+
+  it("updateHybridAccessRole e revokeHybridAccess validam ownership e existencia", async () => {
+    const { store, state } = createStore({
+      ...baseHybridState(),
+      hybridShares: [
+        {
+          id: "share-1",
+          hybrid_id: "hybrid-1",
+          user_id: "guest-1",
+          role: "viewer",
+          granted_by_user_id: "owner-1",
+          created_at: "2026-03-09T11:00:00.000Z",
+          updated_at: "2026-03-09T11:00:00.000Z",
+        },
+      ],
+    });
+
+    const updated = await store.updateHybridAccessRole(
+      "owner-1",
+      "hybrid-1",
+      "share-1",
+      "editor",
+    );
+    expect(updated.role).toBe("editor");
+    expect(state.hybridShares[0]?.role).toBe("editor");
+
+    // share inexistente => 404
+    await expect(
+      store.updateHybridAccessRole("owner-1", "hybrid-1", "nope", "viewer"),
+    ).rejects.toMatchObject({ status: 404 });
+
+    // nao-dono nao pode revogar (404 no hibrido)
+    await expect(
+      store.revokeHybridAccess("guest-2", "hybrid-1", "share-1"),
+    ).rejects.toMatchObject({ status: 404 });
+
+    await store.revokeHybridAccess("owner-1", "hybrid-1", "share-1");
+    expect(state.hybridShares).toEqual([]);
+  });
+
+  it("listHybridShares lista pessoas com acesso (JOIN users)", async () => {
+    const { store } = createStore({
+      ...baseHybridState(),
+      hybridShares: [
+        {
+          id: "share-1",
+          hybrid_id: "hybrid-1",
+          user_id: "guest-1",
+          role: "viewer",
+          granted_by_user_id: "owner-1",
+          created_at: "2026-03-09T11:00:00.000Z",
+          updated_at: "2026-03-09T11:00:00.000Z",
+        },
+        {
+          id: "share-2",
+          hybrid_id: "hybrid-1",
+          user_id: "guest-2",
+          role: "editor",
+          granted_by_user_id: "owner-1",
+          created_at: "2026-03-09T11:30:00.000Z",
+          updated_at: "2026-03-09T11:30:00.000Z",
+        },
+      ],
+    });
+
+    const shares = await store.listHybridShares("owner-1", "hybrid-1");
+    expect(shares).toEqual([
+      {
+        id: "share-1",
+        role: "viewer",
+        createdAt: "2026-03-09T11:00:00.000Z",
+        user: {
+          id: "guest-1",
+          githubLogin: "hubot",
+          name: "Hu Bot",
+          avatarUrl: null,
+        },
+      },
+      {
+        id: "share-2",
+        role: "editor",
+        createdAt: "2026-03-09T11:30:00.000Z",
+        user: {
+          id: "guest-2",
+          githubLogin: "monalisa",
+          name: "Mona Lisa",
+          avatarUrl: null,
+        },
+      },
+    ]);
+
+    // nao-dono => 404 no hibrido
+    await expect(
+      store.listHybridShares("guest-1", "hybrid-1"),
+    ).rejects.toMatchObject({ status: 404 });
+  });
+
+  it("getTree do convidado inclui o hybrid compartilhado diretamente (sharedRole, folderId null)", async () => {
+    const { store, blobs } = createStore({
+      ...baseHybridState(),
+      hybridShares: [
+        {
+          id: "share-1",
+          hybrid_id: "hybrid-1",
+          user_id: "guest-1",
+          role: "editor",
+          granted_by_user_id: "owner-1",
+          created_at: "2026-03-09T11:00:00.000Z",
+          updated_at: "2026-03-09T11:00:00.000Z",
+        },
+      ],
+    });
+    await blobs.put("users/owner-1/items/doc-1/current.md", "# Portal Cross");
+
+    const tree = await store.getTree("guest-1");
+
+    // o par colapsa em uma unica entrada hybrid, marcada como editor e na raiz
+    const hybridEntries = tree.items.filter((i) => i.kind === "hybrid");
+    expect(hybridEntries).toHaveLength(1);
+    expect(hybridEntries[0]?.id).toBe("hybrid-1");
+    expect((hybridEntries[0] as { sharedRole?: string }).sharedRole).toBe(
+      "editor",
+    );
+    expect(hybridEntries[0]?.folderId).toBeNull();
+    // doc/drawing individuais nao aparecem soltos
+    expect(tree.items.some((i) => i.id === "doc-1")).toBe(false);
+    expect(tree.items.some((i) => i.id === "drawing-1")).toBe(false);
+
+    // o dono ve o proprio hybrid SEM sharedRole
+    const ownerTree = await store.getTree("owner-1");
+    const ownerHybrid = ownerTree.items.find((i) => i.id === "hybrid-1") as {
+      sharedRole?: string;
+    };
+    expect(ownerHybrid?.sharedRole).toBeUndefined();
   });
 });

@@ -39,6 +39,7 @@ import {
   buildFolderPath,
   navigateKindraw,
 } from "./router";
+import { ShareHybridModal } from "./ShareHybridModal";
 import { ShareLinksPanel } from "./ShareLinksPanel";
 import { getKindrawDraft, setKindrawDraft } from "./storage";
 import { getErrorMessage, isDraftNewer } from "./utils";
@@ -147,6 +148,7 @@ export const HybridEditorPage = ({
   });
   const [headerMenuOpen, setHeaderMenuOpen] = useState(false);
   const [unlinkConfirmOpen, setUnlinkConfirmOpen] = useState(false);
+  const [shareModalOpen, setShareModalOpen] = useState(false);
   const excalidrawAPIRef = useRef<ExcalidrawImperativeAPI | null>(null);
   const splitBodyRef = useRef<HTMLDivElement | null>(null);
   const headerMenuRef = useRef<HTMLDivElement | null>(null);
@@ -970,6 +972,13 @@ export const HybridEditorPage = ({
             <i />
             <span>{statusMessage}</span>
           </span>
+          <button
+            className="kindraw-btn kindraw-btn--soft kindraw-btn--sm"
+            onClick={() => setShareModalOpen(true)}
+            type="button"
+          >
+            <KindrawIcon name="users" size={14} /> Compartilhar
+          </button>
           <div className="kindraw-menuwrap" ref={headerMenuRef}>
             <button
               aria-expanded={headerMenuOpen}
@@ -1105,6 +1114,14 @@ export const HybridEditorPage = ({
             </div>
           </div>
         </div>
+      ) : null}
+
+      {shareModalOpen ? (
+        <ShareHybridModal
+          hybrid={{ id: hybridId, title: response.hybrid.title }}
+          onChange={() => void onTreeRefresh()}
+          onClose={() => setShareModalOpen(false)}
+        />
       ) : null}
     </div>
   );
