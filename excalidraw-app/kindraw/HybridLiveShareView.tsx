@@ -211,7 +211,10 @@ export const HybridLiveShareView = ({
         </div>
       </header>
 
-      <div className="kindraw-hybrid-shell__body kindraw-hybrid-shell__body--both">
+      <div
+        className="kindraw-hybrid-shell__body kindraw-hybrid-shell__body--both"
+        style={{ gridTemplateColumns: "0.46fr 14px 0.54fr" }}
+      >
         <section className="kindraw-hybrid-shell__document">
           <div className="kindraw-hybrid-doc kindraw-hybrid-doc--live">
             <div className="kindraw-hybrid-doc__editor kindraw-hybrid-doc__editor--live">
