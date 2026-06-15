@@ -765,6 +765,70 @@ export const routeRequest = async (request: Request, env: Env) => {
     });
   }
 
+  // --- Hybrid shares (pessoas com acesso a um híbrido) -----------------------
+  // Matched ANTES do handler genérico /api/hybrid-items/:id para os paths longos
+  // vencerem (espelha o padrão de /api/folders/:id/shares).
+  if (pathname.match(/^\/api\/hybrid-items\/[^/]+\/shares(\/[^/]+)?$/)) {
+    const rest = pathname.replace("/api/hybrid-items/", "");
+    const [hybridId, sharesSegment, shareId] = rest.split("/");
+    const { auth, store } = await requireAuth(request, env);
+
+    // /api/hybrid-items/:hybridId/shares
+    if (sharesSegment === "shares" && !shareId) {
+      if (request.method === "GET") {
+        return json({
+          shares: await store.listHybridShares(auth.user.id, hybridId),
+        });
+      }
+      if (request.method === "POST") {
+        const input = await readJson<{ login?: string; role?: string }>(
+          request,
+        );
+        const login = (input.login || "").trim();
+        if (!login) {
+          throw new HttpError(400, "`login` is required.");
+        }
+        const role = input.role;
+        if (role !== "viewer" && role !== "editor") {
+          throw new HttpError(400, "`role` must be 'viewer' or 'editor'.");
+        }
+        const target = await store.getUserByLogin(login);
+        if (!target) {
+          throw new HttpError(404, `No user found with login @${login}.`);
+        }
+        const share = await store.grantHybridAccess(
+          auth.user.id,
+          hybridId,
+          target.id,
+          role,
+        );
+        return json({ share }, { status: 201 });
+      }
+    }
+
+    // /api/hybrid-items/:hybridId/shares/:shareId
+    if (sharesSegment === "shares" && shareId) {
+      if (request.method === "PATCH") {
+        const input = await readJson<{ role?: string }>(request);
+        const role = input.role;
+        if (role !== "viewer" && role !== "editor") {
+          throw new HttpError(400, "`role` must be 'viewer' or 'editor'.");
+        }
+        const share = await store.updateHybridAccessRole(
+          auth.user.id,
+          hybridId,
+          shareId,
+          role,
+        );
+        return json({ share });
+      }
+      if (request.method === "DELETE") {
+        await store.revokeHybridAccess(auth.user.id, hybridId, shareId);
+        return new Response(null, { status: 204 });
+      }
+    }
+  }
+
   if (pathname.startsWith("/api/hybrid-items/")) {
     const hybridId = pathname
       .replace("/api/hybrid-items/", "")
@@ -783,9 +847,21 @@ export const routeRequest = async (request: Request, env: Env) => {
     }
 
     if (pathname.endsWith("/share-links") && request.method === "POST") {
+      // body é opcional: { access?: "read" | "live-edit" }. Sem body → "read".
+      const body = await request
+        .json()
+        .catch(() => ({}) as { access?: string });
+      const access =
+        (body as { access?: string }).access === "live-edit"
+          ? "live-edit"
+          : "read";
       return json(
         {
-          shareLink: await store.createHybridShareLink(auth.user.id, hybridId),
+          shareLink: await store.createHybridShareLink(
+            auth.user.id,
+            hybridId,
+            access,
+          ),
         },
         { status: 201 },
       );
@@ -940,6 +1016,22 @@ export const routeRequest = async (request: Request, env: Env) => {
     });
   }
 
+  if (
+    pathname.startsWith("/api/items/") &&
+    pathname.endsWith("/convert-to-hybrid") &&
+    request.method === "POST"
+  ) {
+    const itemId = pathname
+      .replace("/api/items/", "")
+      .replace("/convert-to-hybrid", "");
+    const { auth, store } = await requireAuth(request, env);
+    const input = await readJson<{ title?: string }>(request);
+    return json(
+      await store.convertDrawingToHybrid(auth.user.id, itemId, input),
+      { status: 201 },
+    );
+  }
+
   if (pathname.startsWith("/api/items/") && pathname.endsWith("/meta")) {
     const itemId = pathname.replace("/api/items/", "").replace("/meta", "");
     const { auth, store } = await requireAuth(request, env);
@@ -1072,6 +1164,45 @@ export const routeRequest = async (request: Request, env: Env) => {
     const roomId = pathname
       .replace("/api/collab/rooms/", "")
       .replace("/ws", "");
+
+    // Rooms de híbrido (doc Yjs `hdoc:<hybridId>` e canvas `hcanvas:<hybridId>`)
+    // são AUTORIZADOS: o requester precisa ter acesso ao híbrido por sessão
+    // (dono/editor/viewer) OU por um token de link live-edit. Rooms legados
+    // (drawing avulso = itemId puro) seguem sem essa checagem, como antes.
+    const hybridRoomMatch = roomId.match(/^h(?:doc|canvas):(.+)$/);
+    if (hybridRoomMatch) {
+      const hybridId = hybridRoomMatch[1];
+      const store = createStore(env.KINDRAW_DB, env.KINDRAW_BLOBS);
+
+      let authorized = false;
+      // (a) sessão autenticada com qualquer papel no híbrido
+      const session = await getAuthSession(request, env);
+      if (session) {
+        const role = await store.hybridAccessRole(session.user.id, hybridId);
+        if (role) {
+          authorized = true;
+        }
+      }
+      // (b) token de link live-edit apontando para este híbrido
+      if (!authorized) {
+        const token = url.searchParams.get("token");
+        if (token) {
+          const resolved = await store.resolveHybridShareLink(token);
+          if (
+            resolved &&
+            resolved.hybridId === hybridId &&
+            resolved.access === "live-edit"
+          ) {
+            authorized = true;
+          }
+        }
+      }
+
+      if (!authorized) {
+        return errorResponse(403, "Not authorized for this collaboration room.");
+      }
+    }
+
     const stub = env.KINDRAW_COLLAB.get(env.KINDRAW_COLLAB.idFromName(roomId));
     return stub.fetch(request);
   }

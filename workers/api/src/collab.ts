@@ -55,6 +55,29 @@ type FollowChangeMessage = {
   };
 };
 
+// --- Mensagens Yjs (canal de documento colaborativo) ----------------------
+// O DO atua como relay binário: repassa updates Yjs (base64) entre clientes do
+// mesmo room e persiste o estado acumulado em storage para late-joiners.
+type YjsSyncMessage = {
+  type: "yjs-sync";
+  // update Yjs codificado em base64 (Y.encodeStateAsUpdate / Y.encodeStateVector)
+  payload: { update: string };
+};
+
+type YjsAwarenessMessage = {
+  type: "yjs-awareness";
+  // estado de awareness (cursores/presença) codificado em base64
+  payload: { update: string };
+};
+
+// Snapshot completo do doc Yjs (Y.encodeStateAsUpdate) — o cliente envia
+// periodicamente para o DO persistir, garantindo que late-joiners recebam o
+// estado consolidado mesmo que todos os peers anteriores tenham saído.
+type YjsSnapshotMessage = {
+  type: "yjs-snapshot";
+  payload: { update: string };
+};
+
 type ClientMessage =
   | JoinMessage
   | {
@@ -62,7 +85,10 @@ type ClientMessage =
     }
   | BroadcastMessage
   | SnapshotMessage
-  | FollowChangeMessage;
+  | FollowChangeMessage
+  | YjsSyncMessage
+  | YjsAwarenessMessage
+  | YjsSnapshotMessage;
 
 const STALE_PARTICIPANT_TTL_MS = 5 * 60_000;
 
@@ -95,6 +121,20 @@ type ServerMessage =
       payload: {
         followedBy: string[];
       };
+    }
+  // Estado Yjs persistido enviado a quem acaba de entrar (null se room novo).
+  | {
+      type: "yjs-init";
+      payload: { update: string | null };
+    }
+  // Update Yjs (doc) ou awareness (presença) repassado de outro cliente.
+  | {
+      type: "yjs-sync";
+      payload: { update: string };
+    }
+  | {
+      type: "yjs-awareness";
+      payload: { update: string };
     }
   | {
       type: "error";
@@ -198,8 +238,46 @@ export class KindrawCollaborationRoom {
         this.touchParticipant(socketId);
         this.handleFollowChange(socketId, message.payload);
         break;
+      // Canal Yjs (documento): relay puro de updates/awareness para os outros
+      // peers do room. O DO não decodifica Yjs — só repassa.
+      case "yjs-sync":
+        this.touchParticipant(socketId);
+        this.relayYjs(socketId, {
+          type: "yjs-sync",
+          payload: { update: message.payload.update },
+        });
+        return;
+      case "yjs-awareness":
+        this.touchParticipant(socketId);
+        this.relayYjs(socketId, {
+          type: "yjs-awareness",
+          payload: { update: message.payload.update },
+        });
+        return;
+      // Snapshot completo do doc — persistido para late-joiners receberem o
+      // estado consolidado mesmo sem peers ativos.
+      case "yjs-snapshot":
+        this.touchParticipant(socketId);
+        await this.state.storage.put<string>(
+          "yjsSnapshot",
+          message.payload.update,
+        );
+        return;
       default:
         break;
+    }
+  }
+
+  // Repassa uma mensagem Yjs a todos os sockets do room exceto o remetente.
+  private relayYjs(
+    senderSocketId: string,
+    message: { type: "yjs-sync" | "yjs-awareness"; payload: { update: string } },
+  ) {
+    for (const socketId of this.sockets.keys()) {
+      if (socketId === senderSocketId) {
+        continue;
+      }
+      this.send(socketId, message);
     }
   }
 
@@ -246,6 +324,15 @@ export class KindrawCollaborationRoom {
         snapshot,
         isFirstParticipant,
       },
+    });
+
+    // Canal Yjs: entrega o estado consolidado do doc (se houver) ao recém-
+    // chegado, para ele reconstruir o documento antes de receber updates.
+    const yjsSnapshot =
+      (await this.state.storage.get<string>("yjsSnapshot")) || null;
+    this.send(socketId, {
+      type: "yjs-init",
+      payload: { update: yjsSnapshot },
     });
 
     this.broadcastParticipants({

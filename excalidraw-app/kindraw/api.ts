@@ -6,12 +6,14 @@ import type {
   KindrawCollaborationBootstrapResponse,
   KindrawCollaborationRoom,
   KindrawFolderShare,
+  KindrawHybridShare,
   KindrawHybridItemResponse,
   KindrawHybridView,
   KindrawItemKind,
   KindrawItemResponse,
   KindrawPublicItemResponse,
   KindrawSession,
+  KindrawShareLinkAccess,
   KindrawShareRole,
   KindrawTreeResponse,
   KindrawUser,
@@ -164,6 +166,46 @@ export const revokeFolderShare = (folderId: string, shareId: string) =>
     method: "DELETE",
   });
 
+/* ────────────────────────────────────────────────────────
+   Compartilhamento de documentos híbridos com usuários específicos
+   ──────────────────────────────────────────────────────── */
+
+export const listHybridShares = (hybridId: string) =>
+  requestJson<{ shares: KindrawHybridShare[] }>(
+    `/api/hybrid-items/${hybridId}/shares`,
+  );
+
+export const grantHybridShare = (
+  hybridId: string,
+  login: string,
+  role: KindrawShareRole,
+) =>
+  requestJson<{ share: KindrawHybridShare }>(
+    `/api/hybrid-items/${hybridId}/shares`,
+    {
+      method: "POST",
+      body: { login, role },
+    },
+  );
+
+export const updateHybridShareRole = (
+  hybridId: string,
+  shareId: string,
+  role: KindrawShareRole,
+) =>
+  requestJson<{ share: KindrawHybridShare }>(
+    `/api/hybrid-items/${hybridId}/shares/${shareId}`,
+    {
+      method: "PATCH",
+      body: { role },
+    },
+  );
+
+export const revokeHybridShare = (hybridId: string, shareId: string) =>
+  requestJson<void>(`/api/hybrid-items/${hybridId}/shares/${shareId}`, {
+    method: "DELETE",
+  });
+
 export const createItem = (input: {
   kind: KindrawItemKind;
   title: string;
@@ -186,6 +228,21 @@ export const createHybridItem = (input: {
   }>("/api/hybrid-items", {
     method: "POST",
     body: input,
+  });
+
+// Converte um drawing existente em documento híbrido (cria um doc novo ligado
+// ao canvas atual). Devolve os ids do híbrido criado.
+export const convertDrawingToHybrid = (
+  drawingItemId: string,
+  input?: { title?: string },
+) =>
+  requestJson<{
+    hybridId: string;
+    docItemId: string;
+    drawingItemId: string;
+  }>(`/api/items/${drawingItemId}/convert-to-hybrid`, {
+    method: "POST",
+    body: input ?? {},
   });
 
 export const getItem = (itemId: string) =>
@@ -254,16 +311,21 @@ export const createShareLink = (itemId: string) =>
     method: "POST",
   });
 
-export const createHybridShareLink = (hybridId: string) =>
+export const createHybridShareLink = (
+  hybridId: string,
+  access: KindrawShareLinkAccess = "read",
+) =>
   requestJson<{
     shareLink: {
       id: string;
       token: string;
       createdAt: string;
       revokedAt: string | null;
+      access: KindrawShareLinkAccess;
     };
   }>(`/api/hybrid-items/${hybridId}/share-links`, {
     method: "POST",
+    body: { access },
   });
 
 export const enableCollaborationRoom = (itemId: string) =>

@@ -37,6 +37,14 @@ const { mockStore, mockOpenAIChatCreate, mockOpenAIConstructor } = vi.hoisted(
       updateFolderAccessRole: vi.fn(),
       revokeFolderAccess: vi.fn(),
       listFolderShares: vi.fn(),
+      convertDrawingToHybrid: vi.fn(),
+      grantHybridAccess: vi.fn(),
+      updateHybridAccessRole: vi.fn(),
+      revokeHybridAccess: vi.fn(),
+      listHybridShares: vi.fn(),
+      hybridAccessRole: vi.fn(),
+      resolveHybridShareLink: vi.fn(),
+      createHybridShareLink: vi.fn(),
     },
     mockOpenAIChatCreate: vi.fn(),
     mockOpenAIConstructor: vi.fn(),
@@ -781,6 +789,83 @@ describe("routeRequest", () => {
     expect(mockCollabNamespace.get).toHaveBeenCalled();
     expect(mockCollabStub.fetch).toHaveBeenCalled();
     expect(response.status).toBe(204);
+  });
+
+  it("authorizes a hybrid doc room for a user with access to the hybrid", async () => {
+    mockCollabStub.fetch.mockResolvedValue(new Response(null, { status: 204 }));
+    mockStore.getSessionPayload.mockResolvedValue({
+      user: {
+        id: "u-1",
+        githubLogin: "matheus",
+        name: "Matheus",
+        avatarUrl: null,
+      },
+    });
+    mockStore.hybridAccessRole.mockResolvedValue("editor");
+
+    const response = await routeRequest(
+      new Request("http://localhost:8787/api/collab/rooms/hdoc:hyb-1/ws", {
+        headers: { Upgrade: "websocket", Cookie: "kindraw_session=s-1" },
+      }),
+      env,
+    );
+
+    expect(mockStore.hybridAccessRole).toHaveBeenCalledWith("u-1", "hyb-1");
+    expect(mockCollabNamespace.idFromName).toHaveBeenCalledWith("hdoc:hyb-1");
+    expect(response.status).toBe(204);
+  });
+
+  it("rejects a hybrid doc room when there is no session and no token", async () => {
+    mockStore.getSessionPayload.mockResolvedValue(null);
+
+    const response = await routeRequest(
+      new Request("http://localhost:8787/api/collab/rooms/hdoc:hyb-1/ws", {
+        headers: { Upgrade: "websocket" },
+      }),
+      env,
+    );
+
+    expect(response.status).toBe(403);
+    expect(mockCollabStub.fetch).not.toHaveBeenCalled();
+  });
+
+  it("authorizes a hybrid room via a live-edit share link token", async () => {
+    mockCollabStub.fetch.mockResolvedValue(new Response(null, { status: 204 }));
+    mockStore.getSessionPayload.mockResolvedValue(null);
+    mockStore.resolveHybridShareLink.mockResolvedValue({
+      hybridId: "hyb-1",
+      access: "live-edit",
+    });
+
+    const response = await routeRequest(
+      new Request(
+        "http://localhost:8787/api/collab/rooms/hcanvas:hyb-1/ws?token=tok-live",
+        { headers: { Upgrade: "websocket" } },
+      ),
+      env,
+    );
+
+    expect(mockStore.resolveHybridShareLink).toHaveBeenCalledWith("tok-live");
+    expect(response.status).toBe(204);
+  });
+
+  it("rejects a hybrid room when the token is read-only (not live-edit)", async () => {
+    mockStore.getSessionPayload.mockResolvedValue(null);
+    mockStore.resolveHybridShareLink.mockResolvedValue({
+      hybridId: "hyb-1",
+      access: "read",
+    });
+
+    const response = await routeRequest(
+      new Request(
+        "http://localhost:8787/api/collab/rooms/hdoc:hyb-1/ws?token=tok-read",
+        { headers: { Upgrade: "websocket" } },
+      ),
+      env,
+    );
+
+    expect(response.status).toBe(403);
+    expect(mockCollabStub.fetch).not.toHaveBeenCalled();
   });
 
   it("searches users by query for an authenticated user", async () => {

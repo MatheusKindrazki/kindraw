@@ -5,13 +5,13 @@ import { MarkdownPreview } from "./MarkdownPreview";
 import { RichTextEditor } from "./RichTextEditor";
 import {
   buildKindrawSectionLink,
-  composeSectionMarkdown,
+  deleteHybridMarkdownSection,
   parseHybridMarkdownSections,
   replaceHybridMarkdownSection,
-  splitSectionHeadingBody,
 } from "./hybridSections";
 
 import type { KindrawItem } from "./types";
+import type { KindrawYjsProvider } from "./yjsProvider";
 
 type HybridMarkdownPaneProps = {
   hybridId: string;
@@ -21,6 +21,9 @@ type HybridMarkdownPaneProps = {
   canLinkSelection: boolean;
   linkedSectionIds?: ReadonlySet<string>;
   linkingSectionId?: string | null;
+  // Quando há uma sessão ao vivo, o painel troca o modo seção por um único
+  // editor colaborativo full-document (Yjs).
+  collabProvider?: KindrawYjsProvider | null;
   onMarkdownChange: (nextMarkdown: string) => void;
   onNavigate: (pathname: string) => void;
   onOpenCanvas: (sectionId: string) => void;
@@ -40,6 +43,7 @@ export const HybridMarkdownPane = ({
   canLinkSelection,
   linkedSectionIds,
   linkingSectionId,
+  collabProvider,
   onMarkdownChange,
   onNavigate,
   onOpenCanvas,
@@ -52,9 +56,15 @@ export const HybridMarkdownPane = ({
     () => parseHybridMarkdownSections(markdown),
     [markdown],
   );
-  const [editingSectionId, setEditingSectionId] = useState<string | null>(null);
+  // Identificação POSICIONAL: a seção em edição é a do índice — estável durante
+  // a edição mesmo que o conteúdo (e portanto o id derivado do slug) mude.
+  const [editingSectionIndex, setEditingSectionIndex] = useState<number | null>(
+    null,
+  );
   const [draftMarkdown, setDraftMarkdown] = useState("");
-  const [draftTitle, setDraftTitle] = useState("");
+  const [deletingSectionIndex, setDeletingSectionIndex] = useState<
+    number | null
+  >(null);
   const sectionRefs = useRef<Record<string, HTMLElement | null>>({});
 
   useEffect(() => {
@@ -69,31 +79,78 @@ export const HybridMarkdownPane = ({
   }, [activeSectionId]);
 
   useEffect(() => {
-    if (!editingSectionId) {
+    if (editingSectionIndex === null) {
       setDraftMarkdown("");
       return;
     }
 
-    // edita só o CORPO da seção; o título vai num input separado, para o
-    // WYSIWYG não mesclar/perder o heading da seção.
-    const section = sections.find((entry) => entry.id === editingSectionId);
-    setDraftMarkdown(splitSectionHeadingBody(section?.markdown || "").body);
-    setDraftTitle(section?.isIntro ? "" : section?.title || "");
-  }, [editingSectionId, sections]);
+    // Edita a seção INTEIRA (heading incluso, se houver) como um bloco de
+    // conteúdo livre no WYSIWYG — sem campo de título separado.
+    const section = sections[editingSectionIndex];
+    setDraftMarkdown(section?.markdown || "");
+  }, [editingSectionIndex, sections]);
+
+  // Esc cancela a confirmação de exclusão.
+  useEffect(() => {
+    if (deletingSectionIndex === null) {
+      return;
+    }
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setDeletingSectionIndex(null);
+      }
+    };
+
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [deletingSectionIndex]);
 
   const handleAddSection = () => {
     const newSectionId = onAddSection();
     if (newSectionId) {
-      setEditingSectionId(newSectionId);
+      // A nova seção é sempre a última da lista após o append.
+      setEditingSectionIndex(sections.length);
     }
+  };
+
+  const handleSaveSection = (sectionIndex: number) => {
+    onMarkdownChange(
+      replaceHybridMarkdownSection(markdown, sectionIndex, draftMarkdown),
+    );
+    setEditingSectionIndex(null);
+    onStatusMessage("Secao atualizada.");
   };
 
   let sectionNumber = 0;
 
+  // Modo colaborativo ao vivo: um único editor full-document governado por Yjs,
+  // com presença/cursores. O markdown serializado continua sendo salvo por baixo
+  // (onMarkdownChange) para manter D1/preview público consistentes.
+  if (collabProvider) {
+    return (
+      <div className="kindraw-hybrid-doc kindraw-hybrid-doc--live">
+        <div className="kindraw-live-banner" role="status">
+          <span className="kindraw-live-banner__dot" />
+          Sessão ao vivo — edição colaborativa em tempo real
+        </div>
+        <div className="kindraw-hybrid-doc__editor kindraw-hybrid-doc__editor--live">
+          <RichTextEditor
+            collab={{ provider: collabProvider, fieldName: "default" }}
+            onChange={onMarkdownChange}
+            placeholder="Escreva em conjunto…"
+            seedMarkdown={markdown}
+            value={markdown}
+          />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="kindraw-hybrid-doc">
-      {sections.map((section) => {
-        const isEditing = editingSectionId === section.id;
+      {sections.map((section, sectionIndex) => {
+        const isEditing = editingSectionIndex === sectionIndex;
         const isActive = activeSectionId === section.id;
         const isLinked = linkedSectionIds?.has(section.id) || false;
         if (!section.isIntro) {
@@ -149,7 +206,7 @@ export const HybridMarkdownPane = ({
               <div className="kindraw-hybrid-doc__actions">
                 <button
                   className="kindraw-hybrid-doc__action"
-                  onClick={() => setEditingSectionId(section.id)}
+                  onClick={() => setEditingSectionIndex(sectionIndex)}
                   type="button"
                 >
                   Editar
@@ -197,19 +254,22 @@ export const HybridMarkdownPane = ({
                 >
                   Copiar link
                 </button>
+                {section.isIntro ? null : (
+                  <button
+                    aria-label="Excluir seção"
+                    className="kindraw-hybrid-doc__action kindraw-hybrid-doc__action--danger"
+                    onClick={() => setDeletingSectionIndex(sectionIndex)}
+                    title="Excluir seção"
+                    type="button"
+                  >
+                    Excluir
+                  </button>
+                )}
               </div>
             </div>
 
             {isEditing ? (
               <div className="kindraw-hybrid-doc__editor">
-                {section.isIntro ? null : (
-                  <input
-                    className="kindraw-hybrid-doc__title-input"
-                    onChange={(event) => setDraftTitle(event.target.value)}
-                    placeholder="Título da seção"
-                    value={draftTitle}
-                  />
-                )}
                 <RichTextEditor
                   onChange={setDraftMarkdown}
                   placeholder="Escreva o conteúdo da seção…"
@@ -218,38 +278,14 @@ export const HybridMarkdownPane = ({
                 <div className="kindraw-hybrid-doc__editor-actions">
                   <button
                     className="kindraw-btn kindraw-btn--soft kindraw-btn--sm"
-                    onClick={() => setEditingSectionId(null)}
+                    onClick={() => setEditingSectionIndex(null)}
                     type="button"
                   >
                     Cancelar
                   </button>
                   <button
                     className="kindraw-btn kindraw-btn--primary kindraw-btn--sm"
-                    onClick={() => {
-                      // recompõe o heading (com o título editado, preservando o
-                      // nível de #) + corpo editado. Intro não tem heading.
-                      const originalHeading = splitSectionHeadingBody(
-                        section.markdown,
-                      ).heading;
-                      let heading = originalHeading;
-                      if (!section.isIntro) {
-                        const hashes =
-                          originalHeading.match(/^#{1,6}/)?.[0] ||
-                          "#".repeat(Math.max(1, section.depth || 2));
-                        const nextTitle =
-                          draftTitle.trim() || section.title || "Seção";
-                        heading = `${hashes} ${nextTitle}`;
-                      }
-                      onMarkdownChange(
-                        replaceHybridMarkdownSection(
-                          markdown,
-                          section.id,
-                          composeSectionMarkdown(heading, draftMarkdown),
-                        ),
-                      );
-                      setEditingSectionId(null);
-                      onStatusMessage("Secao atualizada.");
-                    }}
+                    onClick={() => handleSaveSection(sectionIndex)}
                     type="button"
                   >
                     Salvar seção
@@ -262,7 +298,7 @@ export const HybridMarkdownPane = ({
               // simples e leva ao desenho), então não há conflito.
               <div
                 className="kindraw-hybrid-doc__preview"
-                onDoubleClick={() => setEditingSectionId(section.id)}
+                onDoubleClick={() => setEditingSectionIndex(sectionIndex)}
                 title="Clique duas vezes para editar"
               >
                 <MarkdownPreview
@@ -282,6 +318,49 @@ export const HybridMarkdownPane = ({
       >
         <KindrawIcon name="plus" size={14} /> Nova seção
       </button>
+
+      {deletingSectionIndex !== null ? (
+        <div
+          className="kindraw-modal-overlay"
+          onClick={(event) => {
+            if (event.target === event.currentTarget) {
+              setDeletingSectionIndex(null);
+            }
+          }}
+        >
+          <div aria-modal="true" className="kindraw-modal" role="dialog">
+            <h2>Excluir seção</h2>
+            <p>
+              Excluir esta seção do documento? O conteúdo dela será removido.
+              Essa ação não pode ser desfeita.
+            </p>
+            <div className="kindraw-modal__actions">
+              <button
+                className="kindraw-btn kindraw-btn--soft"
+                onClick={() => setDeletingSectionIndex(null)}
+                type="button"
+              >
+                Cancelar
+              </button>
+              <button
+                className="kindraw-btn kindraw-btn--danger"
+                onClick={() => {
+                  const index = deletingSectionIndex;
+                  setDeletingSectionIndex(null);
+                  if (editingSectionIndex === index) {
+                    setEditingSectionIndex(null);
+                  }
+                  onMarkdownChange(deleteHybridMarkdownSection(markdown, index));
+                  onStatusMessage("Secao excluida.");
+                }}
+                type="button"
+              >
+                Excluir
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 };

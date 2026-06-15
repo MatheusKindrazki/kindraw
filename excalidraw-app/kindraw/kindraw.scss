@@ -1624,6 +1624,21 @@
 }
 
 /* Linkbox com URL truncada + Copiar */
+/* Seletor de permissão do link (leitura / edição ao vivo) no popover */
+.kindraw-share__access {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 6px 0 2px;
+}
+
+.kindraw-share__access-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--kd-muted);
+}
+
 .kindraw-linkbox {
   display: flex;
   align-items: center;
@@ -2514,25 +2529,6 @@
   gap: 12px;
 }
 
-.kindraw-hybrid-doc__title-input {
-  box-sizing: border-box;
-  width: 100%;
-  border: 1px solid var(--kd-line);
-  border-radius: var(--kd-r-btn);
-  background: var(--kd-surface);
-  padding: 9px 12px;
-  font-family: var(--kd-font);
-  font-size: 15px;
-  font-weight: 700;
-  color: var(--kd-ink);
-}
-
-.kindraw-hybrid-doc__title-input:focus {
-  outline: none;
-  border-color: var(--kd-amber);
-  box-shadow: 0 0 0 3px var(--kd-amber-soft);
-}
-
 .kindraw-hybrid-doc__editor-actions {
   display: flex;
   align-items: center;
@@ -2540,23 +2536,75 @@
   gap: 8px;
 }
 
-.kindraw-hybrid-doc__textarea {
-  min-height: 220px;
-  border: 1px solid var(--kd-line);
-  border-radius: var(--kd-r-btn);
-  padding: 14px;
-  resize: vertical;
-  background: var(--kd-surface);
-  font: inherit;
-  font-family: var(--kd-font);
-  font-size: 13px;
-  line-height: 1.6;
+/* Ação "Excluir" da seção — só fica vermelha no hover, discreta no resto */
+.kindraw-hybrid-doc__action--danger:hover {
+  background: rgba(201, 74, 74, 0.12);
+  color: #c94a4a;
 }
 
-.kindraw-hybrid-doc__textarea:focus {
-  outline: none;
-  border-color: #d9b36a;
-  box-shadow: 0 0 0 3px var(--kd-amber-soft);
+/* Sessão de colaboração ao vivo (doc Yjs) */
+.kindraw-live-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 14px;
+  padding: 8px 12px;
+  border-radius: var(--kd-r-btn);
+  background: var(--kd-amber-soft);
+  color: var(--kd-amber-deep);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.kindraw-live-banner__dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #2e9e5b;
+  box-shadow: 0 0 0 0 rgba(46, 158, 91, 0.5);
+  animation: kindraw-live-pulse 1.8s ease-out infinite;
+}
+
+@keyframes kindraw-live-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(46, 158, 91, 0.5);
+  }
+  70% {
+    box-shadow: 0 0 0 7px rgba(46, 158, 91, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(46, 158, 91, 0);
+  }
+}
+
+.kindraw-hybrid-doc__editor--live {
+  display: block;
+}
+
+/* Cursores/seleção de colaboração (Tiptap CollaborationCaret) */
+.collaboration-carets__caret {
+  position: relative;
+  margin-left: -1px;
+  margin-right: -1px;
+  border-left: 1px solid #0d0d0d;
+  border-right: 1px solid #0d0d0d;
+  word-break: normal;
+  pointer-events: none;
+}
+
+.collaboration-carets__label {
+  position: absolute;
+  top: -1.4em;
+  left: -1px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: normal;
+  white-space: nowrap;
+  color: #fff;
+  padding: 0.1rem 0.3rem;
+  border-radius: 4px 4px 4px 0;
+  user-select: none;
+  pointer-events: none;
 }
 
 /* Cabeçalho de seção vinculada — clicável, foca no canvas */

@@ -21,8 +21,10 @@ import type {
   KindrawPublicItemResponse,
   KindrawSession,
   KindrawShareLink,
+  KindrawShareLinkAccess,
   KindrawShareRole,
   KindrawFolderShare,
+  KindrawHybridShare,
   KindrawUser,
   KindrawTreeResponse,
   PatchFolderInput,
@@ -92,6 +94,8 @@ type ShareLinkRow = {
   created_by_user_id: string;
   created_at: string;
   revoked_at: string | null;
+  // coluna adicionada em 0009 (DEFAULT 'read'); null em rows legados em memória.
+  access?: KindrawShareLinkAccess | null;
 };
 
 type HybridItemRow = {
@@ -107,6 +111,16 @@ type HybridItemRow = {
 type FolderShareRow = {
   id: string;
   folder_id: string;
+  user_id: string;
+  role: KindrawShareRole;
+  granted_by_user_id: string;
+  created_at: string;
+  updated_at: string;
+};
+
+type HybridShareRow = {
+  id: string;
+  hybrid_id: string;
   user_id: string;
   role: KindrawShareRole;
   granted_by_user_id: string;
@@ -140,6 +154,7 @@ const toShareLink = (row: ShareLinkRow): ShareLinkRecord => ({
   createdByUserId: row.created_by_user_id,
   createdAt: row.created_at,
   revokedAt: row.revoked_at,
+  access: row.access === "live-edit" ? "live-edit" : "read",
 });
 
 const toKindrawShareLink = (row: ShareLinkRow): KindrawShareLink => ({
@@ -147,6 +162,7 @@ const toKindrawShareLink = (row: ShareLinkRow): KindrawShareLink => ({
   token: row.token,
   createdAt: row.created_at,
   revokedAt: row.revoked_at,
+  access: row.access === "live-edit" ? "live-edit" : "read",
 });
 
 const toHybridLink = (
@@ -319,6 +335,7 @@ const groupShareLinks = (shareLinks: ShareLinkRecord[]) => {
         token: shareLink.token,
         createdAt: shareLink.createdAt,
         revokedAt: shareLink.revokedAt,
+        access: shareLink.access ?? "read",
       },
     ]);
   }
@@ -719,6 +736,7 @@ export class KindrawStore {
       { results: shareRows },
       { results: hybridRows },
       { results: incomingShareRows },
+      { results: incomingHybridShareRows },
     ] = await Promise.all([
       this.db
         .prepare(
@@ -785,6 +803,36 @@ export class KindrawStore {
           folder_updated_at: string;
           owner_login: string;
           owner_name: string;
+        }>(),
+      // Híbridos compartilhados DIRETAMENTE com este usuário (hybrid_shares),
+      // independente de pasta. Traz a linha do hybrid_items + o doc-root (para
+      // título/folder/share-links) e o papel concedido.
+      this.db
+        .prepare(
+          `SELECT
+             hybrid_shares.role AS share_role,
+             hybrid_items.id AS hybrid_id,
+             hybrid_items.owner_id AS hybrid_owner_id,
+             hybrid_items.doc_item_id AS doc_item_id,
+             hybrid_items.drawing_item_id AS drawing_item_id,
+             hybrid_items.default_view AS default_view,
+             hybrid_items.created_at AS hybrid_created_at,
+             hybrid_items.updated_at AS hybrid_updated_at
+           FROM hybrid_shares
+           JOIN hybrid_items ON hybrid_items.id = hybrid_shares.hybrid_id
+           WHERE hybrid_shares.user_id = ?
+           ORDER BY hybrid_items.updated_at DESC, hybrid_items.created_at DESC`,
+        )
+        .bind(ownerId)
+        .all<{
+          share_role: KindrawShareRole;
+          hybrid_id: string;
+          hybrid_owner_id: string;
+          doc_item_id: string;
+          drawing_item_id: string;
+          default_view: KindrawHybridView;
+          hybrid_created_at: string;
+          hybrid_updated_at: string;
         }>(),
     ]);
 
@@ -924,6 +972,68 @@ export class KindrawStore {
         item.sharedRole = sharedRole;
       }
       treeItems.push(item);
+    }
+
+    // Híbridos compartilhados DIRETAMENTE comigo (via hybrid_shares), que não
+    // vieram pela rota de pasta compartilhada acima. Buscamos os doc-rows (para
+    // título/share-links) e adicionamos como entradas de árvore com sharedRole.
+    const alreadyInTree = new Set(
+      treeItems
+        .filter((entry): entry is KindrawHybridItem => entry.kind === "hybrid")
+        .map((entry) => entry.id),
+    );
+    const directHybridRows = incomingHybridShareRows.filter(
+      (row) => row.hybrid_owner_id !== ownerId && !alreadyInTree.has(row.hybrid_id),
+    );
+    if (directHybridRows.length) {
+      const docIds = directHybridRows.map((row) => row.doc_item_id);
+      const placeholders = docIds.map(() => "?").join(", ");
+      const [{ results: directDocRows }, { results: directShareRows }] =
+        await Promise.all([
+          this.db
+            .prepare(`SELECT * FROM items WHERE id IN (${placeholders})`)
+            .bind(...docIds)
+            .all<ItemRow>(),
+          this.db
+            .prepare(
+              `SELECT share_links.*
+                 FROM share_links
+                 WHERE share_links.item_id IN (${placeholders})
+                   AND share_links.revoked_at IS NULL
+                 ORDER BY share_links.created_at DESC`,
+            )
+            .bind(...docIds)
+            .all<ShareLinkRow>(),
+        ]);
+
+      const directDocById = new Map(
+        directDocRows.map((row) => [row.id, row] as const),
+      );
+      const directShareMap = groupShareLinks(directShareRows.map(toShareLink));
+
+      for (const row of directHybridRows) {
+        const docRow = directDocById.get(row.doc_item_id);
+        if (!docRow) {
+          continue;
+        }
+        const hybridItem = toHybridItem(
+          {
+            id: row.hybrid_id,
+            owner_id: row.hybrid_owner_id,
+            doc_item_id: row.doc_item_id,
+            drawing_item_id: row.drawing_item_id,
+            default_view: row.default_view,
+            created_at: row.hybrid_created_at,
+            updated_at: row.hybrid_updated_at,
+          },
+          docRow,
+          directShareMap.get(row.doc_item_id) || [],
+        );
+        hybridItem.sharedRole = row.share_role;
+        // Híbrido compartilhado não pertence a nenhuma pasta minha → raiz.
+        hybridItem.folderId = null;
+        treeItems.push(hybridItem);
+      }
     }
 
     const folders: KindrawTreeResponse["folders"] = folderRows.map((row) => {
@@ -1208,6 +1318,255 @@ export class KindrawStore {
     };
   }
 
+  // --- Hybrid sharing (convite por @login do GitHub) ------------------------
+  // Espelha o folder sharing acima, mas mira hybrid_items diretamente. Permite
+  // compartilhar um documento híbrido com pessoas específicas (viewer/editor),
+  // independente de pasta.
+
+  async grantHybridAccess(
+    ownerId: string,
+    hybridId: string,
+    targetUserId: string,
+    role: KindrawShareRole,
+  ): Promise<KindrawHybridShare> {
+    await this.requireHybridItem(ownerId, hybridId);
+
+    if (targetUserId === ownerId) {
+      throw new HttpError(400, "You cannot share a hybrid with yourself.");
+    }
+    if (role !== "viewer" && role !== "editor") {
+      throw new HttpError(400, "Invalid role.");
+    }
+
+    const now = isoNow();
+    const existing = await this.db
+      .prepare(
+        "SELECT * FROM hybrid_shares WHERE hybrid_id = ? AND user_id = ?",
+      )
+      .bind(hybridId, targetUserId)
+      .first<HybridShareRow>();
+
+    if (existing) {
+      await this.db
+        .prepare(
+          `UPDATE hybrid_shares
+             SET role = ?, updated_at = ?
+           WHERE id = ?`,
+        )
+        .bind(role, now, existing.id)
+        .run();
+      return this.getHybridShareById(existing.id);
+    }
+
+    const shareId = crypto.randomUUID();
+    await this.db
+      .prepare(
+        `INSERT INTO hybrid_shares
+           (id, hybrid_id, user_id, role, granted_by_user_id, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .bind(shareId, hybridId, targetUserId, role, ownerId, now, now)
+      .run();
+
+    return this.getHybridShareById(shareId);
+  }
+
+  async updateHybridAccessRole(
+    ownerId: string,
+    hybridId: string,
+    shareId: string,
+    role: KindrawShareRole,
+  ): Promise<KindrawHybridShare> {
+    await this.requireHybridItem(ownerId, hybridId);
+    if (role !== "viewer" && role !== "editor") {
+      throw new HttpError(400, "Invalid role.");
+    }
+
+    const result = await this.db
+      .prepare(
+        `UPDATE hybrid_shares
+           SET role = ?, updated_at = ?
+         WHERE id = ? AND hybrid_id = ?`,
+      )
+      .bind(role, isoNow(), shareId, hybridId)
+      .run();
+
+    if (!(result as { meta?: { changes?: number } }).meta?.changes) {
+      throw new HttpError(404, "Hybrid share not found.");
+    }
+
+    return this.getHybridShareById(shareId);
+  }
+
+  async revokeHybridAccess(
+    ownerId: string,
+    hybridId: string,
+    shareId: string,
+  ): Promise<void> {
+    await this.requireHybridItem(ownerId, hybridId);
+    const result = await this.db
+      .prepare("DELETE FROM hybrid_shares WHERE id = ? AND hybrid_id = ?")
+      .bind(shareId, hybridId)
+      .run();
+
+    if (!(result as { meta?: { changes?: number } }).meta?.changes) {
+      throw new HttpError(404, "Hybrid share not found.");
+    }
+  }
+
+  async listHybridShares(
+    ownerId: string,
+    hybridId: string,
+  ): Promise<KindrawHybridShare[]> {
+    await this.requireHybridItem(ownerId, hybridId);
+    const { results } = await this.db
+      .prepare(
+        `SELECT
+           hybrid_shares.id AS share_id,
+           hybrid_shares.role AS share_role,
+           hybrid_shares.created_at AS share_created_at,
+           users.id AS user_id,
+           users.github_login AS github_login,
+           users.name AS user_name,
+           users.avatar_url AS avatar_url
+         FROM hybrid_shares
+         JOIN users ON users.id = hybrid_shares.user_id
+         WHERE hybrid_shares.hybrid_id = ?
+         ORDER BY hybrid_shares.created_at ASC`,
+      )
+      .bind(hybridId)
+      .all<{
+        share_id: string;
+        share_role: KindrawShareRole;
+        share_created_at: string;
+        user_id: string;
+        github_login: string;
+        user_name: string;
+        avatar_url: string | null;
+      }>();
+
+    return results.map((row) => ({
+      id: row.share_id,
+      role: row.share_role,
+      createdAt: row.share_created_at,
+      user: {
+        id: row.user_id,
+        githubLogin: row.github_login,
+        name: row.user_name,
+        avatarUrl: row.avatar_url,
+      },
+    }));
+  }
+
+  private async getHybridShareById(
+    shareId: string,
+  ): Promise<KindrawHybridShare> {
+    const row = await this.db
+      .prepare(
+        `SELECT
+           hybrid_shares.id AS share_id,
+           hybrid_shares.role AS share_role,
+           hybrid_shares.created_at AS share_created_at,
+           users.id AS user_id,
+           users.github_login AS github_login,
+           users.name AS user_name,
+           users.avatar_url AS avatar_url
+         FROM hybrid_shares
+         JOIN users ON users.id = hybrid_shares.user_id
+         WHERE hybrid_shares.id = ?`,
+      )
+      .bind(shareId)
+      .first<{
+        share_id: string;
+        share_role: KindrawShareRole;
+        share_created_at: string;
+        user_id: string;
+        github_login: string;
+        user_name: string;
+        avatar_url: string | null;
+      }>();
+
+    if (!row) {
+      throw new HttpError(404, "Hybrid share not found.");
+    }
+
+    return {
+      id: row.share_id,
+      role: row.share_role,
+      createdAt: row.share_created_at,
+      user: {
+        id: row.user_id,
+        githubLogin: row.github_login,
+        name: row.user_name,
+        avatarUrl: row.avatar_url,
+      },
+    };
+  }
+
+  // Papel efetivo de userId sobre um híbrido: 'owner' se é o dono, ou o role do
+  // hybrid_share, ou null se nenhum vínculo direto existe. (Não considera acesso
+  // herdado de pasta — isso é tratado separadamente no getTree.)
+  async hybridAccessRole(
+    userId: string,
+    hybridId: string,
+  ): Promise<"owner" | KindrawShareRole | null> {
+    const hybrid = await this.db
+      .prepare("SELECT owner_id FROM hybrid_items WHERE id = ?")
+      .bind(hybridId)
+      .first<{ owner_id: string }>();
+
+    if (!hybrid) {
+      return null;
+    }
+    if (hybrid.owner_id === userId) {
+      return "owner";
+    }
+
+    const share = await this.db
+      .prepare(
+        "SELECT role FROM hybrid_shares WHERE hybrid_id = ? AND user_id = ?",
+      )
+      .bind(hybridId, userId)
+      .first<{ role: KindrawShareRole }>();
+
+    return share ? share.role : null;
+  }
+
+  // Carrega a linha do híbrido por id, sem filtrar por dono (autorização é
+  // responsabilidade do chamador). Retorna null se não existe.
+  private async getHybridRecordById(
+    hybridId: string,
+  ): Promise<HybridItemRecord | null> {
+    const row = await this.db
+      .prepare("SELECT * FROM hybrid_items WHERE id = ?")
+      .bind(hybridId)
+      .first<HybridItemRow>();
+    return row ? toHybridItemRecord(row) : null;
+  }
+
+  // Papel efetivo derivado de uma PASTA compartilhada que contém o doc-root do
+  // híbrido (acesso herdado). Retorna o role da pasta, ou null.
+  private async hybridFolderAccessRole(
+    userId: string,
+    hybridId: string,
+  ): Promise<KindrawShareRole | null> {
+    const row = await this.db
+      .prepare(
+        `SELECT doc.folder_id AS folder_id
+         FROM hybrid_items
+         JOIN items AS doc ON doc.id = hybrid_items.doc_item_id
+         WHERE hybrid_items.id = ?`,
+      )
+      .bind(hybridId)
+      .first<{ folder_id: string | null }>();
+
+    if (!row?.folder_id) {
+      return null;
+    }
+    const role = await this.folderAccessRole(userId, row.folder_id);
+    return role === "owner" ? null : role;
+  }
+
   async createFolder(ownerId: string, input: CreateFolderInput) {
     const name = input.name.trim();
     if (!name) {
@@ -1405,6 +1764,73 @@ export class KindrawStore {
     };
   }
 
+  /**
+   * Converte um drawing já existente em documento híbrido: cria um item `doc`
+   * vazio na mesma pasta e liga doc+drawing numa nova linha de hybrid_items,
+   * preservando o canvas como está. Devolve os ids do híbrido criado.
+   *
+   * Rejeita: item que não é drawing, e drawing que já faz parte de um híbrido
+   * (um drawing só pode pertencer a um híbrido por vez).
+   */
+  async convertDrawingToHybrid(
+    ownerId: string,
+    drawingItemId: string,
+    input?: { title?: string },
+  ) {
+    // Precisa ser escrita: dono ou editor da pasta do drawing.
+    const drawing = await this.requireItemWrite(ownerId, drawingItemId);
+
+    if (drawing.kind !== "drawing") {
+      throw new HttpError(400, "Only drawings can be converted to a hybrid.");
+    }
+
+    const existingHybrid = await this.findHybridRowByItemId(
+      undefined,
+      drawingItemId,
+    );
+    if (existingHybrid) {
+      throw new HttpError(
+        409,
+        "This drawing is already part of a hybrid document.",
+      );
+    }
+
+    const title = (input?.title || drawing.title).trim() || drawing.title;
+
+    // O doc novo herda a pasta do drawing e pertence a quem converte.
+    const docItemId = await this.createItem(ownerId, {
+      kind: "doc",
+      title,
+      folderId: drawing.folderId ?? null,
+      content: createInitialItemContent("doc", title),
+    });
+
+    const hybridId = crypto.randomUUID();
+    const now = isoNow();
+
+    await this.db
+      .prepare(
+        `INSERT INTO hybrid_items (
+           id,
+           owner_id,
+           doc_item_id,
+           drawing_item_id,
+           default_view,
+           created_at,
+           updated_at
+         )
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .bind(hybridId, ownerId, docItemId, drawingItemId, "both", now, now)
+      .run();
+
+    return {
+      hybridId,
+      docItemId,
+      drawingItemId,
+    };
+  }
+
   async getItem(ownerId: string, itemId: string): Promise<KindrawItemResponse> {
     // Leitura aberta a dono OU a quem tem qualquer share (viewer/editor) na
     // pasta do item. requireItemRead retorna 404 para recursos sem relação.
@@ -1484,17 +1910,41 @@ export class KindrawStore {
   }
 
   async getHybridItem(
-    ownerId: string,
+    requesterId: string,
     hybridId: string,
   ): Promise<KindrawHybridItemResponse> {
-    const hybrid = await this.requireHybridItem(ownerId, hybridId);
+    // Acesso permitido a quem tem QUALQUER papel no híbrido (dono, editor ou
+    // viewer convidado — direto ou via pasta compartilhada). Os itens internos
+    // (doc/drawing) pertencem ao dono real, então a leitura usa esse owner.
+    const role = await this.hybridAccessRole(requesterId, hybridId);
+    if (!role) {
+      // Pode ser acesso herdado de pasta compartilhada (folder share). Cai no
+      // requireHybridItem? Não — tentamos via leitura dos itens com o requester.
+      // Se nem isso, 404.
+      const sharedRole = await this.hybridFolderAccessRole(
+        requesterId,
+        hybridId,
+      );
+      if (!sharedRole) {
+        throw new HttpError(404, "Hybrid item not found.");
+      }
+    }
+
+    const hybrid = await this.getHybridRecordById(hybridId);
+    if (!hybrid) {
+      throw new HttpError(404, "Hybrid item not found.");
+    }
+
+    // Lê os itens com o OWNER REAL do híbrido (dono dos itens), já que a
+    // autorização do requester já foi validada acima.
+    const realOwnerId = hybrid.ownerId;
     const [document, drawing] = await Promise.all([
-      this.getItem(ownerId, hybrid.docItemId),
-      this.getItem(ownerId, hybrid.drawingItemId),
+      this.getItem(realOwnerId, hybrid.docItemId),
+      this.getItem(realOwnerId, hybrid.drawingItemId),
     ]);
     const docRow = await this.db
       .prepare("SELECT * FROM items WHERE id = ? AND owner_id = ?")
-      .bind(hybrid.docItemId, ownerId)
+      .bind(hybrid.docItemId, realOwnerId)
       .first<ItemRow>();
 
     if (!docRow) {
@@ -1747,9 +2197,13 @@ export class KindrawStore {
       .run();
   }
 
-  async createHybridShareLink(ownerId: string, hybridId: string) {
+  async createHybridShareLink(
+    ownerId: string,
+    hybridId: string,
+    access: KindrawShareLinkAccess = "read",
+  ) {
     const hybrid = await this.requireHybridItem(ownerId, hybridId);
-    return this.createShareLink(ownerId, hybrid.docItemId);
+    return this.createShareLink(ownerId, hybrid.docItemId, access);
   }
 
   async enableItemCollaboration(
@@ -1803,8 +2257,15 @@ export class KindrawStore {
       .run();
   }
 
-  async createShareLink(ownerId: string, itemId: string) {
+  async createShareLink(
+    ownerId: string,
+    itemId: string,
+    access: KindrawShareLinkAccess = "read",
+  ) {
     await this.requireItem(ownerId, itemId);
+    if (access !== "read" && access !== "live-edit") {
+      throw new HttpError(400, "Invalid share link access.");
+    }
     const activeLinks = await this.listActiveShareLinksForItem(itemId);
 
     if (activeLinks.length) {
@@ -1819,7 +2280,14 @@ export class KindrawStore {
         .bind(isoNow(), itemId, currentLink.id)
         .run();
 
-      return toKindrawShareLink(currentLink);
+      // Reusa o link ativo, mas alterna o modo de acesso para o pedido (permite
+      // promover um link de leitura a edição-ao-vivo e vice-versa).
+      await this.db
+        .prepare("UPDATE share_links SET access = ? WHERE id = ?")
+        .bind(access, currentLink.id)
+        .run();
+
+      return { ...toKindrawShareLink(currentLink), access };
     }
 
     const shareLinkId = crypto.randomUUID();
@@ -1828,10 +2296,10 @@ export class KindrawStore {
 
     await this.db
       .prepare(
-        `INSERT INTO share_links (id, item_id, token, created_by_user_id, created_at, revoked_at)
-         VALUES (?, ?, ?, ?, ?, NULL)`,
+        `INSERT INTO share_links (id, item_id, token, created_by_user_id, created_at, revoked_at, access)
+         VALUES (?, ?, ?, ?, ?, NULL, ?)`,
       )
-      .bind(shareLinkId, itemId, token, ownerId, createdAt)
+      .bind(shareLinkId, itemId, token, ownerId, createdAt, access)
       .run();
 
     return {
@@ -1839,6 +2307,37 @@ export class KindrawStore {
       token,
       createdAt,
       revokedAt: null,
+      access,
+    };
+  }
+
+  // Resolve um token de link público para { hybridId, access } — usado pela
+  // autorização do WebSocket de colaboração. Retorna null se o token é inválido,
+  // revogado, ou não aponta para um híbrido.
+  async resolveHybridShareLink(
+    token: string,
+  ): Promise<{ hybridId: string; access: KindrawShareLinkAccess } | null> {
+    const row = await this.db
+      .prepare(
+        `SELECT share_links.item_id AS item_id, share_links.access AS access
+         FROM share_links
+         WHERE share_links.token = ? AND share_links.revoked_at IS NULL`,
+      )
+      .bind(token)
+      .first<{ item_id: string; access: KindrawShareLinkAccess | null }>();
+
+    if (!row) {
+      return null;
+    }
+
+    const hybridRow = await this.findHybridRowByItemId(undefined, row.item_id);
+    if (!hybridRow) {
+      return null;
+    }
+
+    return {
+      hybridId: hybridRow.id,
+      access: row.access === "live-edit" ? "live-edit" : "read",
     };
   }
 

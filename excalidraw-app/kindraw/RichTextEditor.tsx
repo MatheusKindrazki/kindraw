@@ -5,12 +5,15 @@ import StarterKit from "@tiptap/starter-kit";
 import Highlight from "@tiptap/extension-highlight";
 import TaskList from "@tiptap/extension-task-list";
 import TaskItem from "@tiptap/extension-task-item";
+import Collaboration from "@tiptap/extension-collaboration";
+import CollaborationCaret from "@tiptap/extension-collaboration-caret";
 import { Markdown } from "tiptap-markdown";
 
 import { KindrawIcon } from "./icons";
 import { SlashCommand } from "./SlashCommand";
 
 import type { Editor } from "@tiptap/react";
+import type { KindrawYjsProvider } from "./yjsProvider";
 
 // tiptap-markdown injeta `storage.markdown` em runtime, mas não expõe tipos.
 type MarkdownStorage = {
@@ -35,6 +38,16 @@ type RichTextEditorProps = {
   onChange: (markdown: string) => void;
   placeholder?: string;
   editable?: boolean;
+  // Quando presente, o editor entra em modo colaborativo (Yjs): o conteúdo é
+  // governado pelo Y.Doc do provider, não pela prop `value`. `value` ainda é
+  // usado como seed inicial pelo dono do documento (ver HybridMarkdownPane).
+  collab?: {
+    provider: KindrawYjsProvider;
+    fieldName: string;
+  };
+  // Markdown inicial para popular um Y.Doc VAZIO ao entrar na sessão (só o
+  // primeiro participante semeia; os demais recebem o estado já sincronizado).
+  seedMarkdown?: string;
 };
 
 const MenuButton = ({
@@ -68,19 +81,24 @@ export const RichTextEditor = ({
   onChange,
   placeholder = "Escreva aqui…",
   editable = true,
+  collab,
+  seedMarkdown,
 }: RichTextEditorProps) => {
   // Distingue mudanças internas (digitação) de externas (troca de documento)
   // para só re-setar o conteúdo no segundo caso.
   const lastEmittedRef = useRef<string>(value);
+  const isCollab = Boolean(collab);
 
   const editor = useEditor({
     editable,
     extensions: [
-      // StarterKit 3 já traz underline e horizontalRule embutidos.
+      // No modo colaborativo o histórico vem do Yjs (Collaboration traz undo
+      // próprio), então desligamos o history do StarterKit para evitar conflito.
       StarterKit.configure({
         link: {
           openOnClick: false,
         },
+        ...(isCollab ? { undoRedo: false } : {}),
       }),
       Highlight,
       // nested: true permite aninhar tarefas; o tiptap-markdown serializa
@@ -95,8 +113,21 @@ export const RichTextEditor = ({
         transformPastedText: true,
         transformCopiedText: false,
       }),
+      ...(collab
+        ? [
+            Collaboration.configure({
+              document: collab.provider.doc,
+              field: collab.fieldName,
+            }),
+            CollaborationCaret.configure({
+              provider: collab.provider,
+            }),
+          ]
+        : []),
     ],
-    content: value,
+    // No modo colaborativo o conteúdo vem do Y.Doc; setar `content` aqui
+    // duplicaria o documento. O seed inicial é feito pelo dono fora daqui.
+    content: isCollab ? undefined : value,
     editorProps: {
       attributes: {
         class: "kindraw-rte__content",
@@ -133,8 +164,12 @@ export const RichTextEditor = ({
   const editorRef = useRef<Editor | null>(null);
   editorRef.current = editor;
 
-  // Parse correto do markdown inicial no mount.
+  // Parse correto do markdown inicial no mount. NÃO no modo colaborativo (o
+  // conteúdo vem do Y.Doc; setContent duplicaria/conflitaria com o sync).
   useEffect(() => {
+    if (isCollab) {
+      return;
+    }
     if (editor && value) {
       editor.commands.setContent(value);
       lastEmittedRef.current = value;
@@ -142,20 +177,39 @@ export const RichTextEditor = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editor]);
 
-  // Sincroniza com mudanças externas de `value`.
+  // Sincroniza com mudanças externas de `value` (apenas modo não-colaborativo).
   useEffect(() => {
-    if (!editor) {
+    if (isCollab || !editor) {
       return;
     }
     if (value !== lastEmittedRef.current) {
       editor.commands.setContent(value);
       lastEmittedRef.current = value;
     }
-  }, [editor, value]);
+  }, [editor, isCollab, value]);
 
   useEffect(() => {
     editor?.setEditable(editable);
   }, [editor, editable]);
+
+  // Seed colaborativo: quando o provider sincroniza e o documento Yjs está
+  // VAZIO (room novo), o primeiro participante popula com o markdown atual.
+  // Se já há conteúdo sincronizado (outro peer semeou), não faz nada.
+  useEffect(() => {
+    if (!collab || !editor) {
+      return undefined;
+    }
+    const unsubscribe = collab.provider.onSynced(() => {
+      const isEmpty = editor.state.doc.textContent.trim().length === 0;
+      if (isEmpty && seedMarkdown && seedMarkdown.trim().length > 0) {
+        editor.commands.setContent(seedMarkdown);
+      }
+    });
+    return () => {
+      unsubscribe();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [collab, editor]);
 
   return (
     <div className="kindraw-rte kindraw-rte--headless">

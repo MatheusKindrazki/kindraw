@@ -24,6 +24,7 @@ import type { ExcalidrawElement } from "@excalidraw/element/types";
 import {
   createHybridShareLink,
   deleteHybridItem,
+  enableCollaborationRoom,
   getHybridItem,
   revokeShareLink,
   updateHybridItemMeta,
@@ -39,6 +40,7 @@ import {
   buildFolderPath,
   navigateKindraw,
 } from "./router";
+import { ShareHybridModal } from "./ShareHybridModal";
 import { ShareLinksPanel } from "./ShareLinksPanel";
 import { getKindrawDraft, setKindrawDraft } from "./storage";
 import { getErrorMessage, isDraftNewer } from "./utils";
@@ -49,12 +51,15 @@ import {
   parseKindrawSectionLink,
 } from "./hybridSections";
 
+import { KindrawYjsProvider } from "./yjsProvider";
+
 import type { PointerEvent as ReactPointerEvent } from "react";
 import type {
   KindrawFolder,
   KindrawHybridItemResponse,
   KindrawHybridView,
   KindrawItem,
+  KindrawUser,
 } from "./types";
 
 type HybridEditorPageProps = {
@@ -64,6 +69,18 @@ type HybridEditorPageProps = {
   itemsById: Record<string, KindrawItem>;
   onTreeRefresh: () => Promise<void> | void;
   folders?: KindrawFolder[];
+  currentUser?: KindrawUser | null;
+};
+
+// Cor estável por usuário (cursor de colaboração), derivada do id/login.
+const cursorColorFor = (seed: string) => {
+  let hash = 0;
+  for (let i = 0; i < seed.length; i += 1) {
+    hash = (hash << 5) - hash + seed.charCodeAt(i);
+    hash |= 0;
+  }
+  const hue = Math.abs(hash) % 360;
+  return `hsl(${hue}, 70%, 45%)`;
 };
 
 const HYBRID_VIEW_LABELS: { view: KindrawHybridView; label: string }[] = [
@@ -100,6 +117,7 @@ export const HybridEditorPage = ({
   itemsById,
   onTreeRefresh,
   folders,
+  currentUser,
 }: HybridEditorPageProps) => {
   const [response, setResponse] = useState<KindrawHybridItemResponse | null>(
     null,
@@ -147,6 +165,14 @@ export const HybridEditorPage = ({
   });
   const [headerMenuOpen, setHeaderMenuOpen] = useState(false);
   const [unlinkConfirmOpen, setUnlinkConfirmOpen] = useState(false);
+  const [shareModalOpen, setShareModalOpen] = useState(false);
+  // Sessão de colaboração ao vivo do DOCUMENTO (Yjs). Quando ativa, o painel de
+  // documento troca o modo seção pelo editor colaborativo full-doc.
+  const [liveProvider, setLiveProvider] = useState<KindrawYjsProvider | null>(
+    null,
+  );
+  const [liveActive, setLiveActive] = useState(false);
+  const liveProviderRef = useRef<KindrawYjsProvider | null>(null);
   const excalidrawAPIRef = useRef<ExcalidrawImperativeAPI | null>(null);
   const splitBodyRef = useRef<HTMLDivElement | null>(null);
   const headerMenuRef = useRef<HTMLDivElement | null>(null);
@@ -443,27 +469,97 @@ export const HybridEditorPage = ({
     }
   }, [hybridId, onTreeRefresh, response, title]);
 
-  const handleCreateShareLink = useCallback(async () => {
-    try {
-      const shareResponse = await createHybridShareLink(hybridId);
+  const handleCreateShareLink = useCallback(
+    async (access: "read" | "live-edit" = "read") => {
+      try {
+        const shareResponse = await createHybridShareLink(hybridId, access);
 
-      setResponse((current) =>
-        current
-          ? {
-              ...current,
-              hybrid: {
-                ...current.hybrid,
-                shareLinks: [shareResponse.shareLink],
-              },
-            }
-          : current,
-      );
-      setStatusMessage("Link publico criado.");
-      await onTreeRefresh();
-    } catch (error) {
-      setStatusMessage(getErrorMessage(error, "Falha ao criar link publico."));
+        setResponse((current) =>
+          current
+            ? {
+                ...current,
+                hybrid: {
+                  ...current.hybrid,
+                  shareLinks: [shareResponse.shareLink],
+                },
+              }
+            : current,
+        );
+        setStatusMessage(
+          access === "live-edit"
+            ? "Link de edição ao vivo criado."
+            : "Link publico criado.",
+        );
+        await onTreeRefresh();
+      } catch (error) {
+        setStatusMessage(
+          getErrorMessage(error, "Falha ao criar link publico."),
+        );
+      }
+    },
+    [hybridId, onTreeRefresh],
+  );
+
+  const handleToggleLiveSession = useCallback(() => {
+    // Encerrar
+    if (liveProviderRef.current) {
+      liveProviderRef.current.destroy();
+      liveProviderRef.current = null;
+      setLiveProvider(null);
+      setLiveActive(false);
+      setStatusMessage("Sessão ao vivo encerrada.");
+      return;
     }
-  }, [hybridId, onTreeRefresh]);
+    // Iniciar
+    if (!currentUser) {
+      setStatusMessage("Entre para iniciar uma sessão ao vivo.");
+      return;
+    }
+    const provider = new KindrawYjsProvider({
+      roomId: `hdoc:${hybridId}`,
+      user: {
+        name: currentUser.name || currentUser.githubLogin,
+        color: cursorColorFor(currentUser.id),
+        avatarUrl: currentUser.avatarUrl,
+        githubLogin: currentUser.githubLogin,
+        userId: currentUser.id,
+      },
+    });
+    liveProviderRef.current = provider;
+    setLiveProvider(provider);
+    setLiveActive(true);
+    setStatusMessage("Sessão ao vivo iniciada.");
+  }, [currentUser, hybridId]);
+
+  // Abre o canvas do híbrido no editor /draw com a sala de colaboração ATIVA —
+  // onde o cliente de canvas collab nativo (Excalidraw) já funciona por completo
+  // (cursores, sync de cena, presença). É o caminho de canvas ao vivo.
+  const handleOpenCanvasLive = useCallback(async () => {
+    if (!response) {
+      return;
+    }
+    try {
+      await enableCollaborationRoom(response.drawing.item.id);
+      await onTreeRefresh();
+      // full-page: o ExcalidrawApp auto-conecta a sala ao detectar collab.
+      window.location.assign(buildItemPath(response.drawing.item));
+    } catch (error) {
+      setStatusMessage(
+        getErrorMessage(error, "Falha ao abrir o canvas ao vivo."),
+      );
+    }
+  }, [onTreeRefresh, response]);
+
+  // Cleanup do provider ao desmontar.
+  useEffect(
+    () => () => {
+      if (liveProviderRef.current) {
+        liveProviderRef.current.destroy();
+        liveProviderRef.current = null;
+      }
+    },
+    [],
+  );
 
   const handleRevokeShareLink = useCallback(
     async (shareLinkId: string) => {
@@ -852,6 +948,7 @@ export const HybridEditorPage = ({
       <HybridMarkdownPane
         activeSectionId={activeSectionId}
         canLinkSelection={showCanvas}
+        collabProvider={liveProvider}
         hybridId={hybridId}
         itemsById={hybridItemsById}
         linkedSectionIds={linkedSectionIds}
@@ -970,6 +1067,23 @@ export const HybridEditorPage = ({
             <i />
             <span>{statusMessage}</span>
           </span>
+          {liveActive ? (
+            <button
+              className="kindraw-btn kindraw-btn--soft kindraw-btn--sm"
+              onClick={() => void handleOpenCanvasLive()}
+              title="Abrir o canvas em colaboração ao vivo"
+              type="button"
+            >
+              <KindrawIcon name="link" size={14} /> Canvas ao vivo
+            </button>
+          ) : null}
+          <button
+            className="kindraw-btn kindraw-btn--soft kindraw-btn--sm"
+            onClick={() => setShareModalOpen(true)}
+            type="button"
+          >
+            <KindrawIcon name="users" size={14} /> Compartilhar
+          </button>
           <div className="kindraw-menuwrap" ref={headerMenuRef}>
             <button
               aria-expanded={headerMenuOpen}
@@ -1006,6 +1120,9 @@ export const HybridEditorPage = ({
             onCreateShareLink={handleCreateShareLink}
             onRevokeShareLink={handleRevokeShareLink}
             shareLinks={response.hybrid.shareLinks}
+            supportsLiveEdit
+            liveSessionActive={liveActive}
+            onToggleLiveSession={handleToggleLiveSession}
           />
         </div>
       </header>
@@ -1105,6 +1222,14 @@ export const HybridEditorPage = ({
             </div>
           </div>
         </div>
+      ) : null}
+
+      {shareModalOpen ? (
+        <ShareHybridModal
+          hybrid={{ id: hybridId, title: response.hybrid.title }}
+          onChange={() => void onTreeRefresh()}
+          onClose={() => setShareModalOpen(false)}
+        />
       ) : null}
     </div>
   );

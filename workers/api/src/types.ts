@@ -32,6 +32,10 @@ export type KindrawFolderShare = {
   createdAt: string;
 };
 
+// Uma pessoa (que não o dono) com acesso a um híbrido. Mesmo shape do folder
+// share — retornado por listHybridShares / grantHybridAccess.
+export type KindrawHybridShare = KindrawFolderShare;
+
 export type KindrawFolder = {
   id: string;
   name: string;
@@ -42,11 +46,16 @@ export type KindrawFolder = {
   shared?: KindrawFolderSharedMeta;
 };
 
+// Modo de acesso de um link público: leitura, ou edição-ao-vivo (colaboração).
+export type KindrawShareLinkAccess = "read" | "live-edit";
+
 export type KindrawShareLink = {
   id: string;
   token: string;
   createdAt: string;
   revokedAt: string | null;
+  // Default "read" para links antigos (coluna com DEFAULT 'read').
+  access?: KindrawShareLinkAccess;
 };
 
 export type KindrawCollaborationRoom = {
