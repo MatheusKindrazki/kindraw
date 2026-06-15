@@ -32,8 +32,11 @@ import {
   buildPublicShareUrl,
 } from "./api";
 import { parseDrawingContent } from "./content";
+import { colorForUser } from "./identity";
 import { HybridMarkdownPane } from "./HybridMarkdownPane";
 import { KindrawIcon } from "./icons";
+import { PresenceFacepile } from "./PresenceFacepile";
+import { useCanvasCollab } from "./useCanvasCollab";
 import {
   buildHybridPath,
   buildItemPath,
@@ -43,6 +46,7 @@ import {
 import { ShareHybridModal } from "./ShareHybridModal";
 import { ShareLinksPanel } from "./ShareLinksPanel";
 import { getKindrawDraft, setKindrawDraft } from "./storage";
+import { usePresence } from "./usePresence";
 import { getErrorMessage, isDraftNewer } from "./utils";
 import {
   appendHybridSection,
@@ -70,17 +74,6 @@ type HybridEditorPageProps = {
   onTreeRefresh: () => Promise<void> | void;
   folders?: KindrawFolder[];
   currentUser?: KindrawUser | null;
-};
-
-// Cor estável por usuário (cursor de colaboração), derivada do id/login.
-const cursorColorFor = (seed: string) => {
-  let hash = 0;
-  for (let i = 0; i < seed.length; i += 1) {
-    hash = (hash << 5) - hash + seed.charCodeAt(i);
-    hash |= 0;
-  }
-  const hue = Math.abs(hash) % 360;
-  return `hsl(${hue}, 70%, 45%)`;
 };
 
 const HYBRID_VIEW_LABELS: { view: KindrawHybridView; label: string }[] = [
@@ -166,13 +159,14 @@ export const HybridEditorPage = ({
   const [headerMenuOpen, setHeaderMenuOpen] = useState(false);
   const [unlinkConfirmOpen, setUnlinkConfirmOpen] = useState(false);
   const [shareModalOpen, setShareModalOpen] = useState(false);
-  // Sessão de colaboração ao vivo do DOCUMENTO (Yjs). Quando ativa, o painel de
-  // documento troca o modo seção pelo editor colaborativo full-doc.
+  // Sessão de colaboração ao vivo do DOCUMENTO (Yjs) — SEMPRE ativa p/ editores.
+  // O painel de documento usa o editor colaborativo full-doc enquanto há provider.
   const [liveProvider, setLiveProvider] = useState<KindrawYjsProvider | null>(
     null,
   );
-  const [liveActive, setLiveActive] = useState(false);
   const liveProviderRef = useRef<KindrawYjsProvider | null>(null);
+  // Chave de cifra do canal de canvas (vem da collab room do drawing item).
+  const [canvasRoomKey, setCanvasRoomKey] = useState<string | null>(null);
   const excalidrawAPIRef = useRef<ExcalidrawImperativeAPI | null>(null);
   const splitBodyRef = useRef<HTMLDivElement | null>(null);
   const headerMenuRef = useRef<HTMLDivElement | null>(null);
@@ -500,26 +494,24 @@ export const HybridEditorPage = ({
     [hybridId, onTreeRefresh],
   );
 
-  const handleToggleLiveSession = useCallback(() => {
-    // Encerrar
-    if (liveProviderRef.current) {
-      liveProviderRef.current.destroy();
-      liveProviderRef.current = null;
-      setLiveProvider(null);
-      setLiveActive(false);
-      setStatusMessage("Sessão ao vivo encerrada.");
-      return;
+  // SEMPRE-AO-VIVO: assim que o híbrido carrega e há um editor (usuário logado),
+  // a sessão de colaboração do documento conecta sozinha — sem toggle "Iniciar".
+  // Igual Eraser/Figma/tldraw: colaboração é implícita em ter acesso de edição.
+  useEffect(() => {
+    // só editores logados abrem provider aqui; viewer/anônimo via share view.
+    if (!response || !currentUser) {
+      return undefined;
     }
-    // Iniciar
-    if (!currentUser) {
-      setStatusMessage("Entre para iniciar uma sessão ao vivo.");
-      return;
+    // viewer (compartilhamento read-only) não entra em modo de escrita ao vivo.
+    if (response.hybrid.sharedRole === "viewer") {
+      return undefined;
     }
+
     const provider = new KindrawYjsProvider({
       roomId: `hdoc:${hybridId}`,
       user: {
         name: currentUser.name || currentUser.githubLogin,
-        color: cursorColorFor(currentUser.id),
+        color: colorForUser(currentUser.id),
         avatarUrl: currentUser.avatarUrl,
         githubLogin: currentUser.githubLogin,
         userId: currentUser.id,
@@ -527,39 +519,104 @@ export const HybridEditorPage = ({
     });
     liveProviderRef.current = provider;
     setLiveProvider(provider);
-    setLiveActive(true);
-    setStatusMessage("Sessão ao vivo iniciada.");
-  }, [currentUser, hybridId]);
 
-  // Abre o canvas do híbrido no editor /draw com a sala de colaboração ATIVA —
-  // onde o cliente de canvas collab nativo (Excalidraw) já funciona por completo
-  // (cursores, sync de cena, presença). É o caminho de canvas ao vivo.
-  const handleOpenCanvasLive = useCallback(async () => {
-    if (!response) {
+    return () => {
+      provider.destroy();
+      liveProviderRef.current = null;
+      setLiveProvider(null);
+    };
+  }, [currentUser, hybridId, response?.hybrid.sharedRole, response]);
+
+  // Presença ao vivo (facepile + base p/ cursores) derivada do awareness.
+  const presence = usePresence(liveProvider);
+
+  // Garante a collab room do drawing (chave de cifra do canal de canvas).
+  // Editores logados: habilita a room se ainda não houver e guarda a roomKey.
+  useEffect(() => {
+    if (!response || !currentUser) {
       return;
     }
-    try {
-      await enableCollaborationRoom(response.drawing.item.id);
-      await onTreeRefresh();
-      // full-page: o ExcalidrawApp auto-conecta a sala ao detectar collab.
-      window.location.assign(buildItemPath(response.drawing.item));
-    } catch (error) {
-      setStatusMessage(
-        getErrorMessage(error, "Falha ao abrir o canvas ao vivo."),
-      );
+    if (response.hybrid.sharedRole === "viewer") {
+      return;
     }
-  }, [onTreeRefresh, response]);
+    const existing = response.drawing.collaborationRoom?.roomKey;
+    if (existing) {
+      setCanvasRoomKey(existing);
+      return;
+    }
+    let cancelled = false;
+    void enableCollaborationRoom(response.drawing.item.id)
+      .then((res) => {
+        if (!cancelled) {
+          setCanvasRoomKey(res.collaborationRoom.roomKey);
+        }
+      })
+      .catch(() => {
+        /* canvas ao vivo é best-effort; doc segue ao vivo de qualquer forma */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [currentUser, response]);
 
-  // Cleanup do provider ao desmontar.
-  useEffect(
-    () => () => {
-      if (liveProviderRef.current) {
-        liveProviderRef.current.destroy();
-        liveProviderRef.current = null;
-      }
+  // Cliente de colaboração de canvas (enxuto). Conecta ao canal hcanvas:<id>
+  // com a roomKey do drawing; renderiza cursores/seleção nativamente.
+  const canvasCollab = useCanvasCollab({
+    enabled: Boolean(currentUser) && Boolean(canvasRoomKey),
+    roomId: `hcanvas:${hybridId}`,
+    roomKey: canvasRoomKey,
+    profile: {
+      name: currentUser?.name || currentUser?.githubLogin || "Você",
+      userId: currentUser?.id ?? null,
+      avatarUrl: currentUser?.avatarUrl ?? null,
+      githubLogin: currentUser?.githubLogin ?? null,
     },
-    [],
-  );
+    excalidrawAPIRef,
+  });
+
+  // Repassa os colaboradores do canvas (cursores/seleção) p/ o Excalidraw, que
+  // os renderiza nativamente.
+  useEffect(() => {
+    excalidrawAPIRef.current?.updateScene({
+      collaborators: canvasCollab.collaborators,
+    });
+  }, [canvasCollab.collaborators]);
+
+  // Idle/grace: marca o usuário como ausente após inatividade (dim no facepile,
+  // base p/ fade do cursor antes da remoção). Atividade volta a "ativo".
+  useEffect(() => {
+    if (!liveProvider) {
+      return undefined;
+    }
+    let idleTimer: number | null = null;
+    const IDLE_MS = 60_000;
+    const goActive = () => {
+      liveProvider.setIdle(false);
+      if (idleTimer !== null) {
+        window.clearTimeout(idleTimer);
+      }
+      idleTimer = window.setTimeout(() => liveProvider.setIdle(true), IDLE_MS);
+    };
+    const onHidden = () => {
+      if (document.visibilityState === "hidden") {
+        liveProvider.setIdle(true);
+      } else {
+        goActive();
+      }
+    };
+    goActive();
+    window.addEventListener("pointermove", goActive, { passive: true });
+    window.addEventListener("keydown", goActive);
+    document.addEventListener("visibilitychange", onHidden);
+    return () => {
+      if (idleTimer !== null) {
+        window.clearTimeout(idleTimer);
+      }
+      window.removeEventListener("pointermove", goActive);
+      window.removeEventListener("keydown", goActive);
+      document.removeEventListener("visibilitychange", onHidden);
+    };
+  }, [liveProvider]);
 
   const handleRevokeShareLink = useCallback(
     async (shareLinkId: string) => {
@@ -982,6 +1039,7 @@ export const HybridEditorPage = ({
           excalidrawAPIRef.current = api;
         }}
         initialData={drawingInitialData}
+        isCollaborating={canvasCollab.isConnected}
         onChange={(elements, appState, files) => {
           setSceneElements(elements);
           setSceneAppState(appState);
@@ -990,7 +1048,10 @@ export const HybridEditorPage = ({
           setSerializedDrawing(
             serializeAsJSON(elements, appState, files, "local"),
           );
+          // propaga a cena aos outros participantes do canvas (no-op se eco).
+          canvasCollab.broadcastScene(elements);
         }}
+        onPointerUpdate={canvasCollab.onPointerUpdate}
         onLinkOpen={handleCanvasLinkOpen}
       />
     </section>
@@ -1044,6 +1105,7 @@ export const HybridEditorPage = ({
           ))}
         </div>
         <div className="kindraw-editor-header__trailing">
+          <PresenceFacepile users={presence} />
           <span
             className={`kindraw-pill kindraw-pill--${
               saveState === "idle" ? "ok" : saveState
@@ -1053,16 +1115,6 @@ export const HybridEditorPage = ({
             <i />
             <span>{statusMessage}</span>
           </span>
-          {liveActive ? (
-            <button
-              className="kindraw-btn kindraw-btn--soft kindraw-btn--sm"
-              onClick={() => void handleOpenCanvasLive()}
-              title="Abrir o canvas em colaboração ao vivo"
-              type="button"
-            >
-              <KindrawIcon name="link" size={14} /> Canvas ao vivo
-            </button>
-          ) : null}
           <button
             className="kindraw-btn kindraw-btn--soft kindraw-btn--sm"
             onClick={() => setShareModalOpen(true)}
@@ -1107,8 +1159,6 @@ export const HybridEditorPage = ({
             onRevokeShareLink={handleRevokeShareLink}
             shareLinks={response.hybrid.shareLinks}
             supportsLiveEdit
-            liveSessionActive={liveActive}
-            onToggleLiveSession={handleToggleLiveSession}
           />
         </div>
       </header>

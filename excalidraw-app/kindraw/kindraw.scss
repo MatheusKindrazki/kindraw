@@ -2542,6 +2542,155 @@
   color: #c94a4a;
 }
 
+/* Facepile de presença ao vivo (header do híbrido) */
+.kindraw-facepile {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.kindraw-facepile__live {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #2e9e5b;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(46, 158, 91, 0.12);
+}
+
+.kindraw-facepile__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #2e9e5b;
+  box-shadow: 0 0 0 0 rgba(46, 158, 91, 0.5);
+  animation: kindraw-live-pulse 1.8s ease-out infinite;
+}
+
+.kindraw-facepile__stack {
+  display: flex;
+  align-items: center;
+}
+
+.kindraw-facepile__avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 2px solid var(--kd-amber); /* sobrescrito inline pela cor do user */
+  box-shadow: 0 0 0 2px var(--kd-surface);
+  overflow: hidden;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: -8px;
+  background: var(--kd-surface);
+  transition: opacity 0.2s ease, transform 0.15s ease;
+}
+
+.kindraw-facepile__avatar:first-child {
+  margin-left: 0;
+}
+
+.kindraw-facepile__avatar:hover {
+  transform: translateY(-1px);
+  z-index: 2;
+}
+
+.kindraw-facepile__avatar--idle {
+  opacity: 0.45;
+}
+
+.kindraw-facepile__avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.kindraw-facepile__initials {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+  color: #fff;
+  letter-spacing: 0.02em;
+}
+
+.kindraw-facepile__more .kindraw-facepile__initials--more {
+  background: var(--kd-ink);
+  font-size: 10px;
+}
+
+/* Entrada de convidado na sessão ao vivo (escolher nome) */
+.kindraw-guest-card {
+  text-align: center;
+}
+
+.kindraw-guest-entry {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 16px 0;
+  padding: 4px 4px 4px 12px;
+  border: 1px solid var(--kd-line);
+  border-radius: var(--kd-r-btn);
+  background: var(--kd-surface);
+}
+
+.kindraw-guest-entry__swatch {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+}
+
+.kindraw-guest-entry__input {
+  flex: 1;
+  border: none;
+  background: transparent;
+  font-family: var(--kd-font);
+  font-size: 15px;
+  color: var(--kd-ink);
+  padding: 8px 4px;
+}
+
+.kindraw-guest-entry__input:focus {
+  outline: none;
+}
+
+/* Header da view de convidado (com facepile à direita) */
+.kindraw-public-view__header--live {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+/* Nota "edição é ao vivo" no popover de compartilhar (substitui o toggle) */
+.kindraw-share__live-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  margin: 10px 0 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--kd-muted);
+}
+
+.kindraw-share__live-dot {
+  flex: none;
+  margin-top: 4px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #2e9e5b;
+}
+
 /* Sessão de colaboração ao vivo (doc Yjs) */
 .kindraw-live-banner {
   display: flex;

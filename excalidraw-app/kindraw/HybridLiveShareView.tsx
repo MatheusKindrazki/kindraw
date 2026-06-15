@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import { colorForUser } from "./identity";
+import { PresenceFacepile } from "./PresenceFacepile";
 import { RichTextEditor } from "./RichTextEditor";
+import { usePresence } from "./usePresence";
 import { KindrawYjsProvider } from "./yjsProvider";
 
 import type { KindrawPublicItemResponse } from "./types";
@@ -8,41 +11,32 @@ import type { KindrawPublicItemResponse } from "./types";
 // View de edição AO VIVO via link público "live-edit". Diferente do
 // HybridPublicShareView (read-only), aqui o portador do link entra na sessão de
 // colaboração Yjs do documento — autorizado pelo token na URL do WebSocket
-// (?token=). O canvas segue read-only nesta view (canvas ao vivo é só p/ quem
-// abre o /draw autenticado).
+// (?token=). O convidado escolhe um nome na entrada; a cor é estável por hash.
 
-const GUEST_COLORS = [
-  "#c0392b",
-  "#2980b9",
-  "#27ae60",
-  "#8e44ad",
-  "#d35400",
-  "#16a085",
-  "#2c3e50",
-];
+const GUEST_ID_KEY = "kindraw:guest-id";
+const GUEST_NAME_KEY = "kindraw:guest-name";
 
-// nome/cor de convidado estáveis por aba (persistem no sessionStorage).
-const getGuestIdentity = () => {
-  const KEY = "kindraw:guest-identity";
+// id estável por navegador (gera 1x) — base da cor de presença do convidado.
+const getGuestId = () => {
   try {
-    const stored = window.sessionStorage.getItem(KEY);
+    const stored = window.localStorage.getItem(GUEST_ID_KEY);
     if (stored) {
-      return JSON.parse(stored) as { name: string; color: string };
+      return stored;
     }
+    const id = `guest-${Math.random().toString(36).slice(2, 10)}`;
+    window.localStorage.setItem(GUEST_ID_KEY, id);
+    return id;
   } catch {
-    // ignore
+    return "guest-anon";
   }
-  const n = Math.floor(Math.random() * 9000) + 1000;
-  const identity = {
-    name: `Convidado ${n}`,
-    color: GUEST_COLORS[n % GUEST_COLORS.length],
-  };
+};
+
+const getStoredName = () => {
   try {
-    window.sessionStorage.setItem(KEY, JSON.stringify(identity));
+    return window.localStorage.getItem(GUEST_NAME_KEY) || "";
   } catch {
-    // ignore
+    return "";
   }
-  return identity;
 };
 
 export const HybridLiveShareView = ({
@@ -53,38 +47,64 @@ export const HybridLiveShareView = ({
   shareToken: string;
 }) => {
   const hybrid = itemResponse.hybrid;
+  const guestId = useMemo(getGuestId, []);
+  const color = useMemo(() => colorForUser(guestId), [guestId]);
+
+  // Tela de entrada: convidado confirma o nome antes de entrar na sessão.
+  const [name, setName] = useState(getStoredName);
+  const [entered, setEntered] = useState(() => getStoredName().length > 0);
+
   const [provider, setProvider] = useState<KindrawYjsProvider | null>(null);
   const providerRef = useRef<KindrawYjsProvider | null>(null);
-  const guest = useMemo(getGuestIdentity, []);
 
   useEffect(() => {
-    if (!hybrid) {
+    if (!hybrid || !entered) {
       return undefined;
     }
+    const displayName = (getStoredName() || "Convidado").trim();
     const p = new KindrawYjsProvider({
       roomId: `hdoc:${hybrid.id}`,
       token: shareToken,
       user: {
-        name: guest.name,
-        color: guest.color,
+        name: displayName,
+        color,
         avatarUrl: null,
         githubLogin: null,
-        userId: null,
+        userId: guestId,
       },
     });
     providerRef.current = p;
     setProvider(p);
+
+    // idle/grace simples p/ o convidado
+    let idleTimer: number | null = null;
+    const goActive = () => {
+      p.setIdle(false);
+      if (idleTimer !== null) {
+        window.clearTimeout(idleTimer);
+      }
+      idleTimer = window.setTimeout(() => p.setIdle(true), 60_000);
+    };
+    goActive();
+    window.addEventListener("pointermove", goActive, { passive: true });
+    window.addEventListener("keydown", goActive);
+
     return () => {
+      if (idleTimer !== null) {
+        window.clearTimeout(idleTimer);
+      }
+      window.removeEventListener("pointermove", goActive);
+      window.removeEventListener("keydown", goActive);
       p.destroy();
       providerRef.current = null;
       setProvider(null);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hybrid?.id, shareToken]);
+  }, [hybrid?.id, shareToken, entered, color, guestId]);
+
+  const presence = usePresence(provider);
 
   if (!hybrid) {
-    // link live-edit num item não-híbrido: cai num editor colaborativo simples
-    // não faz sentido; mostra um aviso curto.
     return (
       <div className="kindraw-share-shell">
         <div className="kindraw-loading-shell">
@@ -94,25 +114,65 @@ export const HybridLiveShareView = ({
     );
   }
 
+  // Tela de entrada (escolher nome) — só na primeira vez.
+  if (!entered) {
+    return (
+      <div className="kindraw-share-shell">
+        <div className="kindraw-login-shell">
+          <div className="kindraw-login-card kindraw-guest-card">
+            <span className="kindraw-eyebrow">Edição ao vivo</span>
+            <h1>{itemResponse.item.title}</h1>
+            <p>Como você quer aparecer para os outros nesta sessão?</p>
+            <div className="kindraw-guest-entry">
+              <span
+                className="kindraw-guest-entry__swatch"
+                style={{ background: color }}
+              />
+              <input
+                aria-label="Seu nome nesta sessão"
+                autoFocus
+                className="kindraw-guest-entry__input"
+                maxLength={40}
+                onChange={(e) => setName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && name.trim()) {
+                    window.localStorage.setItem(GUEST_NAME_KEY, name.trim());
+                    setEntered(true);
+                  }
+                }}
+                placeholder="Seu nome"
+                value={name}
+              />
+            </div>
+            <button
+              className="kindraw-btn kindraw-btn--primary"
+              disabled={!name.trim()}
+              onClick={() => {
+                window.localStorage.setItem(GUEST_NAME_KEY, name.trim());
+                setEntered(true);
+              }}
+              type="button"
+            >
+              Entrar na sessão
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="kindraw-share-shell">
-      <header className="kindraw-public-view__header">
+      <header className="kindraw-public-view__header kindraw-public-view__header--live">
         <div>
           <span className="kindraw-eyebrow">Edição ao vivo</span>
           <h1>{itemResponse.item.title}</h1>
-          <p>
-            Você entrou numa sessão de colaboração em tempo real como{" "}
-            <strong>{guest.name}</strong>.
-          </p>
         </div>
+        <PresenceFacepile users={presence} />
       </header>
 
       <section className="kindraw-share-shell__content">
         <div className="kindraw-hybrid-doc kindraw-hybrid-doc--live">
-          <div className="kindraw-live-banner" role="status">
-            <span className="kindraw-live-banner__dot" />
-            Sessão ao vivo — edição colaborativa em tempo real
-          </div>
           <div className="kindraw-hybrid-doc__editor kindraw-hybrid-doc__editor--live">
             {provider ? (
               <RichTextEditor
