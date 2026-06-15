@@ -2542,20 +2542,18 @@
   color: #c94a4a;
 }
 
-/* Botão "Inserir" (abre o sidebar de ícones/templates) no canvas do híbrido */
+/* Botão de ícone "Inserir" (livrinho) que abre o sidebar de ícones/templates no
+   canvas do híbrido — mesmo visual do trigger de biblioteca do editor de draw. */
 .kindraw-insert-trigger {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  height: 36px;
-  padding: 0 12px;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
   border: 1px solid var(--kd-line);
-  border-radius: 10px;
+  border-radius: 12px;
   background: var(--kd-surface);
   color: var(--kd-ink);
-  font-family: var(--kd-font);
-  font-size: 13px;
-  font-weight: 600;
   cursor: pointer;
   box-shadow: var(--kd-shadow-popover);
   transition: background 0.15s ease, border-color 0.15s ease;
@@ -2564,6 +2562,11 @@
 .kindraw-insert-trigger:hover {
   background: var(--kd-hover);
   border-color: var(--kd-amber);
+}
+
+.kindraw-insert-trigger svg {
+  width: 18px;
+  height: 18px;
 }
 
 /* Facepile de presença ao vivo (header do híbrido) */

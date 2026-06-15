@@ -31,6 +31,8 @@ import {
   updateItemContent,
   buildPublicShareUrl,
 } from "./api";
+import { LibraryIcon } from "@excalidraw/excalidraw/components/icons";
+
 import { AppSidebar } from "../components/AppSidebar";
 
 import { parseDrawingContent } from "./content";
@@ -1062,6 +1064,7 @@ export const HybridEditorPage = ({
         renderTopRightUI={(isMobile) =>
           isMobile ? null : (
             <button
+              aria-label="Inserir ícones e templates"
               className="kindraw-insert-trigger"
               onClick={() =>
                 excalidrawAPIRef.current?.toggleSidebar({ name: "kindraw" })
@@ -1069,7 +1072,7 @@ export const HybridEditorPage = ({
               title="Inserir ícones e templates"
               type="button"
             >
-              <KindrawIcon name="plus" size={15} /> Inserir
+              {LibraryIcon}
             </button>
           )
         }
