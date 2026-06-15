@@ -2726,8 +2726,45 @@
   }
 }
 
+/* Modo colaborativo full-doc: o editor preenche TODA a altura do painel do
+   documento (sem box recortado, sem height fixo nem alça de resize). A cadeia
+   de flex vai do painel → doc → editor → surface, todos esticando. */
+.kindraw-hybrid-shell__document:has(.kindraw-hybrid-doc--live) {
+  display: flex;
+  flex-direction: column;
+}
+
+.kindraw-hybrid-doc--live {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
 .kindraw-hybrid-doc__editor--live {
-  display: block;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* sobrescreve o surface de seção (height fixo + resize) p/ esticar full-height */
+.kindraw-hybrid-doc__editor--live .kindraw-rte {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  height: auto;
+  overflow: hidden;
+}
+
+.kindraw-hybrid-doc__editor--live .kindraw-rte__surface {
+  flex: 1;
+  min-height: 0;
+  height: auto;
+  max-height: none;
+  resize: none;
+  overflow: auto;
 }
 
 /* Cursores/seleção de colaboração (Tiptap CollaborationCaret) */
