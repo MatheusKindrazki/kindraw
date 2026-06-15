@@ -2542,6 +2542,30 @@
   color: #c94a4a;
 }
 
+/* Botão "Inserir" (abre o sidebar de ícones/templates) no canvas do híbrido */
+.kindraw-insert-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 12px;
+  border: 1px solid var(--kd-line);
+  border-radius: 10px;
+  background: var(--kd-surface);
+  color: var(--kd-ink);
+  font-family: var(--kd-font);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: var(--kd-shadow-popover);
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.kindraw-insert-trigger:hover {
+  background: var(--kd-hover);
+  border-color: var(--kd-amber);
+}
+
 /* Facepile de presença ao vivo (header do híbrido) */
 .kindraw-facepile {
   display: flex;
@@ -2735,6 +2759,7 @@
   display: flex;
   flex-direction: column;
   padding: 0;
+  background: #fff;
 }
 
 .kindraw-hybrid-doc--live {
@@ -2752,7 +2777,7 @@
 }
 
 /* sobrescreve o surface de seção (height fixo + resize) p/ esticar full-height.
-   Full-bleed: sem borda/radius de "card", encosta nas laterais do painel. */
+   Full-bleed: sem borda/radius de "card", fundo BRANCO, encosta nas laterais. */
 .kindraw-hybrid-doc__editor--live .kindraw-rte {
   flex: 1;
   min-height: 0;
@@ -2762,7 +2787,7 @@
   overflow: hidden;
   border: none;
   border-radius: 0;
-  background: var(--kd-surface-warm);
+  background: #fff;
 }
 
 .kindraw-hybrid-doc__editor--live .kindraw-rte__surface {
@@ -2771,15 +2796,21 @@
   height: auto;
   max-height: none;
   resize: none;
-  overflow: auto;
+  overflow-y: auto;
+  overflow-x: hidden; // texto quebra, nunca scrolla na horizontal
+  background: #fff;
 }
 
-/* respiro do conteúdo (já que o painel perdeu o padding no modo live) */
+/* respiro do conteúdo (o painel perdeu o padding no modo live). box-sizing
+   border-box p/ o padding NÃO somar à largura (causava overflow/corte). */
 .kindraw-hybrid-doc__editor--live .kindraw-rte__content {
-  max-width: 820px;
-  margin: 0 auto;
+  box-sizing: border-box;
   width: 100%;
-  padding: 32px 28px 80px;
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 36px 32px 96px;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 /* Cursores/seleção de colaboração (Tiptap CollaborationCaret) */

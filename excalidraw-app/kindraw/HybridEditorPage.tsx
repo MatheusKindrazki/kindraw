@@ -1059,6 +1059,20 @@ export const HybridEditorPage = ({
         }}
         onPointerUpdate={canvasCollab.onPointerUpdate}
         onLinkOpen={handleCanvasLinkOpen}
+        renderTopRightUI={(isMobile) =>
+          isMobile ? null : (
+            <button
+              className="kindraw-insert-trigger"
+              onClick={() =>
+                excalidrawAPIRef.current?.toggleSidebar({ name: "kindraw" })
+              }
+              title="Inserir ícones e templates"
+              type="button"
+            >
+              <KindrawIcon name="plus" size={15} /> Inserir
+            </button>
+          )
+        }
       >
         {/* Menu "Inserir" (ícones + templates/fluxogramas) — mesmo do editor de
             canvas. Desacoplado: só usa excalidrawAPI + route. */}
