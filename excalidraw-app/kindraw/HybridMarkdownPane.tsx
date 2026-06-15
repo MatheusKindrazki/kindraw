@@ -24,6 +24,8 @@ type HybridMarkdownPaneProps = {
   // Quando há uma sessão ao vivo, o painel troca o modo seção por um único
   // editor colaborativo full-document (Yjs).
   collabProvider?: KindrawYjsProvider | null;
+  // identidade do usuário local p/ o caret nomeado (CollaborationCaret).
+  collabUser?: { name: string; color: string } | null;
   onMarkdownChange: (nextMarkdown: string) => void;
   onNavigate: (pathname: string) => void;
   onOpenCanvas: (sectionId: string) => void;
@@ -44,6 +46,7 @@ export const HybridMarkdownPane = ({
   linkedSectionIds,
   linkingSectionId,
   collabProvider,
+  collabUser,
   onMarkdownChange,
   onNavigate,
   onOpenCanvas,
@@ -133,7 +136,11 @@ export const HybridMarkdownPane = ({
       <div className="kindraw-hybrid-doc kindraw-hybrid-doc--live">
         <div className="kindraw-hybrid-doc__editor kindraw-hybrid-doc__editor--live">
           <RichTextEditor
-            collab={{ provider: collabProvider, fieldName: "default" }}
+            collab={{
+              provider: collabProvider,
+              fieldName: "default",
+              user: collabUser || { name: "Você", color: "#888" },
+            }}
             onChange={onMarkdownChange}
             placeholder="Escreva em conjunto…"
             seedMarkdown={markdown}

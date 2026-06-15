@@ -41,9 +41,12 @@ type RichTextEditorProps = {
   // Quando presente, o editor entra em modo colaborativo (Yjs): o conteúdo é
   // governado pelo Y.Doc do provider, não pela prop `value`. `value` ainda é
   // usado como seed inicial pelo dono do documento (ver HybridMarkdownPane).
+  // `user` (nome + cor) alimenta o caret nomeado do CollaborationCaret — sem ele
+  // o caret mostra "User: <clientID>".
   collab?: {
     provider: KindrawYjsProvider;
     fieldName: string;
+    user: { name: string; color: string };
   };
   // Markdown inicial para popular um Y.Doc VAZIO ao entrar na sessão (só o
   // primeiro participante semeia; os demais recebem o estado já sincronizado).
@@ -121,6 +124,7 @@ export const RichTextEditor = ({
             }),
             CollaborationCaret.configure({
               provider: collab.provider,
+              user: collab.user,
             }),
           ]
         : []),

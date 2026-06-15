@@ -220,7 +220,11 @@ export const HybridLiveShareView = ({
             <div className="kindraw-hybrid-doc__editor kindraw-hybrid-doc__editor--live">
               {provider ? (
                 <RichTextEditor
-                  collab={{ provider, fieldName: "default" }}
+                  collab={{
+                    provider,
+                    fieldName: "default",
+                    user: { name: getStoredName() || "Convidado", color },
+                  }}
                   onChange={() => undefined}
                   placeholder="Escreva em conjunto…"
                   seedMarkdown={itemResponse.content}

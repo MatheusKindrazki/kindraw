@@ -1004,6 +1004,14 @@ export const HybridEditorPage = ({
         activeSectionId={activeSectionId}
         canLinkSelection={showCanvas}
         collabProvider={liveProvider}
+        collabUser={
+          currentUser
+            ? {
+                name: currentUser.name || currentUser.githubLogin,
+                color: colorForUser(currentUser.id),
+              }
+            : null
+        }
         hybridId={hybridId}
         itemsById={hybridItemsById}
         linkedSectionIds={linkedSectionIds}

@@ -29,6 +29,10 @@ const HEARTBEAT_MS = 30_000;
 const SNAPSHOT_DEBOUNCE_MS = 4_000;
 const RECONNECT_BASE_MS = 1_000;
 const RECONNECT_MAX_MS = 20_000;
+// Awareness: reenvia o próprio estado a cada 12s; estados remotos sem heartbeat
+// há > 30s são considerados fantasmas e removidos do facepile.
+const AWARENESS_HEARTBEAT_MS = 12_000;
+const PRESENCE_STALE_MS = 30_000;
 
 export type YjsUser = {
   name: string;
@@ -73,6 +77,7 @@ export class KindrawYjsProvider {
   private readonly token: string | null;
   private readonly user: YjsUser;
   private heartbeatTimer: number | null = null;
+  private awarenessTimer: number | null = null;
   private snapshotTimer: number | null = null;
   private reconnectTimer: number | null = null;
   private reconnectAttempts = 0;
@@ -93,6 +98,8 @@ export class KindrawYjsProvider {
     this.awareness = new Awareness(this.doc);
     // Awareness rica: além de name+color (que o CollaborationCaret usa), levamos
     // avatar/login/userId p/ o facepile e um flag de idle p/ dim/grace-period.
+    // `t` = timestamp de atividade (heartbeat) p/ purgar estados fantasma de quem
+    // caiu sem destroy limpo (evita avatares duplicados no facepile).
     this.awareness.setLocalStateField("user", {
       name: opts.user.name,
       color: opts.user.color,
@@ -100,12 +107,47 @@ export class KindrawYjsProvider {
       githubLogin: opts.user.githubLogin,
       userId: opts.user.userId,
       idle: false,
+      t: Date.now(),
     });
 
     this.doc.on("update", this.handleLocalDocUpdate);
     this.awareness.on("update", this.handleLocalAwarenessUpdate);
 
+    // Heartbeat de awareness: reenvia o próprio estado e purga estados remotos
+    // velhos (sem heartbeat há > STALE) periodicamente.
+    this.awarenessTimer = window.setInterval(() => {
+      this.touchAwareness();
+      this.purgeStalePresence();
+    }, AWARENESS_HEARTBEAT_MS);
+
     this.connect();
+  }
+
+  // Reenvia o estado local com timestamp novo (mantém "vivo" para os peers).
+  private touchAwareness() {
+    const current = this.awareness.getLocalState()?.user;
+    if (current) {
+      this.awareness.setLocalStateField("user", { ...current, t: Date.now() });
+    }
+  }
+
+  // Remove estados de awareness remotos sem heartbeat recente (fantasmas de
+  // quem fechou a aba abruptamente).
+  private purgeStalePresence() {
+    const now = Date.now();
+    const stale: number[] = [];
+    for (const [clientId, state] of this.awareness.getStates()) {
+      if (clientId === this.doc.clientID) {
+        continue;
+      }
+      const t = (state as { user?: { t?: number } }).user?.t;
+      if (typeof t === "number" && now - t > PRESENCE_STALE_MS) {
+        stale.push(clientId);
+      }
+    }
+    if (stale.length) {
+      removeAwarenessStates(this.awareness, stale, "stale");
+    }
   }
 
   // --- Presença / idle -----------------------------------------------------
@@ -135,9 +177,19 @@ export class KindrawYjsProvider {
       idle: boolean;
       isSelf: boolean;
     }> = [];
+    const now = Date.now();
     for (const [clientId, state] of states) {
       const user = (state as { user?: Record<string, unknown> }).user;
       if (!user) {
+        continue;
+      }
+      // ignora fantasmas (sem heartbeat recente), exceto o próprio.
+      const t = user.t as number | undefined;
+      if (
+        clientId !== selfClientId &&
+        typeof t === "number" &&
+        now - t > PRESENCE_STALE_MS
+      ) {
         continue;
       }
       list.push({
@@ -373,6 +425,10 @@ export class KindrawYjsProvider {
   destroy() {
     this.destroyed = true;
     this.stopHeartbeat();
+    if (this.awarenessTimer !== null) {
+      window.clearInterval(this.awarenessTimer);
+      this.awarenessTimer = null;
+    }
     if (this.snapshotTimer !== null) {
       window.clearTimeout(this.snapshotTimer);
       this.snapshotTimer = null;
