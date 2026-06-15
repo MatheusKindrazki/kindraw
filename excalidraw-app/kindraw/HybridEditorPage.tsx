@@ -48,7 +48,6 @@ import {
   navigateKindraw,
 } from "./router";
 import { ShareHybridModal } from "./ShareHybridModal";
-import { ShareLinksPanel } from "./ShareLinksPanel";
 import { getKindrawDraft, setKindrawDraft } from "./storage";
 import { usePresence } from "./usePresence";
 import { getErrorMessage, isDraftNewer } from "./utils";
@@ -1140,22 +1139,25 @@ export const HybridEditorPage = ({
           ))}
         </div>
         <div className="kindraw-editor-header__trailing">
-          <PresenceFacepile users={presence} />
-          <span
-            className={`kindraw-pill kindraw-pill--${
-              saveState === "idle" ? "ok" : saveState
-            }`}
-            title={statusMessage}
-          >
-            <i />
-            <span>{statusMessage}</span>
-          </span>
+          <div className="kindraw-header-collab">
+            <PresenceFacepile users={presence} />
+            <span
+              className={`kindraw-pill kindraw-pill--${
+                saveState === "idle" ? "ok" : saveState
+              }`}
+              title={statusMessage}
+            >
+              <i />
+              <span>{statusMessage}</span>
+            </span>
+          </div>
+          <div className="kindraw-header-actions">
           <button
-            className="kindraw-btn kindraw-btn--soft kindraw-btn--sm"
+            className="kindraw-btn kindraw-btn--primary"
             onClick={() => setShareModalOpen(true)}
             type="button"
           >
-            <KindrawIcon name="users" size={14} /> Compartilhar
+            <KindrawIcon name="share" size={16} /> Compartilhar
           </button>
           <div className="kindraw-menuwrap" ref={headerMenuRef}>
             <button
@@ -1185,16 +1187,7 @@ export const HybridEditorPage = ({
               </div>
             ) : null}
           </div>
-          <ShareLinksPanel
-            busy={saveState === "saving"}
-            buildShareUrl={(token) =>
-              buildPublicShareUrl(token, { view: "both" })
-            }
-            onCreateShareLink={handleCreateShareLink}
-            onRevokeShareLink={handleRevokeShareLink}
-            shareLinks={response.hybrid.shareLinks}
-            supportsLiveEdit
-          />
+          </div>
         </div>
       </header>
 
@@ -1297,9 +1290,14 @@ export const HybridEditorPage = ({
 
       {shareModalOpen ? (
         <ShareHybridModal
+          buildShareUrl={(token) => buildPublicShareUrl(token, { view: "both" })}
+          busy={saveState === "saving"}
           hybrid={{ id: hybridId, title: response.hybrid.title }}
           onChange={() => void onTreeRefresh()}
           onClose={() => setShareModalOpen(false)}
+          onCreateShareLink={handleCreateShareLink}
+          onRevokeShareLink={handleRevokeShareLink}
+          shareLinks={response.hybrid.shareLinks}
         />
       ) : null}
     </div>

@@ -34,6 +34,9 @@
   --kd-hybrid-fg: #2f6b3a;
   --kd-ok: #3e7c4f;
   --kd-ok-bg: #e4efe2;
+  /* verde "ao vivo" (presença/colaboração) — unificado p/ facepile, banner, notes */
+  --kd-live: #2f8f54;
+  --kd-live-bg: rgba(47, 143, 84, 0.12);
   --kd-danger: #b42318;
   --kd-danger-bg: rgba(180, 35, 24, 0.16);
 
@@ -1436,9 +1439,31 @@
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 10px;
-  flex: 1 1 0;
+  gap: 16px;
+  flex: 0 0 auto;
   min-width: 0;
+}
+
+/* Dois blocos no trailing do híbrido: colaboração (facepile+status) e ações
+   (compartilhar + menu), cada um agrupado e respirado. */
+.kindraw-header-collab,
+.kindraw-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* No header do híbrido, o status "sincronizado" (ok) colapsa para só o ponto —
+   o texto vem no hover (title). Saving/erro mantêm o texto. NÃO afeta o pill de
+   Drawing/Doc (esses não vivem em .kindraw-header-collab). */
+.kindraw-header-collab .kindraw-pill--ok {
+  width: 30px;
+  padding: 0;
+  justify-content: center;
+}
+
+.kindraw-header-collab .kindraw-pill--ok > span {
+  display: none;
 }
 
 .kindraw-editor-header__segment {
@@ -2361,7 +2386,7 @@
 }
 
 .kindraw-hybrid-shell__divider:focus-visible {
-  outline: 2px solid var(--kd-amber);
+  outline: 2px solid #d9b36a;
   outline-offset: -2px;
 }
 
@@ -2557,17 +2582,17 @@
   width: 40px;
   height: 40px;
   border: 1px solid var(--kd-line);
-  border-radius: 12px;
+  border-radius: var(--kd-r-island);
   background: var(--kd-surface);
   color: var(--kd-ink);
   cursor: pointer;
-  box-shadow: var(--kd-shadow-popover);
+  box-shadow: var(--kd-shadow-island);
   transition: background 0.15s ease, border-color 0.15s ease;
 }
 
 .kindraw-insert-trigger:hover {
   background: var(--kd-hover);
-  border-color: var(--kd-amber);
+  border-color: #d9b36a;
 }
 
 .kindraw-insert-trigger svg {
@@ -2588,17 +2613,17 @@
   gap: 5px;
   font-size: 12px;
   font-weight: 700;
-  color: #2e9e5b;
+  color: var(--kd-live);
   padding: 2px 8px;
   border-radius: 999px;
-  background: rgba(46, 158, 91, 0.12);
+  background: var(--kd-live-bg);
 }
 
 .kindraw-facepile__dot {
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: #2e9e5b;
+  background: var(--kd-live);
   box-shadow: 0 0 0 0 rgba(46, 158, 91, 0.5);
   animation: kindraw-live-pulse 1.8s ease-out infinite;
 }
@@ -2721,7 +2746,7 @@
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: #2e9e5b;
+  background: var(--kd-live);
 }
 
 /* Sessão de colaboração ao vivo (doc Yjs) */
@@ -2742,7 +2767,7 @@
   width: 9px;
   height: 9px;
   border-radius: 50%;
-  background: #2e9e5b;
+  background: var(--kd-live);
   box-shadow: 0 0 0 0 rgba(46, 158, 91, 0.5);
   animation: kindraw-live-pulse 1.8s ease-out infinite;
 }
@@ -3259,6 +3284,29 @@
   margin: 0;
   font-size: 13px;
   color: var(--kd-muted);
+}
+
+/* Seção "Acesso por link" no dialog unificado de share do híbrido */
+.kindraw-sharemodal__section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--kd-line);
+}
+
+.kindraw-sharemodal__section-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--kd-faint);
+}
+
+/* foco acessível na caixa do link (B2) */
+.kindraw-linkbox:focus-within {
+  border-color: #d9b36a;
+  box-shadow: 0 0 0 3px var(--kd-amber-soft);
 }
 
 .kindraw-sharemodal__list {

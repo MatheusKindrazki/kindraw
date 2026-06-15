@@ -8,12 +8,15 @@ import {
   updateHybridShareRole,
 } from "./api";
 import { KindrawIcon } from "./icons";
+import { PublicShareLinkSection } from "./PublicShareLinkSection";
 import { getErrorMessage } from "./utils";
 
 import type { ChangeEvent } from "react";
 
 import type {
   KindrawHybridShare,
+  KindrawShareLink,
+  KindrawShareLinkAccess,
   KindrawShareRole,
   KindrawUser,
 } from "./types";
@@ -41,11 +44,22 @@ export const ShareHybridModal = ({
   hybrid,
   onClose,
   onChange,
+  shareLinks,
+  onCreateShareLink,
+  onRevokeShareLink,
+  buildShareUrl,
+  busy,
 }: {
   hybrid: { id: string; title: string };
   onClose: () => void;
   /** Disparado após qualquer mutação bem-sucedida (ex.: refreshTree). */
   onChange?: () => void;
+  // Link público (mesma seção do popover de Drawing/Doc, embutida aqui).
+  shareLinks: KindrawShareLink[];
+  onCreateShareLink: (access?: KindrawShareLinkAccess) => Promise<void> | void;
+  onRevokeShareLink: (shareLinkId: string) => Promise<void> | void;
+  buildShareUrl?: (token: string) => string;
+  busy?: boolean;
 }) => {
   const [shares, setShares] = useState<KindrawHybridShare[] | null>(null);
   const [listError, setListError] = useState<string | null>(null);
@@ -256,6 +270,21 @@ export const ShareHybridModal = ({
           Editores podem editar o documento e o canvas em tempo real junto com
           você. Visualizadores só leem.
         </p>
+
+        {/* Acesso geral: link público + permissão (read / editar ao vivo) */}
+        <div className="kindraw-sharemodal__section">
+          <span className="kindraw-sharemodal__section-label">
+            Acesso por link
+          </span>
+          <PublicShareLinkSection
+            buildShareUrl={buildShareUrl}
+            busy={busy}
+            onCreateShareLink={onCreateShareLink}
+            onRevokeShareLink={onRevokeShareLink}
+            shareLinks={shareLinks}
+            supportsLiveEdit
+          />
+        </div>
 
         <div className="kindraw-sharemodal__invite" ref={inviteRef}>
           <div className="kindraw-sharemodal__invite-row">

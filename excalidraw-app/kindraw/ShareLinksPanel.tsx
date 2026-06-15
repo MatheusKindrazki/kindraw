@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { buildPublicShareUrl } from "./api";
 import { KindrawIcon } from "./icons";
+import { PublicShareLinkSection } from "./PublicShareLinkSection";
 
 import type { KindrawShareLink, KindrawShareLinkAccess } from "./types";
 
@@ -17,8 +18,8 @@ type ShareLinksPanelProps = {
 
 /**
  * Popover de compartilhamento ancorado no botão primário "Compartilhar".
- * Fecha com clique fora ou Esc; o feedback de cópia acontece no próprio
- * botão ("Copiado ✓" por 2s), sem tocar no status pill global.
+ * Usado pelos editores de canvas/doc avulsos (Drawing/Doc). O editor híbrido usa
+ * o dialog unificado (ShareHybridModal), que embute a mesma PublicShareLinkSection.
  */
 export const ShareLinksPanel = ({
   shareLinks,
@@ -29,9 +30,7 @@ export const ShareLinksPanel = ({
   supportsLiveEdit,
 }: ShareLinksPanelProps) => {
   const [shareOpen, setShareOpen] = useState(false);
-  const [copied, setCopied] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
-  const copyTimeoutRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (!shareOpen) {
@@ -57,39 +56,6 @@ export const ShareLinksPanel = ({
     };
   }, [shareOpen]);
 
-  useEffect(
-    () => () => {
-      if (copyTimeoutRef.current !== null) {
-        window.clearTimeout(copyTimeoutRef.current);
-      }
-    },
-    [],
-  );
-
-  const activeShareLink = shareLinks[0] || null;
-  const publicUrl = activeShareLink
-    ? buildShareUrl(activeShareLink.token)
-    : null;
-
-  const handleCopy = useCallback(async () => {
-    if (!publicUrl || !navigator.clipboard) {
-      return;
-    }
-
-    try {
-      await navigator.clipboard.writeText(publicUrl);
-      setCopied(true);
-      if (copyTimeoutRef.current !== null) {
-        window.clearTimeout(copyTimeoutRef.current);
-      }
-      copyTimeoutRef.current = window.setTimeout(() => {
-        setCopied(false);
-      }, 2000);
-    } catch (error) {
-      console.warn("Failed to copy Kindraw share link:", error);
-    }
-  }, [publicUrl]);
-
   return (
     <div className="kindraw-menuwrap" ref={wrapRef}>
       <button
@@ -109,84 +75,14 @@ export const ShareLinksPanel = ({
           role="dialog"
         >
           <h3 className="kindraw-share__title">Compartilhar</h3>
-
-          <div className="kindraw-share__row">
-            <div className="kindraw-share__rowtext">
-              <strong>Link público</strong>
-              <span>Qualquer pessoa com o link pode ver</span>
-            </div>
-            <button
-              aria-checked={Boolean(activeShareLink)}
-              aria-label="Link público"
-              className={`kindraw-toggle${
-                activeShareLink ? " kindraw-toggle--on" : ""
-              }`}
-              disabled={busy}
-              onClick={() =>
-                activeShareLink
-                  ? void onRevokeShareLink(activeShareLink.id)
-                  : void onCreateShareLink()
-              }
-              role="switch"
-              type="button"
-            >
-              <i />
-            </button>
-          </div>
-
-          {activeShareLink && publicUrl ? (
-            <>
-              {supportsLiveEdit ? (
-                <div className="kindraw-share__access">
-                  <label className="kindraw-share__access-label">
-                    Permissão do link
-                  </label>
-                  <select
-                    aria-label="Permissão do link"
-                    className="kindraw-sharemodal__roleselect"
-                    disabled={busy}
-                    onChange={(event) =>
-                      void onCreateShareLink(
-                        event.target.value as KindrawShareLinkAccess,
-                      )
-                    }
-                    value={activeShareLink.access || "read"}
-                  >
-                    <option value="read">Somente leitura</option>
-                    <option value="live-edit">Pode editar ao vivo</option>
-                  </select>
-                </div>
-              ) : null}
-              <div className="kindraw-linkbox">
-                <a href={publicUrl} rel="noreferrer" target="_blank">
-                  {publicUrl.replace(/^https?:\/\//, "")}
-                </a>
-                <button
-                  className="kindraw-btn kindraw-btn--soft kindraw-btn--sm"
-                  onClick={() => void handleCopy()}
-                  type="button"
-                >
-                  {copied ? (
-                    <>
-                      Copiado <KindrawIcon name="check" size={13} />
-                    </>
-                  ) : (
-                    <>
-                      <KindrawIcon name="copy" size={14} /> Copiar
-                    </>
-                  )}
-                </button>
-              </div>
-            </>
-          ) : null}
-
-          {supportsLiveEdit ? (
-            <p className="kindraw-share__live-note">
-              <span className="kindraw-share__live-dot" />
-              A edição é colaborativa em tempo real — todos com acesso de edição
-              veem as mudanças ao vivo.
-            </p>
-          ) : null}
+          <PublicShareLinkSection
+            buildShareUrl={buildShareUrl}
+            busy={busy}
+            onCreateShareLink={onCreateShareLink}
+            onRevokeShareLink={onRevokeShareLink}
+            shareLinks={shareLinks}
+            supportsLiveEdit={supportsLiveEdit}
+          />
         </div>
       ) : null}
     </div>
