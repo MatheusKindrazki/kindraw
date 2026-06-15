@@ -878,14 +878,6 @@ export const HybridEditorPage = ({
     return ids;
   }, [hybridId, sceneElements]);
 
-  const activeLinkedSection = useMemo(
-    () =>
-      activeSectionId && linkedSectionIds.has(activeSectionId)
-        ? sections.find((section) => section.id === activeSectionId) || null
-        : null,
-    [activeSectionId, linkedSectionIds, sections],
-  );
-
   const linkingSection = useMemo(
     () =>
       linkingSectionId
@@ -983,12 +975,6 @@ export const HybridEditorPage = ({
             Cancelar
           </button>
         </div>
-      ) : null}
-      {activeLinkedSection && !linkingSection ? (
-        <span className="kindraw-canvas-chip">
-          <KindrawIcon name="link" size={11} /> Seção:{" "}
-          {activeLinkedSection.title}
-        </span>
       ) : null}
       <Excalidraw
         key={response.drawing.item.id}
