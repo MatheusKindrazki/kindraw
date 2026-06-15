@@ -13,9 +13,6 @@ type ShareLinksPanelProps = {
   buildShareUrl?: (token: string) => string;
   /** Quando true, exibe o seletor de modo do link (leitura / edição ao vivo). */
   supportsLiveEdit?: boolean;
-  /** Quando definido, exibe a linha "Sessão ao vivo" no popover. */
-  liveSessionActive?: boolean;
-  onToggleLiveSession?: () => Promise<void> | void;
 };
 
 /**
@@ -30,8 +27,6 @@ export const ShareLinksPanel = ({
   busy,
   buildShareUrl = buildPublicShareUrl,
   supportsLiveEdit,
-  liveSessionActive,
-  onToggleLiveSession,
 }: ShareLinksPanelProps) => {
   const [shareOpen, setShareOpen] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -185,25 +180,12 @@ export const ShareLinksPanel = ({
             </>
           ) : null}
 
-          {onToggleLiveSession ? (
-            <div className="kindraw-share__row">
-              <div className="kindraw-share__rowtext">
-                <strong>Sessão ao vivo</strong>
-                <span>Colabore em tempo real com identidade GitHub</span>
-              </div>
-              <button
-                className={`kindraw-btn kindraw-btn--sm ${
-                  liveSessionActive
-                    ? "kindraw-btn--soft"
-                    : "kindraw-btn--primary"
-                }`}
-                disabled={busy}
-                onClick={() => void onToggleLiveSession()}
-                type="button"
-              >
-                {liveSessionActive ? "Encerrar" : "Iniciar"}
-              </button>
-            </div>
+          {supportsLiveEdit ? (
+            <p className="kindraw-share__live-note">
+              <span className="kindraw-share__live-dot" />
+              A edição é colaborativa em tempo real — todos com acesso de edição
+              veem as mudanças ao vivo.
+            </p>
           ) : null}
         </div>
       ) : null}

@@ -126,14 +126,11 @@ export const HybridMarkdownPane = ({
 
   // Modo colaborativo ao vivo: um único editor full-document governado por Yjs,
   // com presença/cursores. O markdown serializado continua sendo salvo por baixo
-  // (onMarkdownChange) para manter D1/preview público consistentes.
+  // (onMarkdownChange) para manter D1/preview público consistentes. A presença
+  // (quem está aqui) é comunicada pelo facepile no header — sem banner ruidoso.
   if (collabProvider) {
     return (
       <div className="kindraw-hybrid-doc kindraw-hybrid-doc--live">
-        <div className="kindraw-live-banner" role="status">
-          <span className="kindraw-live-banner__dot" />
-          Sessão ao vivo — edição colaborativa em tempo real
-        </div>
         <div className="kindraw-hybrid-doc__editor kindraw-hybrid-doc__editor--live">
           <RichTextEditor
             collab={{ provider: collabProvider, fieldName: "default" }}

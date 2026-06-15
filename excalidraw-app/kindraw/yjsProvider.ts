@@ -91,15 +91,76 @@ export class KindrawYjsProvider {
     this.user = opts.user;
     this.doc = opts.doc ?? new Y.Doc();
     this.awareness = new Awareness(this.doc);
+    // Awareness rica: além de name+color (que o CollaborationCaret usa), levamos
+    // avatar/login/userId p/ o facepile e um flag de idle p/ dim/grace-period.
     this.awareness.setLocalStateField("user", {
       name: opts.user.name,
       color: opts.user.color,
+      avatarUrl: opts.user.avatarUrl,
+      githubLogin: opts.user.githubLogin,
+      userId: opts.user.userId,
+      idle: false,
     });
 
     this.doc.on("update", this.handleLocalDocUpdate);
     this.awareness.on("update", this.handleLocalAwarenessUpdate);
 
     this.connect();
+  }
+
+  // --- Presença / idle -----------------------------------------------------
+  // Marca o usuário local como ativo/idle no awareness (dim no facepile, fade do
+  // cursor antes da remoção). Chamado pela UI em atividade/inatividade.
+  setIdle(idle: boolean) {
+    const current = this.awareness.getLocalState()?.user;
+    if (!current || current.idle === idle) {
+      return;
+    }
+    this.awareness.setLocalStateField("user", { ...current, idle });
+  }
+
+  // Snapshot reativo dos participantes a partir do awareness (fonte única de
+  // presença p/ doc + canvas). A chave estável é userId (logado) ou clientID.
+  getPresence() {
+    const states = this.awareness.getStates();
+    const selfClientId = this.doc.clientID;
+    const list: Array<{
+      key: string;
+      clientId: number;
+      name: string;
+      color: string;
+      avatarUrl: string | null;
+      githubLogin: string | null;
+      userId: string | null;
+      idle: boolean;
+      isSelf: boolean;
+    }> = [];
+    for (const [clientId, state] of states) {
+      const user = (state as { user?: Record<string, unknown> }).user;
+      if (!user) {
+        continue;
+      }
+      list.push({
+        key: (user.userId as string) || `client:${clientId}`,
+        clientId,
+        name: (user.name as string) || "Convidado",
+        color: (user.color as string) || "#888",
+        avatarUrl: (user.avatarUrl as string | null) ?? null,
+        githubLogin: (user.githubLogin as string | null) ?? null,
+        userId: (user.userId as string | null) ?? null,
+        idle: Boolean(user.idle),
+        isSelf: clientId === selfClientId,
+      });
+    }
+    return list;
+  }
+
+  // Inscreve um listener para mudanças de presença (awareness). Retorna cleanup.
+  onPresenceChange(listener: () => void): () => void {
+    this.awareness.on("change", listener);
+    return () => {
+      this.awareness.off("change", listener);
+    };
   }
 
   onSynced(listener: () => void): () => void {

@@ -359,10 +359,8 @@ export const DrawingEditorPage = ({
           </button>
           <ShareLinksPanel
             busy={saveState === "saving"}
-            liveSessionActive={liveSessionActive}
             onCreateShareLink={handleCreateShareLink}
             onRevokeShareLink={handleRevokeShareLink}
-            onToggleLiveSession={handleToggleLiveSession}
             shareLinks={itemResponse.item.shareLinks}
           />
         </div>
