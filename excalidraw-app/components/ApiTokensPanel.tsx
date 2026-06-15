@@ -3,7 +3,6 @@ import { FilledButton } from "@excalidraw/excalidraw/components/FilledButton";
 import { TextField } from "@excalidraw/excalidraw/components/TextField";
 import { copyIcon, TrashIcon } from "@excalidraw/excalidraw/components/icons";
 import { useCopyStatus } from "@excalidraw/excalidraw/hooks/useCopiedIndicator";
-import { useI18n } from "@excalidraw/excalidraw/i18n";
 import { useCallback, useEffect, useState } from "react";
 
 import {
@@ -32,7 +31,6 @@ const formatDate = (value: string | null) => {
  * Reutilizado pelo ApiTokensDialog e pela aba "API keys" do SettingsDialog.
  */
 export const ApiTokensPanel = () => {
-  const { t } = useI18n();
   const [tokens, setTokens] = useState<KindrawApiToken[]>([]);
   const [name, setName] = useState("");
   const [loading, setLoading] = useState(false);
@@ -75,7 +73,11 @@ export const ApiTokensPanel = () => {
 
   const handleRevoke = async (prefix: string) => {
     // eslint-disable-next-line no-alert
-    if (!window.confirm(t("kindraw.apiTokens.revokeConfirm"))) {
+    if (
+      !window.confirm(
+        "Revogar este token? Apps que o usam vão parar de funcionar.",
+      )
+    ) {
       return;
     }
     setError(null);
@@ -90,25 +92,26 @@ export const ApiTokensPanel = () => {
   return (
     <div className="kindraw-api-tokens">
       <p className="kindraw-api-tokens__description">
-        {t("kindraw.apiTokens.description")}
+        Crie um token para usar o Kindraw pela CLI (npx kindraw) ou pelo
+        servidor MCP do Claude. Um token tem acesso total à sua conta.
       </p>
 
       {newSecret && (
         <div className="kindraw-api-tokens__secret">
-          <strong>{t("kindraw.apiTokens.secretTitle")}</strong>
+          <strong>Copie seu token agora</strong>
           <code className="kindraw-api-tokens__secret-value">{newSecret}</code>
           <FilledButton
             size="large"
             status={copyStatus}
             icon={copyIcon}
-            label={t("kindraw.apiTokens.copy")}
+            label="Copiar token"
             onClick={() => {
               void copyTextToSystemClipboard(newSecret);
               onCopy();
             }}
           />
           <span className="kindraw-api-tokens__secret-helper">
-            {t("kindraw.apiTokens.secretHelper")}
+            Esta é a única vez que o token aparece. Guarde-o num lugar seguro.
           </span>
         </div>
       )}
@@ -116,17 +119,13 @@ export const ApiTokensPanel = () => {
       <div className="kindraw-api-tokens__create">
         <TextField
           value={name}
-          placeholder={t("kindraw.apiTokens.namePlaceholder")}
+          placeholder="Nome do token (ex.: Meu notebook)"
           onChange={setName}
-          label={t("kindraw.apiTokens.title")}
+          label="API tokens"
         />
         <FilledButton
           size="large"
-          label={
-            generating
-              ? t("kindraw.apiTokens.generating")
-              : t("kindraw.apiTokens.generate")
-          }
+          label={generating ? "Gerando..." : "Gerar token"}
           onClick={() => void handleGenerate()}
         />
       </div>
@@ -134,13 +133,11 @@ export const ApiTokensPanel = () => {
       {error && <p className="kindraw-api-tokens__error">{error}</p>}
 
       <div className="kindraw-api-tokens__list">
-        <h4>{t("kindraw.apiTokens.listTitle")}</h4>
+        <h4>Tokens ativos</h4>
         {loading ? (
           <p className="kindraw-api-tokens__muted">…</p>
         ) : tokens.length === 0 ? (
-          <p className="kindraw-api-tokens__muted">
-            {t("kindraw.apiTokens.empty")}
-          </p>
+          <p className="kindraw-api-tokens__muted">Nenhum token ainda.</p>
         ) : (
           <ul>
             {tokens.map((token) => (
@@ -155,16 +152,14 @@ export const ApiTokensPanel = () => {
                 </div>
                 <div className="kindraw-api-tokens__item-meta">
                   {token.lastSeenAt
-                    ? t("kindraw.apiTokens.lastUsed", {
-                        date: formatDate(token.lastSeenAt) || "",
-                      })
-                    : t("kindraw.apiTokens.neverUsed")}
+                    ? `Último uso ${formatDate(token.lastSeenAt) || ""}`
+                    : "Nunca usado"}
                 </div>
                 <button
                   className="kindraw-api-tokens__revoke"
                   type="button"
-                  aria-label={t("kindraw.apiTokens.revoke")}
-                  title={t("kindraw.apiTokens.revoke")}
+                  aria-label="Revogar"
+                  title="Revogar"
                   onClick={() => void handleRevoke(token.prefix)}
                 >
                   {TrashIcon}

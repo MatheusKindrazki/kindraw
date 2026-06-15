@@ -1,10 +1,7 @@
-import { Dialog } from "@excalidraw/excalidraw/components/Dialog";
-import { useI18n } from "@excalidraw/excalidraw/i18n";
 import { useEffect, useState } from "react";
 
-import type { TranslationKeys } from "@excalidraw/excalidraw/i18n";
-
 import { atom, useAtom } from "../app-jotai";
+import { KindrawIcon } from "../kindraw/icons";
 
 import { AgentsGuide } from "./AgentsGuide";
 import { ApiTokensPanel } from "./ApiTokensPanel";
@@ -20,13 +17,17 @@ export const settingsDialogStateAtom = atom<{
   isOpen: false,
 });
 
-const TABS: { id: SettingsDialogTab; labelKey: TranslationKeys }[] = [
-  { id: "api-keys", labelKey: "kindraw.settings.tabs.apiKeys" },
-  { id: "agents", labelKey: "kindraw.settings.tabs.agents" },
+const TABS: { id: SettingsDialogTab; label: string }[] = [
+  { id: "api-keys", label: "API keys" },
+  { id: "agents", label: "Usar em Agents/LLMs" },
 ];
 
+// NOTE: usa a casca de modal própria do shell Kindraw (.kindraw-modal-overlay /
+// .kindraw-modal), NÃO o <Dialog> de @excalidraw/excalidraw — aquele depende do
+// editor-jotai isolado (createIsolation) que só existe dentro do <Excalidraw>.
+// Como este modal abre no workspace (KindrawApp, sem editor montado), usar o
+// Dialog do Excalidraw crasha com "Missing Provider from createIsolation".
 export const SettingsDialog = () => {
-  const { t } = useI18n();
   const [state, setState] = useAtom(settingsDialogStateAtom);
   const [activeTab, setActiveTab] = useState<SettingsDialogTab>("api-keys");
 
@@ -36,17 +37,52 @@ export const SettingsDialog = () => {
     }
   }, [state.isOpen, state.tab]);
 
+  const close = () => setState({ isOpen: false });
+
+  useEffect(() => {
+    if (!state.isOpen) {
+      return;
+    }
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setState({ isOpen: false });
+      }
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [state.isOpen, setState]);
+
   if (!state.isOpen) {
     return null;
   }
 
   return (
-    <Dialog
-      size="small"
-      onCloseRequest={() => setState({ isOpen: false })}
-      title={t("kindraw.settings.title")}
+    <div
+      className="kindraw-modal-overlay"
+      onClick={(event) => {
+        if (event.target === event.currentTarget) {
+          close();
+        }
+      }}
     >
-      <div className="kindraw-settings">
+      <div
+        aria-labelledby="kindraw-settings-title"
+        aria-modal="true"
+        className="kindraw-modal kindraw-settings"
+        role="dialog"
+      >
+        <div className="kindraw-settings__head">
+          <h2 id="kindraw-settings-title">Configurações</h2>
+          <button
+            aria-label="Fechar"
+            className="kindraw-settings__close"
+            onClick={close}
+            type="button"
+          >
+            <KindrawIcon name="close" size={16} />
+          </button>
+        </div>
+
         <div className="kindraw-settings__tablist" role="tablist">
           {TABS.map((tab) => (
             <button
@@ -62,7 +98,7 @@ export const SettingsDialog = () => {
               }`}
               onClick={() => setActiveTab(tab.id)}
             >
-              {t(tab.labelKey)}
+              {tab.label}
             </button>
           ))}
         </div>
@@ -76,6 +112,6 @@ export const SettingsDialog = () => {
           {activeTab === "api-keys" ? <ApiTokensPanel /> : <AgentsGuide />}
         </div>
       </div>
-    </Dialog>
+    </div>
   );
 };

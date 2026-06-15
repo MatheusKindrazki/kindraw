@@ -1,10 +1,7 @@
 import { copyTextToSystemClipboard } from "@excalidraw/excalidraw/clipboard";
-import { useI18n } from "@excalidraw/excalidraw/i18n";
 import { useState } from "react";
 
 import { createApiToken } from "../kindraw/api";
-
-import type { TranslationKeys } from "@excalidraw/excalidraw/i18n";
 
 import "./AgentsGuide.scss";
 
@@ -30,17 +27,22 @@ npx @kindraw/cli items list`;
 const buildCliGenerate = () =>
   `kindraw generate --mermaid flow.mmd --title "My flow"`;
 
-const MCP_TOOLS: { name: string; descKey: TranslationKeys }[] = [
-  { name: "kindraw_create_diagram", descKey: "kindraw.agents.tools.createDiagram" },
-  { name: "kindraw_create_drawing", descKey: "kindraw.agents.tools.createDrawing" },
-  { name: "kindraw_list_items", descKey: "kindraw.agents.tools.listItems" },
-  { name: "kindraw_get_item", descKey: "kindraw.agents.tools.getItem" },
-  { name: "kindraw_delete_item", descKey: "kindraw.agents.tools.deleteItem" },
+const MCP_TOOLS: { name: string; desc: string }[] = [
+  {
+    name: "kindraw_create_diagram",
+    desc: "Cria um desenho a partir de uma definição Mermaid (fluxograma, sequência, classe, ER…).",
+  },
+  {
+    name: "kindraw_create_drawing",
+    desc: "Cria um desenho a partir de JSON do Excalidraw já serializado.",
+  },
+  { name: "kindraw_list_items", desc: "Lista seus desenhos e docs." },
+  { name: "kindraw_get_item", desc: "Busca um item com o conteúdo." },
+  { name: "kindraw_delete_item", desc: "Exclui um item." },
 ];
 
 /** Bloco de código com botão "Copiar" e feedback inline. */
 const CodeBlock = ({ code, label }: { code: string; label?: string }) => {
-  const { t } = useI18n();
   const [copied, setCopied] = useState(false);
 
   const handleCopy = async () => {
@@ -65,9 +67,7 @@ const CodeBlock = ({ code, label }: { code: string; label?: string }) => {
           className="kindraw-codeblock__copy"
           onClick={() => void handleCopy()}
         >
-          {copied
-            ? t("kindraw.agents.copied")
-            : t("kindraw.agents.copy")}
+          {copied ? "Copiado!" : "Copiar"}
         </button>
       </div>
     </div>
@@ -79,7 +79,6 @@ const CodeBlock = ({ code, label }: { code: string; label?: string }) => {
  * uso via CLI. Permite gerar uma key inline que preenche os snippets uma vez.
  */
 export const AgentsGuide = () => {
-  const { t } = useI18n();
   const [token, setToken] = useState<string | null>(null);
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -102,7 +101,9 @@ export const AgentsGuide = () => {
   return (
     <div className="kindraw-agents-guide">
       <p className="kindraw-agents-guide__intro">
-        {t("kindraw.agents.intro")}
+        Conecte o Kindraw ao Claude, Cursor ou qualquer agente compatível com
+        MCP, ou use pelo terminal com a CLI. Gere uma key abaixo para preencher
+        os exemplos.
       </p>
 
       <div className="kindraw-agents-guide__keybar">
@@ -112,17 +113,15 @@ export const AgentsGuide = () => {
           onClick={() => void handleGenerate()}
           disabled={generating}
         >
-          {generating
-            ? t("kindraw.apiTokens.generating")
-            : t("kindraw.agents.generateKey")}
+          {generating ? "Gerando..." : "Gerar key para esta integração"}
         </button>
         {token ? (
           <span className="kindraw-agents-guide__warning">
-            {t("kindraw.apiTokens.secretHelper")}
+            Esta é a única vez que a key aparece. Guarde-a num lugar seguro.
           </span>
         ) : (
           <span className="kindraw-agents-guide__hint">
-            {t("kindraw.agents.keyHint")}
+            Gere uma key para preencher os exemplos abaixo, ou cole a sua.
           </span>
         )}
       </div>
@@ -131,14 +130,17 @@ export const AgentsGuide = () => {
 
       {/* Bloco A — MCP (Claude/Cursor) */}
       <section className="kindraw-agents-guide__section">
-        <h4>{t("kindraw.agents.mcpTitle")}</h4>
-        <p>{t("kindraw.agents.mcpDescription")}</p>
+        <h4>Configurar MCP (Claude / Cursor)</h4>
+        <p>
+          Adicione este servidor à config do seu cliente MCP (~/.claude.json ou
+          .mcp.json do projeto). Reinicie o cliente depois.
+        </p>
         <CodeBlock code={buildMcpConfig(tokenValue)} />
         <ul className="kindraw-agents-guide__tools">
           {MCP_TOOLS.map((tool) => (
             <li key={tool.name}>
               <code>{tool.name}</code>
-              <span>{t(tool.descKey)}</span>
+              <span>{tool.desc}</span>
             </li>
           ))}
         </ul>
@@ -146,13 +148,16 @@ export const AgentsGuide = () => {
 
       {/* Bloco B — CLI */}
       <section className="kindraw-agents-guide__section">
-        <h4>{t("kindraw.agents.cliTitle")}</h4>
-        <p>{t("kindraw.agents.cliDescription")}</p>
-        <CodeBlock code={buildCliLogin()} label={t("kindraw.agents.cliLoginLabel")} />
-        <CodeBlock code={buildCliEnv(tokenValue)} label={t("kindraw.agents.cliEnvLabel")} />
+        <h4>CLI</h4>
+        <p>
+          Use a CLI de qualquer terminal — entre uma vez, ou passe uma key via
+          variável de ambiente KINDRAW_TOKEN.
+        </p>
+        <CodeBlock code={buildCliLogin()} label="Entrar (abre o navegador)" />
+        <CodeBlock code={buildCliEnv(tokenValue)} label="Ou usar uma key direto" />
         <CodeBlock
           code={buildCliGenerate()}
-          label={t("kindraw.agents.cliGenerateLabel")}
+          label="Gerar um desenho a partir de um arquivo Mermaid"
         />
       </section>
     </div>
