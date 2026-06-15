@@ -41,12 +41,21 @@ type RichTextEditorProps = {
   // Quando presente, o editor entra em modo colaborativo (Yjs): o conteúdo é
   // governado pelo Y.Doc do provider, não pela prop `value`. `value` ainda é
   // usado como seed inicial pelo dono do documento (ver HybridMarkdownPane).
-  // `user` (nome + cor) alimenta o caret nomeado do CollaborationCaret — sem ele
-  // o caret mostra "User: <clientID>".
+  // `user` alimenta o caret nomeado do CollaborationCaret (sem ele o caret mostra
+  // "User: <clientID>"). Passamos o objeto COMPLETO porque o CollaborationCaret
+  // SOBRESCREVE o awareness.user com este objeto — então ele precisa conter os
+  // campos que o facepile também lê (userId/avatarUrl/githubLogin), senão eles
+  // somem do awareness ao montar o editor.
   collab?: {
     provider: KindrawYjsProvider;
     fieldName: string;
-    user: { name: string; color: string };
+    user: {
+      name: string;
+      color: string;
+      avatarUrl?: string | null;
+      githubLogin?: string | null;
+      userId?: string | null;
+    };
   };
   // Markdown inicial para popular um Y.Doc VAZIO ao entrar na sessão (só o
   // primeiro participante semeia; os demais recebem o estado já sincronizado).

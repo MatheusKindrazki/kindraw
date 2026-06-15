@@ -24,8 +24,15 @@ type HybridMarkdownPaneProps = {
   // Quando há uma sessão ao vivo, o painel troca o modo seção por um único
   // editor colaborativo full-document (Yjs).
   collabProvider?: KindrawYjsProvider | null;
-  // identidade do usuário local p/ o caret nomeado (CollaborationCaret).
-  collabUser?: { name: string; color: string } | null;
+  // identidade do usuário local p/ o caret nomeado (CollaborationCaret) +
+  // facepile (avatar/login/id).
+  collabUser?: {
+    name: string;
+    color: string;
+    avatarUrl?: string | null;
+    githubLogin?: string | null;
+    userId?: string | null;
+  } | null;
   onMarkdownChange: (nextMarkdown: string) => void;
   onNavigate: (pathname: string) => void;
   onOpenCanvas: (sectionId: string) => void;
@@ -139,7 +146,13 @@ export const HybridMarkdownPane = ({
             collab={{
               provider: collabProvider,
               fieldName: "default",
-              user: collabUser || { name: "Você", color: "#888" },
+              user: collabUser || {
+                name: "Você",
+                color: "#888",
+                avatarUrl: null,
+                githubLogin: null,
+                userId: null,
+              },
             }}
             onChange={onMarkdownChange}
             placeholder="Escreva em conjunto…"

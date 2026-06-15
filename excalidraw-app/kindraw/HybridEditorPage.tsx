@@ -1009,6 +1009,9 @@ export const HybridEditorPage = ({
             ? {
                 name: currentUser.name || currentUser.githubLogin,
                 color: colorForUser(currentUser.id),
+                avatarUrl: currentUser.avatarUrl,
+                githubLogin: currentUser.githubLogin,
+                userId: currentUser.id,
               }
             : null
         }

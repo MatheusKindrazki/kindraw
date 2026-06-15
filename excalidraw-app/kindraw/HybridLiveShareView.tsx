@@ -223,7 +223,13 @@ export const HybridLiveShareView = ({
                   collab={{
                     provider,
                     fieldName: "default",
-                    user: { name: getStoredName() || "Convidado", color },
+                    user: {
+                      name: getStoredName() || "Convidado",
+                      color,
+                      avatarUrl: null,
+                      githubLogin: null,
+                      userId: guestId,
+                    },
                   }}
                   onChange={() => undefined}
                   placeholder="Escreva em conjunto…"
