@@ -356,6 +356,23 @@ export const HybridEditorPage = ({
     return () => window.clearTimeout(timer);
   }, [lastSavedMarkdown, markdown, persistMarkdown, response]);
 
+  // Flush do documento no unmount/navegação: persiste a última edição pendente
+  // (dentro da janela do debounce) p/ não perder ao sair. Refs p/ ler valores
+  // atuais sem re-armar o effect (que só roda no unmount).
+  const flushMarkdownRef = useRef<() => void>(() => undefined);
+  flushMarkdownRef.current = () => {
+    if (!response || markdown === lastSavedMarkdown) {
+      return;
+    }
+    void persistMarkdown(markdown);
+  };
+  useEffect(
+    () => () => {
+      flushMarkdownRef.current();
+    },
+    [],
+  );
+
   const persistDrawing = useCallback(
     async (content: string) => {
       if (!response) {
@@ -419,6 +436,24 @@ export const HybridEditorPage = ({
     response,
     serializedDrawing,
   ]);
+
+  // Flush do canvas no unmount/navegação: mesma garantia da do documento.
+  const flushDrawingRef = useRef<() => void>(() => undefined);
+  flushDrawingRef.current = () => {
+    if (!response || !drawingSeedContent) {
+      return;
+    }
+    if (!serializedDrawing || serializedDrawing === lastSavedDrawing) {
+      return;
+    }
+    void persistDrawing(serializedDrawing);
+  };
+  useEffect(
+    () => () => {
+      flushDrawingRef.current();
+    },
+    [],
+  );
 
   const commitTitle = useCallback(async () => {
     if (!response) {
@@ -504,24 +539,40 @@ export const HybridEditorPage = ({
   // SEMPRE-AO-VIVO: assim que o híbrido carrega e há um editor (usuário logado),
   // a sessão de colaboração do documento conecta sozinha — sem toggle "Iniciar".
   // Igual Eraser/Figma/tldraw: colaboração é implícita em ter acesso de edição.
+  //
+  // CRÍTICO: este effect só pode (re)criar o provider quando a IDENTIDADE DA
+  // SESSÃO muda (híbrido, usuário, papel) — NUNCA a cada save. O `setResponse`
+  // do autosave troca a referência de `response`; se ele estivesse nas deps, o
+  // provider seria destruído/recriado a cada save, deixando o editor Tiptap preso
+  // ao Y.Doc MORTO do provider anterior (o useEditor não reconfigura extensões),
+  // e as edições parariam de persistir. Por isso dependemos só de primitivas
+  // estáveis e lemos o resto via refs.
+  const userId = currentUser?.id ?? null;
+  // viewer (compartilhamento read-only) não entra em modo de escrita ao vivo.
+  const canGoLive =
+    Boolean(response) &&
+    Boolean(currentUser) &&
+    response?.hybrid.sharedRole !== "viewer";
+  const currentUserRef = useRef(currentUser);
+  currentUserRef.current = currentUser;
+
   useEffect(() => {
-    // só editores logados abrem provider aqui; viewer/anônimo via share view.
-    if (!response || !currentUser) {
+    if (!canGoLive) {
       return undefined;
     }
-    // viewer (compartilhamento read-only) não entra em modo de escrita ao vivo.
-    if (response.hybrid.sharedRole === "viewer") {
+    const user = currentUserRef.current;
+    if (!user) {
       return undefined;
     }
 
     const provider = new KindrawYjsProvider({
       roomId: `hdoc:${hybridId}`,
       user: {
-        name: currentUser.name || userHandle(currentUser),
-        color: colorForUser(currentUser.id),
-        avatarUrl: currentUser.avatarUrl,
-        githubLogin: currentUser.githubLogin,
-        userId: currentUser.id,
+        name: user.name || userHandle(user),
+        color: colorForUser(user.id),
+        avatarUrl: user.avatarUrl,
+        githubLogin: user.githubLogin,
+        userId: user.id,
       },
     });
     liveProviderRef.current = provider;
@@ -532,7 +583,8 @@ export const HybridEditorPage = ({
       liveProviderRef.current = null;
       setLiveProvider(null);
     };
-  }, [currentUser, hybridId, response?.hybrid.sharedRole, response]);
+    // Só recria quando a identidade da sessão muda — não a cada save (response).
+  }, [canGoLive, hybridId, userId]);
 
   // Presença ao vivo (facepile + base p/ cursores) derivada do awareness.
   const presence = usePresence(liveProvider);

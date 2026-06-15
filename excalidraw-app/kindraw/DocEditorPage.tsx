@@ -1,4 +1,10 @@
-import { useCallback, useEffect, useState, startTransition } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  startTransition,
+} from "react";
 
 import {
   createShareLink,
@@ -129,6 +135,26 @@ export const DocEditorPage = ({
       window.clearTimeout(saveTimeout);
     };
   }, [itemResponse, lastSavedContent, markdown, persistContent]);
+
+  // Flush on unmount / troca de item: se houver edição pendente (dentro da
+  // janela do debounce), persiste agora para NÃO perder a última edição ao
+  // navegar/fechar. Usamos refs p/ ler os valores mais recentes sem re-armar o
+  // effect (que só roda no unmount).
+  const flushRef = useRef<() => void>(() => undefined);
+  flushRef.current = () => {
+    if (!itemResponse || markdown === lastSavedContent) {
+      return;
+    }
+    // dispara o save (best-effort) e grava o rascunho local imediatamente —
+    // mesmo que a request seja interrompida, o draft sobrevive e é restaurado.
+    void persistContent(markdown);
+  };
+  useEffect(
+    () => () => {
+      flushRef.current();
+    },
+    [],
+  );
 
   const commitTitle = useCallback(async () => {
     if (!itemResponse) {
