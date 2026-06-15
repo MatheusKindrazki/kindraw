@@ -1100,6 +1100,7 @@ const WorkspacePage = ({
             <h1>{heading}</h1>
             {currentFolder && !isSharedFolder ? (
               <KindrawMenuWrap
+                align="left"
                 button={
                   <button
                     aria-expanded={openMenuId === "current-folder"}
