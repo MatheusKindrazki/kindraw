@@ -101,40 +101,50 @@ export const AgentsGuide = () => {
   return (
     <div className="kindraw-agents-guide">
       <p className="kindraw-agents-guide__intro">
-        Conecte o Kindraw ao Claude, Cursor ou qualquer agente compatível com
-        MCP, ou use pelo terminal com a CLI. Gere uma key abaixo para preencher
-        os exemplos.
+        Deixe um agente desenhar por você: gere diagramas a partir de Mermaid,
+        liste e edite seus drawings direto do Claude, Cursor ou do terminal.
       </p>
 
-      <div className="kindraw-agents-guide__keybar">
+      {/* Passo 1 — a key é a protagonista */}
+      <div
+        className={`kindraw-agents-guide__keybar${
+          token ? " kindraw-agents-guide__keybar--issued" : ""
+        }`}
+      >
+        <div className="kindraw-agents-guide__keybar-text">
+          <strong>
+            {token ? "Pronto — key gerada" : "Comece gerando uma key"}
+          </strong>
+          <span>
+            {token
+              ? "Já preenchemos os exemplos abaixo. Copie a key agora: ela não aparece de novo."
+              : "Ela autentica o agente na sua conta. Preenche os exemplos automaticamente."}
+          </span>
+        </div>
         <button
           type="button"
           className="kindraw-agents-guide__generate"
           onClick={() => void handleGenerate()}
           disabled={generating}
         >
-          {generating ? "Gerando..." : "Gerar key para esta integração"}
+          {generating ? "Gerando…" : token ? "Gerar outra" : "Gerar key"}
         </button>
-        {token ? (
-          <span className="kindraw-agents-guide__warning">
-            Esta é a única vez que a key aparece. Guarde-a num lugar seguro.
-          </span>
-        ) : (
-          <span className="kindraw-agents-guide__hint">
-            Gere uma key para preencher os exemplos abaixo, ou cole a sua.
-          </span>
-        )}
       </div>
 
       {error && <p className="kindraw-agents-guide__error">{error}</p>}
 
-      {/* Bloco A — MCP (Claude/Cursor) */}
+      {/* Passo 2 — MCP (Claude/Cursor) */}
       <section className="kindraw-agents-guide__section">
-        <h4>Configurar MCP (Claude / Cursor)</h4>
-        <p>
-          Adicione este servidor à config do seu cliente MCP (~/.claude.json ou
-          .mcp.json do projeto). Reinicie o cliente depois.
-        </p>
+        <div className="kindraw-agents-guide__section-head">
+          <span className="kindraw-agents-guide__step">1</span>
+          <div>
+            <h4>Plugue no Claude ou Cursor</h4>
+            <p>
+              Cole em <code>~/.claude.json</code> ou no{" "}
+              <code>.mcp.json</code> do projeto e reinicie o cliente.
+            </p>
+          </div>
+        </div>
         <CodeBlock code={buildMcpConfig(tokenValue)} />
         <ul className="kindraw-agents-guide__tools">
           {MCP_TOOLS.map((tool) => (
@@ -146,18 +156,23 @@ export const AgentsGuide = () => {
         </ul>
       </section>
 
-      {/* Bloco B — CLI */}
+      {/* Passo 3 — CLI */}
       <section className="kindraw-agents-guide__section">
-        <h4>CLI</h4>
-        <p>
-          Use a CLI de qualquer terminal — entre uma vez, ou passe uma key via
-          variável de ambiente KINDRAW_TOKEN.
-        </p>
+        <div className="kindraw-agents-guide__section-head">
+          <span className="kindraw-agents-guide__step">2</span>
+          <div>
+            <h4>Ou use pelo terminal</h4>
+            <p>
+              Entre uma vez, ou passe a key em <code>KINDRAW_TOKEN</code> para
+              scripts e CI.
+            </p>
+          </div>
+        </div>
         <CodeBlock code={buildCliLogin()} label="Entrar (abre o navegador)" />
-        <CodeBlock code={buildCliEnv(tokenValue)} label="Ou usar uma key direto" />
+        <CodeBlock code={buildCliEnv(tokenValue)} label="Ou usar a key direto" />
         <CodeBlock
           code={buildCliGenerate()}
-          label="Gerar um desenho a partir de um arquivo Mermaid"
+          label="Gerar um desenho de um arquivo Mermaid"
         />
       </section>
     </div>
