@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from "react";
 
 import ExcalidrawApp from "./App";
+import { InvitePage } from "./kindraw/InvitePage";
 import { KindrawApp } from "./kindraw/KindrawApp";
 import {
   KindrawDocScreen,
@@ -43,6 +44,10 @@ const RootApp = () => {
     return (
       <KindrawPublicSharePage token={route.token} view={route.view || "both"} />
     );
+  }
+
+  if (route.kind === "invite") {
+    return <InvitePage token={route.token} />;
   }
 
   return <ExcalidrawApp />;

@@ -55,6 +55,14 @@ describe("Kindraw router", () => {
     expect(isKindrawPath("/legacy")).toBe(false);
   });
 
+  it("should match invite routes", () => {
+    expect(matchKindrawRoute("/invite/invite-token")).toEqual({
+      kind: "invite",
+      token: "invite-token",
+    });
+    expect(isKindrawPath("/invite/invite-token")).toBe(true);
+  });
+
   it("should build hybrid routes", () => {
     expect(
       buildHybridPath("hybrid-1", {

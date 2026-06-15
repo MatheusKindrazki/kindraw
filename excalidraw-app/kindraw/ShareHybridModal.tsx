@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
-  grantHybridShare,
+  createHybridInvite,
+  listHybridInvites,
   listHybridShares,
+  revokeHybridInvite,
   revokeHybridShare,
   searchKindrawUsers,
   updateHybridShareRole,
@@ -10,12 +12,15 @@ import {
 import { KindrawIcon } from "./icons";
 import { userHandle, userSubtitle } from "./identity";
 import { PublicShareLinkSection } from "./PublicShareLinkSection";
+import { CreatedInviteBox, SharePendingInvites } from "./SharePendingInvites";
 import { getErrorMessage } from "./utils";
 
 import type { ChangeEvent } from "react";
 
 import type {
+  KindrawCreatedInvite,
   KindrawHybridShare,
+  KindrawPendingInvite,
   KindrawShareLink,
   KindrawShareLinkAccess,
   KindrawShareRole,
@@ -63,6 +68,9 @@ export const ShareHybridModal = ({
   busy?: boolean;
 }) => {
   const [shares, setShares] = useState<KindrawHybridShare[] | null>(null);
+  const [invites, setInvites] = useState<KindrawPendingInvite[]>([]);
+  const [createdInvite, setCreatedInvite] =
+    useState<KindrawCreatedInvite | null>(null);
   const [listError, setListError] = useState<string | null>(null);
 
   const [query, setQuery] = useState("");
@@ -74,6 +82,7 @@ export const ShareHybridModal = ({
   const [inviteError, setInviteError] = useState<string | null>(null);
   const [inviting, setInviting] = useState(false);
   const [busyShareId, setBusyShareId] = useState<string | null>(null);
+  const [busyInviteId, setBusyInviteId] = useState<string | null>(null);
 
   const inputRef = useRef<HTMLInputElement>(null);
   const inviteRef = useRef<HTMLDivElement>(null);
@@ -81,8 +90,12 @@ export const ShareHybridModal = ({
   const loadShares = useCallback(async () => {
     setListError(null);
     try {
-      const response = await listHybridShares(hybrid.id);
-      setShares(response.shares);
+      const [sharesResponse, invitesResponse] = await Promise.all([
+        listHybridShares(hybrid.id),
+        listHybridInvites(hybrid.id),
+      ]);
+      setShares(sharesResponse.shares);
+      setInvites(invitesResponse.invites);
     } catch (error) {
       setListError(getErrorMessage(error, "Falha ao carregar acessos."));
       setShares([]);
@@ -177,18 +190,21 @@ export const ShareHybridModal = ({
     [],
   );
 
+  // Sempre gera um LINK de convite (fluxo único), mesmo selecionando um usuário
+  // existente. O e-mail/identificador é só informativo; o link é a credencial.
   const handleInvite = useCallback(async () => {
-    const login = (
-      (selectedUser ? userHandle(selectedUser) : "") ||
+    const identifier = (
+      (selectedUser ? selectedUser.email || userHandle(selectedUser) : "") ||
       query.trim().replace(/^@/, "")
     ).trim();
-    if (!login) {
+    if (!identifier) {
       return;
     }
     setInviting(true);
     setInviteError(null);
     try {
-      await grantHybridShare(hybrid.id, login, role);
+      const response = await createHybridInvite(hybrid.id, identifier, role);
+      setCreatedInvite(response.invite);
       setQuery("");
       setSelectedUser(null);
       setResults([]);
@@ -201,6 +217,26 @@ export const ShareHybridModal = ({
       setInviting(false);
     }
   }, [selectedUser, query, hybrid.id, role, loadShares, onChange]);
+
+  const handleRevokeInvite = useCallback(
+    async (invite: KindrawPendingInvite) => {
+      setBusyInviteId(invite.id);
+      setListError(null);
+      try {
+        await revokeHybridInvite(hybrid.id, invite.id);
+        if (createdInvite?.id === invite.id) {
+          setCreatedInvite(null);
+        }
+        await loadShares();
+        onChange?.();
+      } catch (error) {
+        setListError(getErrorMessage(error, "Falha ao cancelar o convite."));
+      } finally {
+        setBusyInviteId(null);
+      }
+    },
+    [hybrid.id, createdInvite, loadShares, onChange],
+  );
 
   const handleRoleChange = useCallback(
     async (share: KindrawHybridShare, nextRole: KindrawShareRole) => {
@@ -324,9 +360,14 @@ export const ShareHybridModal = ({
               onClick={() => void handleInvite()}
               type="button"
             >
-              Convidar
+              {inviting ? "Gerando…" : "Convidar"}
             </button>
           </div>
+
+          <p className="kindraw-sharemodal__invite-help">
+            Gera um link de convite para você copiar e enviar. Quem abrir e
+            entrar ganha acesso (mesmo sem conta ainda).
+          </p>
 
           {resultsOpen && (results.length > 0 || searching) ? (
             <ul className="kindraw-sharemodal__results" role="listbox">
@@ -369,18 +410,25 @@ export const ShareHybridModal = ({
           ) : null}
         </div>
 
+        {createdInvite ? <CreatedInviteBox invite={createdInvite} /> : null}
+
         <div className="kindraw-sharemodal__people">
           <span className="kindraw-sharemodal__people-label">
             Pessoas com acesso
           </span>
           {shares === null ? (
             <p className="kindraw-sharemodal__hint">Carregando…</p>
-          ) : shares.length === 0 ? (
+          ) : shares.length === 0 && invites.length === 0 ? (
             <p className="kindraw-sharemodal__hint">
               Ninguém tem acesso ainda além de você.
             </p>
           ) : (
             <ul className="kindraw-sharemodal__list">
+              <SharePendingInvites
+                busyInviteId={busyInviteId}
+                invites={invites}
+                onRevoke={(invite) => void handleRevokeInvite(invite)}
+              />
               {shares.map((share) => {
                 const busy = busyShareId === share.id;
                 return (

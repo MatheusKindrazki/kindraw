@@ -1,21 +1,26 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
-  grantFolderShare,
+  createFolderInvite,
+  listFolderInvites,
   listFolderShares,
+  revokeFolderInvite,
   revokeFolderShare,
   searchKindrawUsers,
   updateFolderShareRole,
 } from "./api";
 import { KindrawIcon } from "./icons";
 import { userHandle, userSubtitle } from "./identity";
+import { CreatedInviteBox, SharePendingInvites } from "./SharePendingInvites";
 import { getErrorMessage } from "./utils";
 
 import type { ChangeEvent } from "react";
 
 import type {
+  KindrawCreatedInvite,
   KindrawFolder,
   KindrawFolderShare,
+  KindrawPendingInvite,
   KindrawShareRole,
   KindrawUser,
 } from "./types";
@@ -50,6 +55,9 @@ export const ShareFolderModal = ({
   onChange?: () => void;
 }) => {
   const [shares, setShares] = useState<KindrawFolderShare[] | null>(null);
+  const [invites, setInvites] = useState<KindrawPendingInvite[]>([]);
+  const [createdInvite, setCreatedInvite] =
+    useState<KindrawCreatedInvite | null>(null);
   const [listError, setListError] = useState<string | null>(null);
 
   const [query, setQuery] = useState("");
@@ -61,6 +69,7 @@ export const ShareFolderModal = ({
   const [inviteError, setInviteError] = useState<string | null>(null);
   const [inviting, setInviting] = useState(false);
   const [busyShareId, setBusyShareId] = useState<string | null>(null);
+  const [busyInviteId, setBusyInviteId] = useState<string | null>(null);
 
   const inputRef = useRef<HTMLInputElement>(null);
   const inviteRef = useRef<HTMLDivElement>(null);
@@ -68,8 +77,12 @@ export const ShareFolderModal = ({
   const loadShares = useCallback(async () => {
     setListError(null);
     try {
-      const response = await listFolderShares(folder.id);
-      setShares(response.shares);
+      const [sharesResponse, invitesResponse] = await Promise.all([
+        listFolderShares(folder.id),
+        listFolderInvites(folder.id),
+      ]);
+      setShares(sharesResponse.shares);
+      setInvites(invitesResponse.invites);
     } catch (error) {
       setListError(getErrorMessage(error, "Falha ao carregar acessos."));
       setShares([]);
@@ -167,18 +180,21 @@ export const ShareFolderModal = ({
     [],
   );
 
+  // Sempre gera um LINK de convite (fluxo único), mesmo selecionando um usuário
+  // existente. O e-mail/identificador é só informativo; o link é a credencial.
   const handleInvite = useCallback(async () => {
-    const login = (
-      (selectedUser ? userHandle(selectedUser) : "") ||
+    const identifier = (
+      (selectedUser ? selectedUser.email || userHandle(selectedUser) : "") ||
       query.trim().replace(/^@/, "")
     ).trim();
-    if (!login) {
+    if (!identifier) {
       return;
     }
     setInviting(true);
     setInviteError(null);
     try {
-      await grantFolderShare(folder.id, login, role);
+      const response = await createFolderInvite(folder.id, identifier, role);
+      setCreatedInvite(response.invite);
       setQuery("");
       setSelectedUser(null);
       setResults([]);
@@ -191,6 +207,26 @@ export const ShareFolderModal = ({
       setInviting(false);
     }
   }, [selectedUser, query, folder.id, role, loadShares, onChange]);
+
+  const handleRevokeInvite = useCallback(
+    async (invite: KindrawPendingInvite) => {
+      setBusyInviteId(invite.id);
+      setListError(null);
+      try {
+        await revokeFolderInvite(folder.id, invite.id);
+        if (createdInvite?.id === invite.id) {
+          setCreatedInvite(null);
+        }
+        await loadShares();
+        onChange?.();
+      } catch (error) {
+        setListError(getErrorMessage(error, "Falha ao cancelar o convite."));
+      } finally {
+        setBusyInviteId(null);
+      }
+    },
+    [folder.id, createdInvite, loadShares, onChange],
+  );
 
   const handleRoleChange = useCallback(
     async (share: KindrawFolderShare, nextRole: KindrawShareRole) => {
@@ -294,9 +330,14 @@ export const ShareFolderModal = ({
               onClick={() => void handleInvite()}
               type="button"
             >
-              Convidar
+              {inviting ? "Gerando…" : "Convidar"}
             </button>
           </div>
+
+          <p className="kindraw-sharemodal__invite-help">
+            Gera um link de convite para você copiar e enviar. Quem abrir e
+            entrar ganha acesso (mesmo sem conta ainda).
+          </p>
 
           {resultsOpen && (results.length > 0 || searching) ? (
             <ul className="kindraw-sharemodal__results" role="listbox">
@@ -339,18 +380,25 @@ export const ShareFolderModal = ({
           ) : null}
         </div>
 
+        {createdInvite ? <CreatedInviteBox invite={createdInvite} /> : null}
+
         <div className="kindraw-sharemodal__people">
           <span className="kindraw-sharemodal__people-label">
             Pessoas com acesso
           </span>
           {shares === null ? (
             <p className="kindraw-sharemodal__hint">Carregando…</p>
-          ) : shares.length === 0 ? (
+          ) : shares.length === 0 && invites.length === 0 ? (
             <p className="kindraw-sharemodal__hint">
               Ninguém tem acesso ainda além de você.
             </p>
           ) : (
             <ul className="kindraw-sharemodal__list">
+              <SharePendingInvites
+                busyInviteId={busyInviteId}
+                invites={invites}
+                onRevoke={(invite) => void handleRevokeInvite(invite)}
+              />
               {shares.map((share) => {
                 const busy = busyShareId === share.id;
                 return (

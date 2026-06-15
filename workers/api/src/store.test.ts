@@ -83,6 +83,20 @@ type HybridShareRow = {
   updated_at: string;
 };
 
+type ShareInviteRow = {
+  id: string;
+  token: string;
+  resource_type: "folder" | "hybrid";
+  resource_id: string;
+  email: string | null;
+  role: "viewer" | "editor";
+  invited_by_user_id: string;
+  accepted_by_user_id: string | null;
+  accepted_at: string | null;
+  expires_at: string;
+  created_at: string;
+};
+
 type FakeState = {
   folders: FolderRow[];
   items: ItemRow[];
@@ -91,6 +105,7 @@ type FakeState = {
   users: UserRow[];
   folderShares: FolderShareRow[];
   hybridShares: HybridShareRow[];
+  shareInvites: ShareInviteRow[];
 };
 
 const normalizeQuery = (query: string) => query.replace(/\s+/g, " ").trim();
@@ -473,6 +488,79 @@ class FakeStatement implements D1PreparedStatement {
       } as T;
     }
 
+    // getInviteByToken
+    if (query === "SELECT * FROM share_invites WHERE token = ?") {
+      const [token] = this.values as [string];
+      return (this.state.shareInvites.find((entry) => entry.token === token) ||
+        null) as T | null;
+    }
+
+    // loadInviteResource (folder): nome da pasta + dono.
+    if (
+      normalizeQuery(query) ===
+      normalizeQuery(
+        `SELECT folders.name AS name,
+                  folders.owner_id AS owner_id,
+                  owner.name AS owner_name
+             FROM folders
+             JOIN users AS owner ON owner.id = folders.owner_id
+             WHERE folders.id = ?`,
+      )
+    ) {
+      const [folderId] = this.values as [string];
+      const folder = this.state.folders.find((entry) => entry.id === folderId);
+      if (!folder) {
+        return null;
+      }
+      const owner = this.state.users.find(
+        (entry) => entry.id === folder.owner_id,
+      );
+      if (!owner) {
+        return null;
+      }
+      return {
+        name: folder.name,
+        owner_id: folder.owner_id,
+        owner_name: owner.name,
+      } as T;
+    }
+
+    // loadInviteResource (hybrid): título do doc-root + dono.
+    if (
+      normalizeQuery(query) ===
+      normalizeQuery(
+        `SELECT doc.title AS name,
+                hybrid_items.owner_id AS owner_id,
+                owner.name AS owner_name
+           FROM hybrid_items
+           JOIN items AS doc ON doc.id = hybrid_items.doc_item_id
+           JOIN users AS owner ON owner.id = hybrid_items.owner_id
+           WHERE hybrid_items.id = ?`,
+      )
+    ) {
+      const [hybridId] = this.values as [string];
+      const hybrid = this.state.hybridItems.find(
+        (entry) => entry.id === hybridId,
+      );
+      if (!hybrid) {
+        return null;
+      }
+      const doc = this.state.items.find(
+        (entry) => entry.id === hybrid.doc_item_id,
+      );
+      const owner = this.state.users.find(
+        (entry) => entry.id === hybrid.owner_id,
+      );
+      if (!doc || !owner) {
+        return null;
+      }
+      return {
+        name: doc.title,
+        owner_id: hybrid.owner_id,
+        owner_name: owner.name,
+      } as T;
+    }
+
     throw new Error(`Unsupported first() query in test double: ${query}`);
   }
 
@@ -818,6 +906,40 @@ class FakeStatement implements D1PreparedStatement {
       const results = this.state.shareLinks
         .filter((entry) => entry.revoked_at === null && set.has(entry.item_id))
         .sort((left, right) => right.created_at.localeCompare(left.created_at));
+      return { results: results as T[] };
+    }
+
+    // listPendingInvites: convites pendentes (não aceitos, não expirados).
+    if (
+      normalizeQuery(query) ===
+      normalizeQuery(
+        `SELECT * FROM share_invites
+           WHERE resource_type = ?
+             AND resource_id = ?
+             AND invited_by_user_id = ?
+             AND accepted_at IS NULL
+             AND expires_at > ?
+           ORDER BY created_at DESC`,
+      )
+    ) {
+      const [resourceType, resourceId, ownerId, now] = this.values as [
+        "folder" | "hybrid",
+        string,
+        string,
+        string,
+      ];
+      const results = this.state.shareInvites
+        .filter(
+          (entry) =>
+            entry.resource_type === resourceType &&
+            entry.resource_id === resourceId &&
+            entry.invited_by_user_id === ownerId &&
+            entry.accepted_at === null &&
+            entry.expires_at > now,
+        )
+        .sort((left, right) =>
+          right.created_at.localeCompare(left.created_at),
+        );
       return { results: results as T[] };
     }
 
@@ -1338,6 +1460,93 @@ class FakeStatement implements D1PreparedStatement {
       return {};
     }
 
+    // createShareInvite
+    if (
+      normalizeQuery(query) ===
+      normalizeQuery(
+        `INSERT INTO share_invites
+           (id, token, resource_type, resource_id, email, role,
+            invited_by_user_id, accepted_by_user_id, accepted_at,
+            expires_at, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?, ?)`,
+      )
+    ) {
+      const [
+        id,
+        token,
+        resourceType,
+        resourceId,
+        email,
+        role,
+        invitedBy,
+        expiresAt,
+        createdAt,
+      ] = this.values as [
+        string,
+        string,
+        "folder" | "hybrid",
+        string,
+        string | null,
+        "viewer" | "editor",
+        string,
+        string,
+        string,
+      ];
+      this.state.shareInvites.push({
+        id,
+        token,
+        resource_type: resourceType,
+        resource_id: resourceId,
+        email,
+        role,
+        invited_by_user_id: invitedBy,
+        accepted_by_user_id: null,
+        accepted_at: null,
+        expires_at: expiresAt,
+        created_at: createdAt,
+      });
+      return { meta: { changes: 1 } };
+    }
+
+    // revokeShareInvite
+    if (
+      query ===
+      "DELETE FROM share_invites WHERE id = ? AND invited_by_user_id = ?"
+    ) {
+      const [id, ownerId] = this.values as [string, string];
+      const before = this.state.shareInvites.length;
+      this.state.shareInvites = this.state.shareInvites.filter(
+        (entry) => !(entry.id === id && entry.invited_by_user_id === ownerId),
+      );
+      return {
+        meta: { changes: before - this.state.shareInvites.length },
+      };
+    }
+
+    // acceptShareInvite: marca accepted_* (uso único — só se ainda não aceito).
+    if (
+      normalizeQuery(query) ===
+      normalizeQuery(
+        `UPDATE share_invites
+           SET accepted_by_user_id = ?, accepted_at = ?
+         WHERE id = ? AND accepted_at IS NULL`,
+      )
+    ) {
+      const [acceptedBy, acceptedAt, id] = this.values as [
+        string,
+        string,
+        string,
+      ];
+      const invite = this.state.shareInvites.find(
+        (entry) => entry.id === id && entry.accepted_at === null,
+      );
+      if (invite) {
+        invite.accepted_by_user_id = acceptedBy;
+        invite.accepted_at = acceptedAt;
+      }
+      return { meta: { changes: invite ? 1 : 0 } };
+    }
+
     throw new Error(`Unsupported run() query in test double: ${query}`);
   }
 }
@@ -1401,6 +1610,7 @@ const createStore = (state?: Partial<FakeState>) => {
     users: state?.users ?? [],
     folderShares: state?.folderShares ?? [],
     hybridShares: state?.hybridShares ?? [],
+    shareInvites: state?.shareInvites ?? [],
   };
   const blobs = new FakeR2Bucket();
   return {
@@ -3380,5 +3590,437 @@ describe("KindrawStore.upsertOAuthUser (account linking)", () => {
       githubLogin: "erin",
     });
     expect(updated.email).toBe("erin@test.dev");
+  });
+});
+
+describe("KindrawStore share invites (convite por link)", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-03-09T12:00:00.000Z"));
+  });
+
+  const baseUsers: UserRow[] = [
+    {
+      id: "owner-1",
+      github_login: "octocat",
+      name: "Octo Cat",
+      avatar_url: null,
+      email: "octo@test.dev",
+    },
+    {
+      id: "guest-1",
+      github_login: "hubot",
+      name: "Hu Bot",
+      avatar_url: null,
+      email: "hubot@test.dev",
+    },
+    {
+      id: "stranger-1",
+      github_login: "mallory",
+      name: "Mallory",
+      avatar_url: null,
+      email: null,
+    },
+  ];
+
+  const folder: FolderRow = {
+    id: "folder-1",
+    owner_id: "owner-1",
+    parent_id: null,
+    name: "Plano Q3",
+    created_at: "2026-03-09T10:00:00.000Z",
+    updated_at: "2026-03-09T10:00:00.000Z",
+  };
+
+  // Forces a deterministic invite token (crypto.getRandomValues) + id
+  // (crypto.randomUUID) so the link/token are assertable.
+  const stubInviteRandomness = (
+    uuid: `${string}-${string}-${string}-${string}-${string}`,
+  ) => {
+    const getRandomValuesSpy = vi
+      .spyOn(crypto, "getRandomValues")
+      .mockImplementation((array: ArrayBufferView | null) => {
+        const view = array as Uint8Array;
+        for (let i = 0; i < view.length; i += 1) {
+          view[i] = 0;
+        }
+        return array as never;
+      });
+    const uuidSpy = vi.spyOn(crypto, "randomUUID").mockReturnValueOnce(uuid);
+    return () => {
+      getRandomValuesSpy.mockRestore();
+      uuidSpy.mockRestore();
+    };
+  };
+
+  it("createShareInvite gera token, valida ownership e expira em 7 dias", async () => {
+    const restore = stubInviteRandomness(
+      "00000000-0000-0000-0000-0000000000b1",
+    );
+    const { store, state } = createStore({
+      users: baseUsers,
+      folders: [folder],
+    });
+
+    const invite = await store.createShareInvite({
+      resourceType: "folder",
+      resourceId: "folder-1",
+      email: "  GUEST@Test.dev  ",
+      role: "editor",
+      invitedByUserId: "owner-1",
+    });
+
+    // token = base64url de 32 bytes zerados = 43 chars "A".
+    expect(invite.token).toBe("A".repeat(43));
+    expect(invite.id).toBe("00000000-0000-0000-0000-0000000000b1");
+    expect(invite.email).toBe("guest@test.dev"); // normalizado lower + trim
+    expect(invite.role).toBe("editor");
+    expect(invite.acceptedByUserId).toBeNull();
+    expect(invite.createdAt).toBe("2026-03-09T12:00:00.000Z");
+    // created_at + 7 dias
+    expect(invite.expiresAt).toBe("2026-03-16T12:00:00.000Z");
+    expect(state.shareInvites).toHaveLength(1);
+
+    // não-dono não cria (ownership => 404)
+    await expect(
+      store.createShareInvite({
+        resourceType: "folder",
+        resourceId: "folder-1",
+        email: null,
+        role: "viewer",
+        invitedByUserId: "guest-1",
+      }),
+    ).rejects.toMatchObject({ status: 404 });
+
+    restore();
+  });
+
+  it("listFolderInvites lista só pendentes (não aceitos, não expirados)", async () => {
+    const { store } = createStore({
+      users: baseUsers,
+      folders: [folder],
+      shareInvites: [
+        {
+          id: "inv-pending",
+          token: "tok-pending",
+          resource_type: "folder",
+          resource_id: "folder-1",
+          email: "a@test.dev",
+          role: "viewer",
+          invited_by_user_id: "owner-1",
+          accepted_by_user_id: null,
+          accepted_at: null,
+          expires_at: "2026-03-16T12:00:00.000Z",
+          created_at: "2026-03-09T11:00:00.000Z",
+        },
+        {
+          id: "inv-accepted",
+          token: "tok-accepted",
+          resource_type: "folder",
+          resource_id: "folder-1",
+          email: "b@test.dev",
+          role: "editor",
+          invited_by_user_id: "owner-1",
+          accepted_by_user_id: "guest-1",
+          accepted_at: "2026-03-09T11:30:00.000Z",
+          expires_at: "2026-03-16T12:00:00.000Z",
+          created_at: "2026-03-09T10:30:00.000Z",
+        },
+        {
+          id: "inv-expired",
+          token: "tok-expired",
+          resource_type: "folder",
+          resource_id: "folder-1",
+          email: "c@test.dev",
+          role: "viewer",
+          invited_by_user_id: "owner-1",
+          accepted_by_user_id: null,
+          accepted_at: null,
+          expires_at: "2026-03-01T12:00:00.000Z",
+          created_at: "2026-02-22T12:00:00.000Z",
+        },
+      ],
+    });
+
+    const invites = await store.listFolderInvites("owner-1", "folder-1");
+    expect(invites).toHaveLength(1);
+    expect(invites[0]).toEqual({
+      id: "inv-pending",
+      email: "a@test.dev",
+      role: "viewer",
+      createdAt: "2026-03-09T11:00:00.000Z",
+      expiresAt: "2026-03-16T12:00:00.000Z",
+      link: "/invite/tok-pending",
+      status: "pending",
+    });
+
+    // não-dono não lista (ownership => 404)
+    await expect(
+      store.listFolderInvites("guest-1", "folder-1"),
+    ).rejects.toMatchObject({ status: 404 });
+  });
+
+  it("resolveShareInvite devolve metadados do recurso e do dono", async () => {
+    const { store } = createStore({
+      users: baseUsers,
+      folders: [folder],
+      shareInvites: [
+        {
+          id: "inv-1",
+          token: "tok-1",
+          resource_type: "folder",
+          resource_id: "folder-1",
+          email: "guest@test.dev",
+          role: "editor",
+          invited_by_user_id: "owner-1",
+          accepted_by_user_id: null,
+          accepted_at: null,
+          expires_at: "2026-03-16T12:00:00.000Z",
+          created_at: "2026-03-09T11:00:00.000Z",
+        },
+      ],
+    });
+
+    const meta = await store.resolveShareInvite("tok-1");
+    expect(meta).toEqual({
+      resourceType: "folder",
+      resourceId: "folder-1",
+      resourceName: "Plano Q3",
+      role: "editor",
+      expiresAt: "2026-03-16T12:00:00.000Z",
+      invitedByName: "Octo Cat",
+      accepted: false,
+    });
+
+    // token inexistente => 404
+    await expect(store.resolveShareInvite("nope")).rejects.toMatchObject({
+      status: 404,
+    });
+  });
+
+  it("acceptShareInvite vira share real e marca accepted_at", async () => {
+    const restore = stubInviteRandomness(
+      "00000000-0000-0000-0000-0000000000c1",
+    );
+    const { store, state } = createStore({
+      users: baseUsers,
+      folders: [folder],
+      shareInvites: [
+        {
+          id: "inv-1",
+          token: "tok-1",
+          resource_type: "folder",
+          resource_id: "folder-1",
+          email: "guest@test.dev",
+          role: "editor",
+          invited_by_user_id: "owner-1",
+          accepted_by_user_id: null,
+          accepted_at: null,
+          expires_at: "2026-03-16T12:00:00.000Z",
+          created_at: "2026-03-09T11:00:00.000Z",
+        },
+      ],
+    });
+
+    const result = await store.acceptShareInvite("tok-1", "guest-1");
+    expect(result).toEqual({ resourceType: "folder", resourceId: "folder-1" });
+
+    // virou uma share real, com o role e o granted_by do convite
+    expect(state.folderShares).toHaveLength(1);
+    expect(state.folderShares[0]).toMatchObject({
+      folder_id: "folder-1",
+      user_id: "guest-1",
+      role: "editor",
+      granted_by_user_id: "owner-1",
+    });
+
+    // invite marcado como aceito
+    expect(state.shareInvites[0]?.accepted_by_user_id).toBe("guest-1");
+    expect(state.shareInvites[0]?.accepted_at).toBe("2026-03-09T12:00:00.000Z");
+
+    restore();
+  });
+
+  it("acceptShareInvite rejeita token expirado", async () => {
+    const { store, state } = createStore({
+      users: baseUsers,
+      folders: [folder],
+      shareInvites: [
+        {
+          id: "inv-exp",
+          token: "tok-exp",
+          resource_type: "folder",
+          resource_id: "folder-1",
+          email: null,
+          role: "viewer",
+          invited_by_user_id: "owner-1",
+          accepted_by_user_id: null,
+          accepted_at: null,
+          expires_at: "2026-03-01T12:00:00.000Z",
+          created_at: "2026-02-22T12:00:00.000Z",
+        },
+      ],
+    });
+
+    await expect(
+      store.acceptShareInvite("tok-exp", "guest-1"),
+    ).rejects.toMatchObject({ status: 410 });
+    expect(state.folderShares).toHaveLength(0);
+  });
+
+  it("acceptShareInvite rejeita aceitar duas vezes (uso único)", async () => {
+    const { store, state } = createStore({
+      users: baseUsers,
+      folders: [folder],
+      shareInvites: [
+        {
+          id: "inv-1",
+          token: "tok-1",
+          resource_type: "folder",
+          resource_id: "folder-1",
+          email: null,
+          role: "viewer",
+          invited_by_user_id: "owner-1",
+          accepted_by_user_id: null,
+          accepted_at: null,
+          expires_at: "2026-03-16T12:00:00.000Z",
+          created_at: "2026-03-09T11:00:00.000Z",
+        },
+      ],
+    });
+
+    await store.acceptShareInvite("tok-1", "guest-1");
+    await expect(
+      store.acceptShareInvite("tok-1", "stranger-1"),
+    ).rejects.toMatchObject({ status: 409 });
+    // só a primeira virou share
+    expect(state.folderShares).toHaveLength(1);
+    expect(state.folderShares[0]?.user_id).toBe("guest-1");
+  });
+
+  it("acceptShareInvite pelo próprio dono é no-op amigável (não cria share)", async () => {
+    const { store, state } = createStore({
+      users: baseUsers,
+      folders: [folder],
+      shareInvites: [
+        {
+          id: "inv-1",
+          token: "tok-1",
+          resource_type: "folder",
+          resource_id: "folder-1",
+          email: null,
+          role: "editor",
+          invited_by_user_id: "owner-1",
+          accepted_by_user_id: null,
+          accepted_at: null,
+          expires_at: "2026-03-16T12:00:00.000Z",
+          created_at: "2026-03-09T11:00:00.000Z",
+        },
+      ],
+    });
+
+    const result = await store.acceptShareInvite("tok-1", "owner-1");
+    expect(result).toEqual({ resourceType: "folder", resourceId: "folder-1" });
+    // dono já tem acesso => nenhuma share criada
+    expect(state.folderShares).toHaveLength(0);
+    // mas o convite é consumido (marcado aceito)
+    expect(state.shareInvites[0]?.accepted_by_user_id).toBe("owner-1");
+  });
+
+  it("revokeShareInvite apaga validando ownership; não-dono => 404", async () => {
+    const { store, state } = createStore({
+      users: baseUsers,
+      folders: [folder],
+      shareInvites: [
+        {
+          id: "inv-1",
+          token: "tok-1",
+          resource_type: "folder",
+          resource_id: "folder-1",
+          email: null,
+          role: "viewer",
+          invited_by_user_id: "owner-1",
+          accepted_by_user_id: null,
+          accepted_at: null,
+          expires_at: "2026-03-16T12:00:00.000Z",
+          created_at: "2026-03-09T11:00:00.000Z",
+        },
+      ],
+    });
+
+    // não-dono não revoga
+    await expect(
+      store.revokeShareInvite("guest-1", "inv-1"),
+    ).rejects.toMatchObject({ status: 404 });
+    expect(state.shareInvites).toHaveLength(1);
+
+    // dono revoga
+    await store.revokeShareInvite("owner-1", "inv-1");
+    expect(state.shareInvites).toHaveLength(0);
+  });
+
+  it("convite de híbrido: cria, resolve com título do doc-root e aceita", async () => {
+    const restore = stubInviteRandomness(
+      "00000000-0000-0000-0000-0000000000d1",
+    );
+    const { store, state } = createStore({
+      users: baseUsers,
+      items: [
+        {
+          id: "doc-1",
+          owner_id: "owner-1",
+          folder_id: null,
+          kind: "doc",
+          title: "Documento Híbrido",
+          content_blob_key: "users/owner-1/items/doc-1/current.md",
+          archived_at: null,
+          collaboration_room_key: null,
+          collaboration_enabled_at: null,
+          created_at: "2026-03-09T10:00:00.000Z",
+          updated_at: "2026-03-09T10:00:00.000Z",
+        },
+      ],
+      hybridItems: [
+        {
+          id: "hybrid-1",
+          owner_id: "owner-1",
+          doc_item_id: "doc-1",
+          drawing_item_id: "draw-1",
+          default_view: "both",
+          created_at: "2026-03-09T10:00:00.000Z",
+          updated_at: "2026-03-09T10:00:00.000Z",
+        },
+      ],
+    });
+
+    const invite = await store.createShareInvite({
+      resourceType: "hybrid",
+      resourceId: "hybrid-1",
+      email: null,
+      role: "viewer",
+      invitedByUserId: "owner-1",
+    });
+    expect(invite.resourceType).toBe("hybrid");
+
+    const meta = await store.resolveShareInvite(invite.token);
+    expect(meta).toMatchObject({
+      resourceType: "hybrid",
+      resourceId: "hybrid-1",
+      resourceName: "Documento Híbrido",
+      invitedByName: "Octo Cat",
+      role: "viewer",
+    });
+
+    const result = await store.acceptShareInvite(invite.token, "guest-1");
+    expect(result).toEqual({ resourceType: "hybrid", resourceId: "hybrid-1" });
+    expect(state.hybridShares).toHaveLength(1);
+    expect(state.hybridShares[0]).toMatchObject({
+      hybrid_id: "hybrid-1",
+      user_id: "guest-1",
+      role: "viewer",
+      granted_by_user_id: "owner-1",
+    });
+
+    restore();
   });
 });

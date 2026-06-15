@@ -23,6 +23,7 @@ export type KindrawRoute =
       view: KindrawHybridView;
       sectionId: string | null;
     }
+  | { kind: "invite"; token: string }
   | { kind: "public" };
 
 const trimTrailingSlash = (pathname: string) => {
@@ -86,6 +87,10 @@ export const matchKindrawRoute = (pathname: string): KindrawRoute => {
     };
   }
 
+  if (normalized.startsWith("/invite/")) {
+    return { kind: "invite", token: normalized.replace("/invite/", "") };
+  }
+
   return { kind: "public" };
 };
 
@@ -138,6 +143,8 @@ export const buildSharePath = (
     ? `/share/${token}?${params.toString()}`
     : `/share/${token}`;
 };
+
+export const buildInvitePath = (token: string) => `/invite/${token}`;
 
 export const shouldAutoCreateRootDrawing = (
   pathname: string,

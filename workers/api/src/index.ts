@@ -18,6 +18,7 @@ import type {
   PatchFolderInput,
   PatchHybridItemMetaInput,
   PatchItemMetaInput,
+  ShareInviteRecord,
 } from "./types";
 
 type ExportedHandler<E> = {
@@ -27,6 +28,10 @@ type ExportedHandler<E> = {
 const SESSION_COOKIE = "kindraw_session";
 const OAUTH_STATE_COOKIE = "kindraw_oauth_state";
 const OAUTH_RETURN_TO_COOKIE = "kindraw_oauth_return_to";
+// Same-origin path to land on AFTER login (e.g. "/invite/<token>"). Stored
+// separately from the origin cookie above; validated as a safe path on the way
+// in and out to prevent open-redirects.
+const OAUTH_RETURN_PATH_COOKIE = "kindraw_oauth_return_path";
 // For the CLI OAuth loopback: stores the full localhost callback URL so the
 // callback can mint a one-time code and redirect there instead of the web app.
 const CLI_RETURN_TO_COOKIE = "kindraw_cli_return_to";
@@ -53,6 +58,20 @@ const toV1ItemSummary = (item: KindrawTreeEntry) => ({
 
 const drawingUrl = (request: Request, env: Env, itemId: string) =>
   `${resolveAppOrigin(request, env)}/draw/${itemId}`;
+
+// Shape devolvido ao criar um convite. Expõe o token (o link É a credencial)
+// e um caminho relativo /invite/<token> pronto para o frontend copiar. NÃO
+// expõe colunas internas (invited_by, accepted_*).
+const toInviteResponse = (invite: ShareInviteRecord) => ({
+  id: invite.id,
+  email: invite.email,
+  role: invite.role,
+  token: invite.token,
+  link: `/invite/${invite.token}`,
+  createdAt: invite.createdAt,
+  expiresAt: invite.expiresAt,
+  status: "pending" as const,
+});
 
 const errorResponse = (status: number, message: string) =>
   json(
@@ -403,7 +422,81 @@ const handleAuthLogin = async (request: Request, env: Env) => {
       }),
     );
   }
+
+  // Same-origin path to land on after login (e.g. /invite/<token>).
+  setReturnPathCookie(response, request, env);
   return response;
+};
+
+// Persists a validated same-origin return PATH on the OAuth login response, so
+// finishAuth can land the user back where they came from (e.g. an invite page).
+const setReturnPathCookie = (
+  response: Response,
+  request: Request,
+  env: Env,
+) => {
+  const returnPath = parseReturnPath(
+    new URL(request.url).searchParams.get("returnTo"),
+    env,
+  );
+  if (returnPath) {
+    response.headers.append(
+      "Set-Cookie",
+      buildCookie(OAUTH_RETURN_PATH_COOKIE, returnPath, {
+        maxAge: 60 * 10,
+        sameSite: "Lax",
+        secure: isSecureRequest(request),
+      }),
+    );
+  }
+};
+
+// Extracts a SAFE same-origin path from a returnTo value, for post-login
+// redirects (e.g. landing back on "/invite/<token>"). Anti-open-redirect:
+// - if the value parses as an absolute URL, it must point at an allowed app
+//   origin; we then keep only its path+query+hash.
+// - if it's already a relative path, it must start with a single "/" (no "//",
+//   no "/\", no scheme) so it can never escape to another origin.
+// Returns the normalized path ("/..."), or null when nothing safe is present.
+// "/" is treated as "no specific path" (the default redirect handles it).
+const parseReturnPath = (
+  value: string | null | undefined,
+  env: Env,
+): string | null => {
+  if (!value) {
+    return null;
+  }
+
+  let candidate = value;
+  // Absolute URL form: accept only when same allowed app origin, then drop the
+  // origin and keep the path.
+  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(value)) {
+    if (!isAllowedAppOrigin(value, env)) {
+      return null;
+    }
+    try {
+      const url = new URL(value);
+      candidate = `${url.pathname}${url.search}${url.hash}`;
+    } catch {
+      return null;
+    }
+  }
+
+  // Must be a single-slash-rooted path. Reject "//", "/\" (protocol-relative /
+  // backslash tricks) and anything not starting with "/".
+  if (
+    !candidate.startsWith("/") ||
+    candidate.startsWith("//") ||
+    candidate.startsWith("/\\")
+  ) {
+    return null;
+  }
+  // Reject any embedded scheme (defensive; a rooted path shouldn't contain one).
+  if (candidate.includes(":")) {
+    return null;
+  }
+  // "/" alone carries no extra information — let the default redirect win.
+  return candidate === "/" ? null : candidate;
 };
 
 // Validates that a returnTo is a localhost loopback callback URL (CLI flow).
@@ -451,6 +544,7 @@ const handleAuthCallback = async (request: Request, env: Env) => {
 
   return finishAuth({
     request,
+    env,
     store,
     userId: user.id,
     cookies,
@@ -465,14 +559,22 @@ const handleAuthCallback = async (request: Request, env: Env) => {
 // adding a fetch+upsert, not duplicating session handling.
 const finishAuth = async (params: {
   request: Request;
+  env: Env;
   store: ReturnType<typeof createStore>;
   userId: string;
   cookies: Map<string, string>;
   appOrigin: string;
   sessionCookieSameSite: "Lax" | "Strict" | "None";
 }) => {
-  const { request, store, userId, cookies, appOrigin, sessionCookieSameSite } =
-    params;
+  const {
+    request,
+    env,
+    store,
+    userId,
+    cookies,
+    appOrigin,
+    sessionCookieSameSite,
+  } = params;
 
   // CLI loopback flow: issue a one-time code and redirect to the local server,
   // which exchanges it for a PAT. No web session cookie is set.
@@ -490,6 +592,7 @@ const finishAuth = async (params: {
     for (const cookieName of [
       OAUTH_STATE_COOKIE,
       OAUTH_RETURN_TO_COOKIE,
+      OAUTH_RETURN_PATH_COOKIE,
       CLI_RETURN_TO_COOKIE,
     ]) {
       cliResponse.headers.append(
@@ -506,10 +609,17 @@ const finishAuth = async (params: {
 
   const session = await store.createSession(userId);
 
+  // Land back on the saved same-origin path when present (e.g. /invite/<token>),
+  // otherwise the app root. Re-validated here as a final anti-open-redirect
+  // guard before composing the Location with the (already validated) origin.
+  const returnPath = parseReturnPath(
+    cookies.get(OAUTH_RETURN_PATH_COOKIE) ?? null,
+    env,
+  );
   const response = new Response(null, {
     status: 302,
     headers: {
-      Location: `${appOrigin}/`,
+      Location: `${appOrigin}${returnPath ?? "/"}`,
     },
   });
   response.headers.append(
@@ -531,6 +641,14 @@ const finishAuth = async (params: {
   response.headers.append(
     "Set-Cookie",
     buildCookie(OAUTH_RETURN_TO_COOKIE, "", {
+      maxAge: 0,
+      sameSite: "Lax",
+      secure: isSecureRequest(request),
+    }),
+  );
+  response.headers.append(
+    "Set-Cookie",
+    buildCookie(OAUTH_RETURN_PATH_COOKIE, "", {
       maxAge: 0,
       sameSite: "Lax",
       secure: isSecureRequest(request),
@@ -610,6 +728,9 @@ const handleGoogleLogin = async (request: Request, env: Env) => {
       }),
     );
   }
+
+  // Same-origin path to land on after login (e.g. /invite/<token>).
+  setReturnPathCookie(response, request, env);
   return response;
 };
 
@@ -716,6 +837,7 @@ const handleGoogleCallback = async (request: Request, env: Env) => {
 
   return finishAuth({
     request,
+    env,
     store,
     userId: user.id,
     cookies,
@@ -1078,6 +1200,48 @@ export const routeRequest = async (request: Request, env: Env) => {
     }
   }
 
+  // --- Hybrid invites (convites por link de um híbrido) ----------------------
+  // Espelha /api/folders/:id/invites. Matched ANTES do handler genérico.
+  if (pathname.match(/^\/api\/hybrid-items\/[^/]+\/invites(\/[^/]+)?$/)) {
+    const rest = pathname.replace("/api/hybrid-items/", "");
+    const [hybridId, invitesSegment, inviteId] = rest.split("/");
+    const { auth, store } = await requireAuth(request, env);
+
+    // /api/hybrid-items/:hybridId/invites
+    if (invitesSegment === "invites" && !inviteId) {
+      if (request.method === "GET") {
+        return json({
+          invites: await store.listHybridInvites(auth.user.id, hybridId),
+        });
+      }
+      if (request.method === "POST") {
+        const input = await readJson<{ email?: string; role?: string }>(
+          request,
+        );
+        const role = input.role;
+        if (role !== "viewer" && role !== "editor") {
+          throw new HttpError(400, "`role` must be 'viewer' or 'editor'.");
+        }
+        const invite = await store.createShareInvite({
+          resourceType: "hybrid",
+          resourceId: hybridId,
+          email: normalizeEmail(input.email),
+          role,
+          invitedByUserId: auth.user.id,
+        });
+        return json({ invite: toInviteResponse(invite) }, { status: 201 });
+      }
+    }
+
+    // /api/hybrid-items/:hybridId/invites/:inviteId
+    if (invitesSegment === "invites" && inviteId) {
+      if (request.method === "DELETE") {
+        await store.revokeShareInvite(auth.user.id, inviteId);
+        return new Response(null, { status: 204 });
+      }
+    }
+  }
+
   if (pathname.startsWith("/api/hybrid-items/")) {
     const hybridId = pathname
       .replace("/api/hybrid-items/", "")
@@ -1202,6 +1366,48 @@ export const routeRequest = async (request: Request, env: Env) => {
       }
       if (request.method === "DELETE") {
         await store.revokeFolderAccess(auth.user.id, folderId, shareId);
+        return new Response(null, { status: 204 });
+      }
+    }
+  }
+
+  // --- Folder invites (convites por link de uma pasta) -----------------------
+  // Matched BEFORE the generic /api/folders/:id handler so the longer paths win.
+  if (pathname.match(/^\/api\/folders\/[^/]+\/invites(\/[^/]+)?$/)) {
+    const rest = pathname.replace("/api/folders/", "");
+    const [folderId, invitesSegment, inviteId] = rest.split("/");
+    const { auth, store } = await requireAuth(request, env);
+
+    // /api/folders/:folderId/invites
+    if (invitesSegment === "invites" && !inviteId) {
+      if (request.method === "GET") {
+        return json({
+          invites: await store.listFolderInvites(auth.user.id, folderId),
+        });
+      }
+      if (request.method === "POST") {
+        const input = await readJson<{ email?: string; role?: string }>(
+          request,
+        );
+        const role = input.role;
+        if (role !== "viewer" && role !== "editor") {
+          throw new HttpError(400, "`role` must be 'viewer' or 'editor'.");
+        }
+        const invite = await store.createShareInvite({
+          resourceType: "folder",
+          resourceId: folderId,
+          email: normalizeEmail(input.email),
+          role,
+          invitedByUserId: auth.user.id,
+        });
+        return json({ invite: toInviteResponse(invite) }, { status: 201 });
+      }
+    }
+
+    // /api/folders/:folderId/invites/:inviteId
+    if (invitesSegment === "invites" && inviteId) {
+      if (request.method === "DELETE") {
+        await store.revokeShareInvite(auth.user.id, inviteId);
         return new Response(null, { status: 204 });
       }
     }
@@ -1378,6 +1584,32 @@ export const routeRequest = async (request: Request, env: Env) => {
     const token = pathname.replace("/api/public/", "");
     const store = createStore(env.KINDRAW_DB, env.KINDRAW_BLOBS);
     return json(await store.getPublicItem(token));
+  }
+
+  // --- Convites por link (resolve público / aceite autenticado) --------------
+  // POST /api/invites/:token/accept — EXIGE sessão (cookie), pois o aceite
+  // materializa uma share no nome da conta logada. Matched antes do GET genérico.
+  if (
+    pathname.match(/^\/api\/invites\/[^/]+\/accept$/) &&
+    request.method === "POST"
+  ) {
+    const token = pathname
+      .replace("/api/invites/", "")
+      .replace("/accept", "");
+    const { auth, store } = await requireAuth(request, env);
+    const result = await store.acceptShareInvite(token, auth.user.id);
+    return json(result);
+  }
+
+  // GET /api/invites/:token — metadados do convite, SEM exigir login (a página
+  // mostra "Fulano convidou você para X"). Não vaza conteúdo, só metadados.
+  if (
+    pathname.match(/^\/api\/invites\/[^/]+$/) &&
+    request.method === "GET"
+  ) {
+    const token = pathname.replace("/api/invites/", "");
+    const store = createStore(env.KINDRAW_DB, env.KINDRAW_BLOBS);
+    return json({ invite: await store.resolveShareInvite(token) });
   }
 
   if (pathname === "/api/icons/search" && request.method === "GET") {

@@ -25,12 +25,17 @@ import type {
   KindrawShareRole,
   KindrawFolderShare,
   KindrawHybridShare,
+  KindrawAcceptInviteResult,
+  KindrawInviteMetadata,
+  KindrawPendingInvite,
+  KindrawShareInviteResourceType,
   KindrawUser,
   KindrawTreeResponse,
   PatchFolderInput,
   PatchHybridItemMetaInput,
   PatchItemMetaInput,
   R2Bucket,
+  ShareInviteRecord,
   ShareLinkRecord,
 } from "./types";
 
@@ -128,6 +133,20 @@ type HybridShareRow = {
   granted_by_user_id: string;
   created_at: string;
   updated_at: string;
+};
+
+type ShareInviteRow = {
+  id: string;
+  token: string;
+  resource_type: KindrawShareInviteResourceType;
+  resource_id: string;
+  email: string | null;
+  role: KindrawShareRole;
+  invited_by_user_id: string;
+  accepted_by_user_id: string | null;
+  accepted_at: string | null;
+  expires_at: string;
+  created_at: string;
 };
 
 export class HttpError extends Error {
@@ -244,6 +263,33 @@ const toHybridItem = (
   drawingItemId: row.drawing_item_id,
   defaultView: row.default_view,
 });
+
+const toShareInvite = (row: ShareInviteRow): ShareInviteRecord => ({
+  id: row.id,
+  token: row.token,
+  resourceType: row.resource_type,
+  resourceId: row.resource_id,
+  email: row.email,
+  role: row.role,
+  invitedByUserId: row.invited_by_user_id,
+  acceptedByUserId: row.accepted_by_user_id,
+  acceptedAt: row.accepted_at,
+  expiresAt: row.expires_at,
+  createdAt: row.created_at,
+});
+
+const toPendingInvite = (row: ShareInviteRow): KindrawPendingInvite => ({
+  id: row.id,
+  email: row.email,
+  role: row.role,
+  createdAt: row.created_at,
+  expiresAt: row.expires_at,
+  link: `/invite/${row.token}`,
+  status: "pending",
+});
+
+// Janela de validade de um convite: 7 dias a partir da criação.
+const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 const isoNow = () => new Date().toISOString();
 
@@ -1648,6 +1694,286 @@ export class KindrawStore {
       .first<{ role: KindrawShareRole }>();
 
     return share ? share.role : null;
+  }
+
+  // --- Convites por link (share_invites) ------------------------------------
+  // Unifica pasta+híbrido num único mecanismo de token. O link É a credencial:
+  // qualquer conta logada que abra e aceite ganha acesso. Token único, expira
+  // em 7 dias, uso único. O aceite materializa uma share real
+  // (folder_shares/hybrid_shares) reusando grantFolderAccess/grantHybridAccess.
+
+  // Garante que `userId` é o DONO do recurso, ou 404 (mesma regra do share
+  // atual: só o dono convida/lista/revoga).
+  private async requireResourceOwner(
+    ownerId: string,
+    resourceType: KindrawShareInviteResourceType,
+    resourceId: string,
+  ): Promise<void> {
+    if (resourceType === "folder") {
+      await this.requireFolder(ownerId, resourceId);
+      return;
+    }
+    await this.requireHybridItem(ownerId, resourceId);
+  }
+
+  async createShareInvite(input: {
+    resourceType: KindrawShareInviteResourceType;
+    resourceId: string;
+    email: string | null;
+    role: KindrawShareRole;
+    invitedByUserId: string;
+  }): Promise<ShareInviteRecord> {
+    const { resourceType, resourceId, role, invitedByUserId } = input;
+    if (resourceType !== "folder" && resourceType !== "hybrid") {
+      throw new HttpError(400, "Invalid resource type.");
+    }
+    if (role !== "viewer" && role !== "editor") {
+      throw new HttpError(400, "Invalid role.");
+    }
+    // Só o dono do recurso pode convidar (404 se não for dono/não existir).
+    await this.requireResourceOwner(invitedByUserId, resourceType, resourceId);
+
+    // E-mail é informativo (exibição): normalizado para lower, ou null.
+    const email = input.email?.trim().toLowerCase() || null;
+
+    // Token: 32 bytes aleatórios base64url (~256 bits), igual aos API tokens.
+    const bytes = crypto.getRandomValues(new Uint8Array(32));
+    const token = base64UrlEncode(bytes);
+
+    const id = crypto.randomUUID();
+    const now = isoNow();
+    const expiresAt = new Date(Date.now() + INVITE_TTL_MS).toISOString();
+
+    await this.db
+      .prepare(
+        `INSERT INTO share_invites
+           (id, token, resource_type, resource_id, email, role,
+            invited_by_user_id, accepted_by_user_id, accepted_at,
+            expires_at, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?, ?)`,
+      )
+      .bind(
+        id,
+        token,
+        resourceType,
+        resourceId,
+        email,
+        role,
+        invitedByUserId,
+        expiresAt,
+        now,
+      )
+      .run();
+
+    return {
+      id,
+      token,
+      resourceType,
+      resourceId,
+      email,
+      role,
+      invitedByUserId,
+      acceptedByUserId: null,
+      acceptedAt: null,
+      expiresAt,
+      createdAt: now,
+    };
+  }
+
+  // Convites PENDENTES (não aceitos e não expirados) de uma pasta. Valida que
+  // ownerId é o dono.
+  async listFolderInvites(
+    ownerId: string,
+    folderId: string,
+  ): Promise<KindrawPendingInvite[]> {
+    await this.requireFolder(ownerId, folderId);
+    return this.listPendingInvites(ownerId, "folder", folderId);
+  }
+
+  // Espelho híbrido de listFolderInvites.
+  async listHybridInvites(
+    ownerId: string,
+    hybridId: string,
+  ): Promise<KindrawPendingInvite[]> {
+    await this.requireHybridItem(ownerId, hybridId);
+    return this.listPendingInvites(ownerId, "hybrid", hybridId);
+  }
+
+  private async listPendingInvites(
+    ownerId: string,
+    resourceType: KindrawShareInviteResourceType,
+    resourceId: string,
+  ): Promise<KindrawPendingInvite[]> {
+    const now = isoNow();
+    const { results } = await this.db
+      .prepare(
+        `SELECT * FROM share_invites
+           WHERE resource_type = ?
+             AND resource_id = ?
+             AND invited_by_user_id = ?
+             AND accepted_at IS NULL
+             AND expires_at > ?
+           ORDER BY created_at DESC`,
+      )
+      .bind(resourceType, resourceId, ownerId, now)
+      .all<ShareInviteRow>();
+
+    return results.map(toPendingInvite);
+  }
+
+  // Revoga (apaga) um convite pendente. Valida que ownerId é quem criou.
+  async revokeShareInvite(ownerId: string, inviteId: string): Promise<void> {
+    const result = await this.db
+      .prepare(
+        "DELETE FROM share_invites WHERE id = ? AND invited_by_user_id = ?",
+      )
+      .bind(inviteId, ownerId)
+      .run();
+
+    if (!(result as { meta?: { changes?: number } }).meta?.changes) {
+      throw new HttpError(404, "Invite not found.");
+    }
+  }
+
+  // Resolve um convite por token, retornando metadados do recurso (nome + dono)
+  // para a página de convite. NÃO exige login. Rejeita token inexistente,
+  // expirado, ou cujo recurso sumiu. Convite já aceito ainda resolve (a UI usa
+  // `accepted` para mostrar "convite já utilizado").
+  async resolveShareInvite(token: string): Promise<KindrawInviteMetadata> {
+    const invite = await this.getInviteByToken(token);
+    if (!invite) {
+      throw new HttpError(404, "Invite not found.");
+    }
+    if (new Date(invite.expiresAt).getTime() <= Date.now()) {
+      throw new HttpError(410, "This invite has expired.");
+    }
+
+    const resource = await this.loadInviteResource(invite);
+    if (!resource) {
+      throw new HttpError(404, "The shared resource no longer exists.");
+    }
+
+    return {
+      resourceType: invite.resourceType,
+      resourceId: invite.resourceId,
+      resourceName: resource.name,
+      role: invite.role,
+      expiresAt: invite.expiresAt,
+      invitedByName: resource.ownerName,
+      accepted: invite.acceptedByUserId !== null,
+    };
+  }
+
+  // Aceita um convite vivo: cria a share real (UPSERT) e marca accepted_*.
+  // O dono aceitar o próprio convite é um no-op amigável (ele já tem acesso).
+  async acceptShareInvite(
+    token: string,
+    acceptingUserId: string,
+  ): Promise<KindrawAcceptInviteResult> {
+    const invite = await this.getInviteByToken(token);
+    if (!invite) {
+      throw new HttpError(404, "Invite not found.");
+    }
+    if (invite.acceptedByUserId !== null) {
+      throw new HttpError(409, "This invite has already been used.");
+    }
+    if (new Date(invite.expiresAt).getTime() <= Date.now()) {
+      throw new HttpError(410, "This invite has expired.");
+    }
+
+    const resource = await this.loadInviteResource(invite);
+    if (!resource) {
+      throw new HttpError(404, "The shared resource no longer exists.");
+    }
+
+    const result: KindrawAcceptInviteResult = {
+      resourceType: invite.resourceType,
+      resourceId: invite.resourceId,
+    };
+
+    // Edge: o dono não pode "ganhar acesso" ao próprio recurso (self-share é
+    // bloqueado no grant). Tratamos como no-op amigável: marca aceito e segue.
+    if (resource.ownerId !== acceptingUserId) {
+      if (invite.resourceType === "folder") {
+        await this.grantFolderAccess(
+          invite.invitedByUserId,
+          invite.resourceId,
+          acceptingUserId,
+          invite.role,
+        );
+      } else {
+        await this.grantHybridAccess(
+          invite.invitedByUserId,
+          invite.resourceId,
+          acceptingUserId,
+          invite.role,
+        );
+      }
+    }
+
+    await this.db
+      .prepare(
+        `UPDATE share_invites
+           SET accepted_by_user_id = ?, accepted_at = ?
+         WHERE id = ? AND accepted_at IS NULL`,
+      )
+      .bind(acceptingUserId, isoNow(), invite.id)
+      .run();
+
+    return result;
+  }
+
+  private async getInviteByToken(
+    token: string,
+  ): Promise<ShareInviteRecord | null> {
+    const trimmed = (token || "").trim();
+    if (!trimmed) {
+      return null;
+    }
+    const row = await this.db
+      .prepare("SELECT * FROM share_invites WHERE token = ?")
+      .bind(trimmed)
+      .first<ShareInviteRow>();
+    return row ? toShareInvite(row) : null;
+  }
+
+  // Carrega nome do recurso + dono (id/nome) de um convite, ou null se o
+  // recurso sumiu. Para pasta: folders.name. Para híbrido: título do doc-root.
+  private async loadInviteResource(
+    invite: ShareInviteRecord,
+  ): Promise<{ name: string; ownerId: string; ownerName: string } | null> {
+    if (invite.resourceType === "folder") {
+      const row = await this.db
+        .prepare(
+          `SELECT folders.name AS name,
+                  folders.owner_id AS owner_id,
+                  owner.name AS owner_name
+             FROM folders
+             JOIN users AS owner ON owner.id = folders.owner_id
+             WHERE folders.id = ?`,
+        )
+        .bind(invite.resourceId)
+        .first<{ name: string; owner_id: string; owner_name: string }>();
+      return row
+        ? { name: row.name, ownerId: row.owner_id, ownerName: row.owner_name }
+        : null;
+    }
+
+    const row = await this.db
+      .prepare(
+        `SELECT doc.title AS name,
+                hybrid_items.owner_id AS owner_id,
+                owner.name AS owner_name
+           FROM hybrid_items
+           JOIN items AS doc ON doc.id = hybrid_items.doc_item_id
+           JOIN users AS owner ON owner.id = hybrid_items.owner_id
+           WHERE hybrid_items.id = ?`,
+      )
+      .bind(invite.resourceId)
+      .first<{ name: string; owner_id: string; owner_name: string }>();
+    return row
+      ? { name: row.name, ownerId: row.owner_id, ownerName: row.owner_name }
+      : null;
   }
 
   // Carrega a linha do híbrido por id, sem filtrar por dono (autorização é

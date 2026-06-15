@@ -41,6 +41,43 @@ export type KindrawFolderShare = {
 // share — retornado por listHybridShares / grantHybridAccess.
 export type KindrawHybridShare = KindrawFolderShare;
 
+// Tipo de recurso de um convite por link. Unifica pasta e híbrido num só
+// mecanismo de token.
+export type KindrawShareInviteResourceType = "folder" | "hybrid";
+
+// Um convite por link AINDA pendente (não aceito, não expirado), exibido na
+// lista "Pessoas com acesso" com selo "Pendente". `link` é relativo
+// (/invite/<token>) — o frontend monta a URL absoluta.
+export type KindrawPendingInvite = {
+  id: string;
+  email: string | null;
+  role: KindrawShareRole;
+  createdAt: string;
+  expiresAt: string;
+  link: string;
+  status: "pending";
+};
+
+// Metadados de um convite resolvido por token (página /invite/<token>). NÃO
+// vaza conteúdo — só o suficiente para mostrar "Fulano convidou você para X".
+export type KindrawInviteMetadata = {
+  resourceType: KindrawShareInviteResourceType;
+  resourceId: string;
+  resourceName: string;
+  role: KindrawShareRole;
+  expiresAt: string;
+  invitedByName: string;
+  // Já foi aceito por alguém? (uso único). Continua resolvível para a UI poder
+  // mostrar "convite já utilizado".
+  accepted: boolean;
+};
+
+// Resultado do aceite de um convite — informa onde redirecionar o usuário.
+export type KindrawAcceptInviteResult = {
+  resourceType: KindrawShareInviteResourceType;
+  resourceId: string;
+};
+
 export type KindrawFolder = {
   id: string;
   name: string;
@@ -187,6 +224,21 @@ export type HybridItemRecord = {
 export type ShareLinkRecord = KindrawShareLink & {
   itemId: string;
   createdByUserId: string;
+};
+
+// Linha bruta da tabela share_invites (convite por link).
+export type ShareInviteRecord = {
+  id: string;
+  token: string;
+  resourceType: KindrawShareInviteResourceType;
+  resourceId: string;
+  email: string | null;
+  role: KindrawShareRole;
+  invitedByUserId: string;
+  acceptedByUserId: string | null;
+  acceptedAt: string | null;
+  expiresAt: string;
+  createdAt: string;
 };
 
 export type CreateFolderInput = {
