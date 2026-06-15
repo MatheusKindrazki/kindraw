@@ -1164,6 +1164,45 @@ export const routeRequest = async (request: Request, env: Env) => {
     const roomId = pathname
       .replace("/api/collab/rooms/", "")
       .replace("/ws", "");
+
+    // Rooms de híbrido (doc Yjs `hdoc:<hybridId>` e canvas `hcanvas:<hybridId>`)
+    // são AUTORIZADOS: o requester precisa ter acesso ao híbrido por sessão
+    // (dono/editor/viewer) OU por um token de link live-edit. Rooms legados
+    // (drawing avulso = itemId puro) seguem sem essa checagem, como antes.
+    const hybridRoomMatch = roomId.match(/^h(?:doc|canvas):(.+)$/);
+    if (hybridRoomMatch) {
+      const hybridId = hybridRoomMatch[1];
+      const store = createStore(env.KINDRAW_DB, env.KINDRAW_BLOBS);
+
+      let authorized = false;
+      // (a) sessão autenticada com qualquer papel no híbrido
+      const session = await getAuthSession(request, env);
+      if (session) {
+        const role = await store.hybridAccessRole(session.user.id, hybridId);
+        if (role) {
+          authorized = true;
+        }
+      }
+      // (b) token de link live-edit apontando para este híbrido
+      if (!authorized) {
+        const token = url.searchParams.get("token");
+        if (token) {
+          const resolved = await store.resolveHybridShareLink(token);
+          if (
+            resolved &&
+            resolved.hybridId === hybridId &&
+            resolved.access === "live-edit"
+          ) {
+            authorized = true;
+          }
+        }
+      }
+
+      if (!authorized) {
+        return errorResponse(403, "Not authorized for this collaboration room.");
+      }
+    }
+
     const stub = env.KINDRAW_COLLAB.get(env.KINDRAW_COLLAB.idFromName(roomId));
     return stub.fetch(request);
   }

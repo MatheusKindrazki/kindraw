@@ -11,6 +11,7 @@ import {
 } from "./hybridSections";
 
 import type { KindrawItem } from "./types";
+import type { KindrawYjsProvider } from "./yjsProvider";
 
 type HybridMarkdownPaneProps = {
   hybridId: string;
@@ -20,6 +21,9 @@ type HybridMarkdownPaneProps = {
   canLinkSelection: boolean;
   linkedSectionIds?: ReadonlySet<string>;
   linkingSectionId?: string | null;
+  // Quando há uma sessão ao vivo, o painel troca o modo seção por um único
+  // editor colaborativo full-document (Yjs).
+  collabProvider?: KindrawYjsProvider | null;
   onMarkdownChange: (nextMarkdown: string) => void;
   onNavigate: (pathname: string) => void;
   onOpenCanvas: (sectionId: string) => void;
@@ -39,6 +43,7 @@ export const HybridMarkdownPane = ({
   canLinkSelection,
   linkedSectionIds,
   linkingSectionId,
+  collabProvider,
   onMarkdownChange,
   onNavigate,
   onOpenCanvas,
@@ -118,6 +123,29 @@ export const HybridMarkdownPane = ({
   };
 
   let sectionNumber = 0;
+
+  // Modo colaborativo ao vivo: um único editor full-document governado por Yjs,
+  // com presença/cursores. O markdown serializado continua sendo salvo por baixo
+  // (onMarkdownChange) para manter D1/preview público consistentes.
+  if (collabProvider) {
+    return (
+      <div className="kindraw-hybrid-doc kindraw-hybrid-doc--live">
+        <div className="kindraw-live-banner" role="status">
+          <span className="kindraw-live-banner__dot" />
+          Sessão ao vivo — edição colaborativa em tempo real
+        </div>
+        <div className="kindraw-hybrid-doc__editor kindraw-hybrid-doc__editor--live">
+          <RichTextEditor
+            collab={{ provider: collabProvider, fieldName: "default" }}
+            onChange={onMarkdownChange}
+            placeholder="Escreva em conjunto…"
+            seedMarkdown={markdown}
+            value={markdown}
+          />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="kindraw-hybrid-doc">

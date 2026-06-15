@@ -2328,6 +2328,7 @@ export const KindrawApp = () => {
             />
           ) : route.kind === "hybrid" ? (
             <HybridEditorPage
+              currentUser={session?.user ?? null}
               folders={tree.folders}
               hybridId={route.hybridId}
               initialSectionId={route.sectionId}

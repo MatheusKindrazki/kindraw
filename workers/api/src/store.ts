@@ -1532,6 +1532,41 @@ export class KindrawStore {
     return share ? share.role : null;
   }
 
+  // Carrega a linha do híbrido por id, sem filtrar por dono (autorização é
+  // responsabilidade do chamador). Retorna null se não existe.
+  private async getHybridRecordById(
+    hybridId: string,
+  ): Promise<HybridItemRecord | null> {
+    const row = await this.db
+      .prepare("SELECT * FROM hybrid_items WHERE id = ?")
+      .bind(hybridId)
+      .first<HybridItemRow>();
+    return row ? toHybridItemRecord(row) : null;
+  }
+
+  // Papel efetivo derivado de uma PASTA compartilhada que contém o doc-root do
+  // híbrido (acesso herdado). Retorna o role da pasta, ou null.
+  private async hybridFolderAccessRole(
+    userId: string,
+    hybridId: string,
+  ): Promise<KindrawShareRole | null> {
+    const row = await this.db
+      .prepare(
+        `SELECT doc.folder_id AS folder_id
+         FROM hybrid_items
+         JOIN items AS doc ON doc.id = hybrid_items.doc_item_id
+         WHERE hybrid_items.id = ?`,
+      )
+      .bind(hybridId)
+      .first<{ folder_id: string | null }>();
+
+    if (!row?.folder_id) {
+      return null;
+    }
+    const role = await this.folderAccessRole(userId, row.folder_id);
+    return role === "owner" ? null : role;
+  }
+
   async createFolder(ownerId: string, input: CreateFolderInput) {
     const name = input.name.trim();
     if (!name) {
@@ -1875,17 +1910,41 @@ export class KindrawStore {
   }
 
   async getHybridItem(
-    ownerId: string,
+    requesterId: string,
     hybridId: string,
   ): Promise<KindrawHybridItemResponse> {
-    const hybrid = await this.requireHybridItem(ownerId, hybridId);
+    // Acesso permitido a quem tem QUALQUER papel no híbrido (dono, editor ou
+    // viewer convidado — direto ou via pasta compartilhada). Os itens internos
+    // (doc/drawing) pertencem ao dono real, então a leitura usa esse owner.
+    const role = await this.hybridAccessRole(requesterId, hybridId);
+    if (!role) {
+      // Pode ser acesso herdado de pasta compartilhada (folder share). Cai no
+      // requireHybridItem? Não — tentamos via leitura dos itens com o requester.
+      // Se nem isso, 404.
+      const sharedRole = await this.hybridFolderAccessRole(
+        requesterId,
+        hybridId,
+      );
+      if (!sharedRole) {
+        throw new HttpError(404, "Hybrid item not found.");
+      }
+    }
+
+    const hybrid = await this.getHybridRecordById(hybridId);
+    if (!hybrid) {
+      throw new HttpError(404, "Hybrid item not found.");
+    }
+
+    // Lê os itens com o OWNER REAL do híbrido (dono dos itens), já que a
+    // autorização do requester já foi validada acima.
+    const realOwnerId = hybrid.ownerId;
     const [document, drawing] = await Promise.all([
-      this.getItem(ownerId, hybrid.docItemId),
-      this.getItem(ownerId, hybrid.drawingItemId),
+      this.getItem(realOwnerId, hybrid.docItemId),
+      this.getItem(realOwnerId, hybrid.drawingItemId),
     ]);
     const docRow = await this.db
       .prepare("SELECT * FROM items WHERE id = ? AND owner_id = ?")
-      .bind(hybrid.docItemId, ownerId)
+      .bind(hybrid.docItemId, realOwnerId)
       .first<ItemRow>();
 
     if (!docRow) {
