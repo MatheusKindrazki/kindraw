@@ -742,7 +742,8 @@
       "save": "Salvar",
       "convert": "Converter",
       "copyLink": "Copiar link",
-      "copied": "Copiado"
+      "copied": "Copiado",
+      "signIn": "Entrar"
     },
     "commandPalette": {
       "publicLink": "Link de visualização pública",

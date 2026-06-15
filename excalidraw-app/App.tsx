@@ -113,6 +113,7 @@ import { AppMainMenu } from "./components/AppMainMenu";
 import { AppWelcomeScreen } from "./components/AppWelcomeScreen";
 import { TopErrorBoundary } from "./components/TopErrorBoundary";
 import { KindrawTechnicalExportCard } from "./kindraw/KindrawTechnicalExportCard";
+import { SignInDropdown } from "./kindraw/SignInDropdown";
 import { KINDRAW_CURATED_LIBRARIES } from "./kindraw/curatedLibraries";
 
 import {
@@ -2192,22 +2193,7 @@ const ExcalidrawWrapper = () => {
                   </span>
                 </button>
               ) : (
-                <>
-                  <button
-                    className="kindraw-top-right-actions__button"
-                    onClick={openGithubLogin}
-                    type="button"
-                  >
-                    {t("kindraw.actions.signInWithGitHub")}
-                  </button>
-                  <button
-                    className="kindraw-top-right-actions__button"
-                    onClick={openGoogleLogin}
-                    type="button"
-                  >
-                    {t("kindraw.actions.signInWithGoogle")}
-                  </button>
-                </>
+                <SignInDropdown />
               )}
               {kindrawIsDrawingRoute && kindrawCurrentItem ? (
                 <Tooltip
