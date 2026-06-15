@@ -80,6 +80,8 @@ export class KindrawYjsProvider {
   private awarenessTimer: number | null = null;
   private snapshotTimer: number | null = null;
   private reconnectTimer: number | null = null;
+  // 1ª vez que vimos um clientId remoto sem heartbeat (grace antes de purgar)
+  private readonly noHeartbeatSince = new Map<number, number>();
   private reconnectAttempts = 0;
   private destroyed = false;
   private synced = false;
@@ -136,13 +138,34 @@ export class KindrawYjsProvider {
   private purgeStalePresence() {
     const now = Date.now();
     const stale: number[] = [];
+    const present = new Set<number>();
     for (const [clientId, state] of this.awareness.getStates()) {
+      present.add(clientId);
       if (clientId === this.doc.clientID) {
         continue;
       }
-      const t = (state as { user?: { t?: number } }).user?.t;
-      if (typeof t === "number" && now - t > PRESENCE_STALE_MS) {
-        stale.push(clientId);
+      const user = (state as { user?: { t?: number } }).user;
+      const t = user?.t;
+      if (typeof t === "number") {
+        this.noHeartbeatSince.delete(clientId);
+        if (now - t > PRESENCE_STALE_MS) {
+          stale.push(clientId); // tinha heartbeat, mas parou → caiu
+        }
+      } else {
+        // sem timestamp: pode ser peer recém-conectado (o CollaborationCaret
+        // sobrescreve o user sem `t`) OU fantasma de versão antiga. Só purga se
+        // persistir sem `t` por uma janela de graça.
+        const first = this.noHeartbeatSince.get(clientId) ?? now;
+        this.noHeartbeatSince.set(clientId, first);
+        if (now - first > PRESENCE_STALE_MS) {
+          stale.push(clientId);
+        }
+      }
+    }
+    // limpa entradas de clientes que sumiram
+    for (const id of this.noHeartbeatSince.keys()) {
+      if (!present.has(id)) {
+        this.noHeartbeatSince.delete(id);
       }
     }
     if (stale.length) {
@@ -183,7 +206,8 @@ export class KindrawYjsProvider {
       if (!user) {
         continue;
       }
-      // ignora fantasmas (sem heartbeat recente), exceto o próprio.
+      // ignora fantasmas com heartbeat antigo (o purge remove os sem `t` após
+      // a janela de graça). Self nunca é filtrado.
       const t = user.t as number | undefined;
       if (
         clientId !== selfClientId &&
