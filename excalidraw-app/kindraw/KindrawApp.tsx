@@ -25,6 +25,12 @@ import {
   updateHybridItemMeta,
   updateItemMeta,
 } from "./api";
+import { useSetAtom } from "../app-jotai";
+import {
+  SettingsDialog,
+  settingsDialogStateAtom,
+} from "../components/SettingsDialog";
+
 import { DocEditorPage } from "./DocEditorPage";
 import { DrawingEditorPage } from "./DrawingEditorPage";
 import { HybridEditorPage } from "./HybridEditorPage";
@@ -1633,6 +1639,7 @@ export const KindrawApp = () => {
   const [dialog, setDialog] = useState<KindrawDialog | null>(null);
   const [shareFolder, setShareFolder] = useState<KindrawFolder | null>(null);
   const [avatarMenuOpen, setAvatarMenuOpen] = useState(false);
+  const setSettingsDialogState = useSetAtom(settingsDialogStateAtom);
   const [searchQuery, setSearchQuery] = useState("");
   const [sharedView, setSharedView] = useState<KindrawSharedView>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -2224,6 +2231,18 @@ export const KindrawApp = () => {
           </div>
           <button
             className="kindraw-menu__item"
+            onClick={() => {
+              setAvatarMenuOpen(false);
+              setSettingsDialogState({ isOpen: true });
+            }}
+            role="menuitem"
+            type="button"
+          >
+            <KindrawIcon name="settings" size={15} />
+            Configurações
+          </button>
+          <button
+            className="kindraw-menu__item"
             disabled={isMutating}
             onClick={() => {
               setAvatarMenuOpen(false);
@@ -2395,6 +2414,8 @@ export const KindrawApp = () => {
         onClose={() => setPaletteOpen(false)}
         open={paletteOpen}
       />
+
+      <SettingsDialog />
     </div>
   );
 };

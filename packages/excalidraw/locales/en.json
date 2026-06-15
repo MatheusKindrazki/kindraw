@@ -896,6 +896,34 @@
       "revoke": "Revoke",
       "revokeConfirm": "Revoke this token? Apps using it will stop working."
     },
+    "settings": {
+      "title": "Settings",
+      "tabs": {
+        "apiKeys": "API keys",
+        "agents": "Use in Agents/LLMs"
+      }
+    },
+    "agents": {
+      "intro": "Connect Kindraw to Claude, Cursor or any MCP-compatible agent, or drive it from your terminal with the CLI. Generate a key below to prefill the snippets.",
+      "generateKey": "Generate key for this integration",
+      "keyHint": "Generate a key to fill in the snippets below, or paste your own.",
+      "copy": "Copy",
+      "copied": "Copied!",
+      "mcpTitle": "MCP setup (Claude / Cursor)",
+      "mcpDescription": "Add this server to your MCP client config (~/.claude.json or project .mcp.json). Restart the client afterwards.",
+      "tools": {
+        "createDiagram": "Create a drawing from a Mermaid definition (flowchart, sequence, class, ER…).",
+        "createDrawing": "Create a drawing from pre-serialized Excalidraw JSON.",
+        "listItems": "List your drawings and docs.",
+        "getItem": "Fetch one item with its content.",
+        "deleteItem": "Delete an item."
+      },
+      "cliTitle": "CLI",
+      "cliDescription": "Use the CLI from any terminal — sign in once, or pass a key via the KINDRAW_TOKEN env var.",
+      "cliLoginLabel": "Sign in (opens your browser)",
+      "cliEnvLabel": "Or use a key directly",
+      "cliGenerateLabel": "Generate a drawing from a Mermaid file"
+    },
     "technicalExport": {
       "title": "Technical export",
       "description": "Generate Mermaid from the current drawing, then copy it, download it, or open the result directly in draw.io.",

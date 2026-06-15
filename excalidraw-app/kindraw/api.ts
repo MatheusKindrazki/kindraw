@@ -1,16 +1,20 @@
 import { isKindrawHybridItem } from "./types";
 
 import type {
+  KindrawAcceptInviteResult,
   KindrawApiToken,
   KindrawApiTokenSecret,
   KindrawCollaborationBootstrapResponse,
   KindrawCollaborationRoom,
+  KindrawCreatedInvite,
   KindrawFolderShare,
   KindrawHybridShare,
   KindrawHybridItemResponse,
   KindrawHybridView,
+  KindrawInviteMetadata,
   KindrawItemKind,
   KindrawItemResponse,
+  KindrawPendingInvite,
   KindrawPublicItemResponse,
   KindrawSession,
   KindrawShareLinkAccess,
@@ -61,17 +65,22 @@ const requestJson = async <T>(pathname: string, init?: JsonRequestInit) => {
   return payload as T;
 };
 
+// returnTo inclui a ORIGEM + o PATH atual (sem query/hash), para que o
+// pós-login volte à mesma página — ex.: /invite/<token>. O backend revalida o
+// path com whitelist anti-open-redirect (parseReturnPath em index.ts); quando o
+// path não passa, ele cai de volta para "/".
+const currentReturnTo = () =>
+  encodeURIComponent(window.location.origin + window.location.pathname);
+
 export const openGithubLogin = () => {
-  const returnTo = encodeURIComponent(window.location.origin);
   window.location.assign(
-    createUrl(`/api/auth/login/github?returnTo=${returnTo}`),
+    createUrl(`/api/auth/login/github?returnTo=${currentReturnTo()}`),
   );
 };
 
 export const openGoogleLogin = () => {
-  const returnTo = encodeURIComponent(window.location.origin);
   window.location.assign(
-    createUrl(`/api/auth/login/google?returnTo=${returnTo}`),
+    createUrl(`/api/auth/login/google?returnTo=${currentReturnTo()}`),
   );
 };
 
@@ -212,6 +221,77 @@ export const revokeHybridShare = (hybridId: string, shareId: string) =>
   requestJson<void>(`/api/hybrid-items/${hybridId}/shares/${shareId}`, {
     method: "DELETE",
   });
+
+/* ────────────────────────────────────────────────────────
+   Convites por link (para quem ainda não tem acesso/conta)
+   ──────────────────────────────────────────────────────── */
+
+// Metadados de um convite resolvido por token. NÃO exige login (a página de
+// convite mostra "Fulano convidou você para X" antes de o visitante logar).
+export const getInvite = (token: string) =>
+  requestJson<{ invite: KindrawInviteMetadata }>(
+    `/api/invites/${encodeURIComponent(token)}`,
+    { credentials: "include" },
+  );
+
+// Aceita o convite no nome da conta logada (exige sessão). Devolve onde
+// redirecionar (pasta ou híbrido).
+export const acceptInvite = (token: string) =>
+  requestJson<KindrawAcceptInviteResult>(
+    `/api/invites/${encodeURIComponent(token)}/accept`,
+    { method: "POST" },
+  );
+
+export const createFolderInvite = (
+  folderId: string,
+  email: string,
+  role: KindrawShareRole,
+) =>
+  requestJson<{ invite: KindrawCreatedInvite }>(
+    `/api/folders/${folderId}/invites`,
+    {
+      method: "POST",
+      body: { email, role },
+    },
+  );
+
+export const listFolderInvites = (folderId: string) =>
+  requestJson<{ invites: KindrawPendingInvite[] }>(
+    `/api/folders/${folderId}/invites`,
+  );
+
+export const revokeFolderInvite = (folderId: string, inviteId: string) =>
+  requestJson<void>(`/api/folders/${folderId}/invites/${inviteId}`, {
+    method: "DELETE",
+  });
+
+export const createHybridInvite = (
+  hybridId: string,
+  email: string,
+  role: KindrawShareRole,
+) =>
+  requestJson<{ invite: KindrawCreatedInvite }>(
+    `/api/hybrid-items/${hybridId}/invites`,
+    {
+      method: "POST",
+      body: { email, role },
+    },
+  );
+
+export const listHybridInvites = (hybridId: string) =>
+  requestJson<{ invites: KindrawPendingInvite[] }>(
+    `/api/hybrid-items/${hybridId}/invites`,
+  );
+
+export const revokeHybridInvite = (hybridId: string, inviteId: string) =>
+  requestJson<void>(`/api/hybrid-items/${hybridId}/invites/${inviteId}`, {
+    method: "DELETE",
+  });
+
+// Monta a URL absoluta de um convite a partir do link relativo (/invite/<token>)
+// retornado pelo backend.
+export const buildInviteUrl = (link: string) =>
+  `${window.location.origin}${link}`;
 
 export const createItem = (input: {
   kind: KindrawItemKind;

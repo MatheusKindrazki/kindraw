@@ -1,0 +1,160 @@
+.kindraw-agents-guide {
+  display: flex;
+  flex-direction: column;
+  gap: 1.1rem;
+  font-size: 0.875rem;
+
+  &__intro {
+    margin: 0;
+    line-height: 1.5;
+    color: var(--kd-muted, var(--color-on-surface));
+  }
+
+  &__keybar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.9rem;
+    border-radius: var(--kd-r-btn, 10px);
+    border: 1px solid var(--kd-line, var(--color-border-outline-variant));
+    background: var(--kd-surface-warm, var(--color-surface-high));
+  }
+
+  &__generate {
+    padding: 8px 14px;
+    border: none;
+    border-radius: var(--kd-r-btn, 10px);
+    background: var(--kd-ink, #20283a);
+    color: var(--kd-surface-warm, #fffdf8);
+    font-family: var(--kd-font, inherit);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+
+    &:hover:not(:disabled) {
+      opacity: 0.9;
+    }
+
+    &:disabled {
+      opacity: 0.55;
+      cursor: default;
+    }
+  }
+
+  &__hint {
+    font-size: 0.78rem;
+    color: var(--kd-faint, #a39577);
+  }
+
+  &__warning {
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--kd-amber-deep, #7a5414);
+  }
+
+  &__error {
+    margin: 0;
+    color: var(--kd-danger, var(--color-danger));
+    font-size: 0.8rem;
+  }
+
+  &__section {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+
+    h4 {
+      margin: 0;
+      font-size: 0.82rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--kd-amber, var(--color-primary));
+    }
+
+    p {
+      margin: 0;
+      line-height: 1.5;
+      color: var(--kd-muted, var(--color-on-surface));
+    }
+  }
+
+  &__tools {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+
+    li {
+      display: flex;
+      flex-direction: column;
+      gap: 0.1rem;
+    }
+
+    code {
+      font-family: ui-monospace, "SF Mono", Menlo, monospace;
+      font-size: 0.76rem;
+      font-weight: 600;
+      color: var(--kd-ink, var(--color-on-surface));
+    }
+
+    span {
+      font-size: 0.78rem;
+      color: var(--kd-muted, var(--color-on-surface));
+    }
+  }
+}
+
+.kindraw-codeblock {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+
+  &__label {
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: var(--kd-faint, #a39577);
+  }
+
+  &__body {
+    position: relative;
+  }
+
+  &__pre {
+    margin: 0;
+    padding: 0.7rem 0.8rem;
+    border-radius: var(--kd-r-btn, 10px);
+    border: 1px solid var(--kd-line, var(--color-border-outline-variant));
+    background: var(--kd-canvas, var(--color-surface-lowest));
+    overflow-x: auto;
+
+    code {
+      font-family: ui-monospace, "SF Mono", Menlo, monospace;
+      font-size: 0.76rem;
+      line-height: 1.5;
+      color: var(--kd-ink, var(--color-on-surface));
+      white-space: pre;
+    }
+  }
+
+  &__copy {
+    position: absolute;
+    top: 0.5rem;
+    right: 0.5rem;
+    padding: 4px 10px;
+    border: 1px solid var(--kd-line, var(--color-border-outline-variant));
+    border-radius: var(--kd-r-btn, 8px);
+    background: var(--kd-surface, var(--color-surface-high));
+    color: var(--kd-ink-soft, var(--color-on-surface));
+    font-family: var(--kd-font, inherit);
+    font-size: 0.72rem;
+    font-weight: 600;
+    cursor: pointer;
+
+    &:hover {
+      background: var(--kd-amber-soft, var(--color-surface-high));
+    }
+  }
+}

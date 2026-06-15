@@ -26,6 +26,7 @@ export type KindrawIconName =
   | "close"
   | "trash"
   | "move"
+  | "settings"
   | "github";
 
 const KINDRAW_ICON_BODY: Record<KindrawIconName, ReactNode> = {
@@ -123,6 +124,12 @@ const KINDRAW_ICON_BODY: Record<KindrawIconName, ReactNode> = {
     <g>
       <path d="M3 7.5A1.5 1.5 0 0 1 4.5 6h4.4l2 2.2h8.6A1.5 1.5 0 0 1 21 9.7v7.8a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 17.5z" />
       <path d="M9.5 13.5h6M13 11l2.5 2.5L13 16" />
+    </g>
+  ),
+  settings: (
+    <g>
+      <circle cx="12" cy="12" r="3.2" />
+      <path d="M12 2.8v2.4M12 18.8v2.4M21.2 12h-2.4M5.2 12H2.8M18.5 5.5l-1.7 1.7M7.2 16.8l-1.7 1.7M18.5 18.5l-1.7-1.7M7.2 7.2 5.5 5.5" />
     </g>
   ),
   github: (

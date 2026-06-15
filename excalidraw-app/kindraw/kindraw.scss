@@ -1374,6 +1374,12 @@
   color: var(--kd-faint);
 }
 
+/* Linha de chamada acima dos botões de provedor na página de convite */
+.kindraw-login-card__hint {
+  font-weight: 600;
+  color: var(--kd-ink-soft);
+}
+
 .kindraw-ghostlink {
   align-self: center;
   border: none;
@@ -3304,6 +3310,53 @@
   margin: 0;
   color: var(--kd-danger);
   font-size: 12.5px;
+}
+
+/* Texto de apoio abaixo do campo de convite (explica que gera link) */
+.kindraw-sharemodal__invite-help {
+  margin: 8px 0 0;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--kd-muted);
+}
+
+/* Caixa de destaque com o link recém-gerado do convite */
+.kindraw-invite-created {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--kd-line);
+  border-radius: 12px;
+  background: var(--kd-amber-soft);
+}
+
+.kindraw-invite-created__label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--kd-amber-deep);
+}
+
+/* Selo "Pendente" de um convite por link ainda não aceito */
+.kindraw-sharemodal__pending-tag {
+  flex-shrink: 0;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--kd-amber-soft);
+  color: var(--kd-amber-deep);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+/* Linha de um convite pendente na lista de pessoas: ícone de link no lugar do
+   avatar + botão copiar antes do × de cancelar. */
+.kindraw-sharemodal__person--invite .kindraw-sharemodal__avatar--fallback {
+  color: var(--kd-muted);
+}
+
+.kindraw-sharemodal__person--invite .kindraw-btn--sm {
+  flex-shrink: 0;
 }
 
 /* Lista de pessoas com acesso */

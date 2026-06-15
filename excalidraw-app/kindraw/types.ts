@@ -30,6 +30,48 @@ export type KindrawFolderShare = {
 // Mesmo shape do folder share, mas para um documento híbrido.
 export type KindrawHybridShare = KindrawFolderShare;
 
+// Tipo de recurso de um convite por link — pasta ou documento híbrido.
+export type KindrawShareInviteResourceType = "folder" | "hybrid";
+
+// Um convite por link AINDA pendente (não aceito, não expirado), exibido na
+// lista "Pessoas com acesso" com selo "Pendente". `link` é relativo
+// (/invite/<token>) — montamos a URL absoluta no frontend.
+export type KindrawPendingInvite = {
+  id: string;
+  email: string | null;
+  role: KindrawShareRole;
+  createdAt: string;
+  expiresAt: string;
+  link: string;
+  status: "pending";
+};
+
+// Resposta da criação de um convite: além dos campos de KindrawPendingInvite,
+// expõe o `token` cru (o link É a credencial, igual aos links públicos).
+export type KindrawCreatedInvite = KindrawPendingInvite & {
+  token: string;
+};
+
+// Metadados de um convite resolvido por token (página /invite/<token>). NÃO
+// vaza conteúdo — só o suficiente para mostrar "Fulano convidou você para X".
+export type KindrawInviteMetadata = {
+  resourceType: KindrawShareInviteResourceType;
+  resourceId: string;
+  resourceName: string;
+  role: KindrawShareRole;
+  expiresAt: string;
+  invitedByName: string;
+  // Já foi aceito por alguém? (uso único). Continua resolvível para a UI poder
+  // mostrar "convite já utilizado".
+  accepted: boolean;
+};
+
+// Resultado do aceite de um convite — informa onde redirecionar o usuário.
+export type KindrawAcceptInviteResult = {
+  resourceType: KindrawShareInviteResourceType;
+  resourceId: string;
+};
+
 export type KindrawFolderSharedMeta = {
   role: KindrawShareRole;
   ownerId: string;

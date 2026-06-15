@@ -137,10 +137,7 @@ import {
 } from "./data/LocalData";
 import { isBrowserStorageStateNewer } from "./data/tabSync";
 import { ShareDialog, shareDialogStateAtom } from "./share/ShareDialog";
-import {
-  ApiTokensDialog,
-  apiTokensDialogStateAtom,
-} from "./components/ApiTokensDialog";
+import { SettingsDialog } from "./components/SettingsDialog";
 import CollabError, { collabErrorIndicatorAtom } from "./collab/CollabError";
 import { useHandleAppTheme } from "./useHandleAppTheme";
 import { getPreferredLanguage } from "./app-language/language-detector";
@@ -2393,7 +2390,7 @@ const ExcalidrawWrapper = () => {
           }}
         />
 
-        <ApiTokensDialog />
+        <SettingsDialog />
 
         <AppSidebar
           currentDrawingStatus={kindrawDrawingStatus}
