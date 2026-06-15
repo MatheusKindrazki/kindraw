@@ -6,6 +6,7 @@ import {
   getSession,
   getWorkspaceTree,
   openGithubLogin,
+  openGoogleLogin,
 } from "./api";
 import { DocEditorPage } from "./DocEditorPage";
 import { HybridEditorPage } from "./HybridEditorPage";
@@ -137,6 +138,13 @@ export const KindrawDocScreen = ({ itemId }: KindrawDocScreenProps) => {
             >
               {t("kindraw.actions.signInWithGitHub")}
             </button>
+            <button
+              className="kindraw-button"
+              onClick={openGoogleLogin}
+              type="button"
+            >
+              {t("kindraw.actions.signInWithGoogle")}
+            </button>
             <a className="kindraw-link-button" href="/">
               {t("kindraw.publicView.backToCanvas")}
             </a>
@@ -214,6 +222,13 @@ export const KindrawHybridScreen = ({
               type="button"
             >
               {t("kindraw.actions.signInWithGitHub")}
+            </button>
+            <button
+              className="kindraw-button"
+              onClick={openGoogleLogin}
+              type="button"
+            >
+              {t("kindraw.actions.signInWithGoogle")}
             </button>
             <a className="kindraw-link-button" href="/">
               {t("kindraw.publicView.backToCanvas")}

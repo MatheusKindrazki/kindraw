@@ -20,6 +20,7 @@ import {
   getWorkspaceTree,
   logout,
   openGithubLogin,
+  openGoogleLogin,
   renameFolder,
   updateHybridItemMeta,
   updateItemMeta,
@@ -29,7 +30,8 @@ import { DrawingEditorPage } from "./DrawingEditorPage";
 import { HybridEditorPage } from "./HybridEditorPage";
 import { HybridPublicShareView } from "./HybridPublicShareView";
 import { ShareFolderModal } from "./ShareFolderModal";
-import { KindrawIcon } from "./icons";
+import { GoogleGlyph, KindrawIcon } from "./icons";
+import { userHandle } from "./identity";
 import { createInitialItemContent } from "./content";
 import {
   buildFolderPath,
@@ -2109,18 +2111,34 @@ export const KindrawApp = () => {
             Seu workspace de drawings, docs e híbridos — com pastas, autosave e
             links públicos.
           </p>
-          <button
-            className="kindraw-btn kindraw-btn--primary kindraw-btn--github"
-            onClick={openGithubLogin}
-            type="button"
-          >
-            <KindrawIcon name="github" size={18} /> Continuar com GitHub
-          </button>
+          <div className="kindraw-login-providers">
+            <button
+              className="kindraw-btn kindraw-btn--primary kindraw-provider-btn"
+              onClick={openGithubLogin}
+              type="button"
+            >
+              <span className="kindraw-provider-glyph kindraw-provider-glyph--github">
+                <KindrawIcon name="github" size={18} />
+              </span>
+              GitHub
+            </button>
+            <button
+              className="kindraw-btn kindraw-btn--primary kindraw-provider-btn"
+              onClick={openGoogleLogin}
+              type="button"
+            >
+              <span className="kindraw-provider-glyph kindraw-provider-glyph--google">
+                <GoogleGlyph size={16} />
+              </span>
+              Google
+            </button>
+          </div>
           <a className="kindraw-ghostlink" href="/public">
             Explorar sem conta
           </a>
           <small>
-            Usamos seu GitHub apenas para login e presença em sessões ao vivo.
+            Usamos seu GitHub ou Google apenas para login e presença em sessões
+            ao vivo.
           </small>
           {errorMessage ? (
             <p className="kindraw-error-copy">{errorMessage}</p>
@@ -2193,7 +2211,7 @@ export const KindrawApp = () => {
               )}
               <span>
                 <strong>{session.user.name}</strong>
-                <span>@{session.user.githubLogin}</span>
+                <span>@{userHandle(session.user)}</span>
               </span>
             </button>
           }
@@ -2202,7 +2220,7 @@ export const KindrawApp = () => {
         >
           <div className="kindraw-menu__header">
             <strong>{session.user.name}</strong>
-            <span>@{session.user.githubLogin}</span>
+            <span>@{userHandle(session.user)}</span>
           </div>
           <button
             className="kindraw-menu__item"

@@ -182,6 +182,47 @@
   font-size: 14px;
 }
 
+/* Login com provedores (GitHub / Google) lado a lado, 50/50 */
+.kindraw-login-providers {
+  display: flex;
+  width: 100%;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+.kindraw-provider-btn {
+  flex: 1 1 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  height: 46px;
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+/* Chip do ícone — círculo claro pra o glifo do provedor "respirar" sobre o
+   botão escuro (e o G colorido do Google ficar legível). */
+.kindraw-provider-glyph {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.kindraw-provider-glyph--github {
+  /* gato branco do GitHub direto sobre o botão, sem chip */
+  color: var(--kd-surface-warm);
+}
+
+.kindraw-provider-glyph--google {
+  background: #fff;
+}
+
 /* Pills de status (Salvo / Salvando / Erro) */
 .kindraw-pill {
   display: inline-flex;

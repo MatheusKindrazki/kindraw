@@ -4,9 +4,14 @@ export type KindrawHybridRole = "doc" | "drawing";
 
 export type KindrawUser = {
   id: string;
-  githubLogin: string;
+  // Null for accounts that only ever logged in with Google. Use userHandle()
+  // (identity.ts) for display instead of reading this directly.
+  githubLogin: string | null;
   name: string;
   avatarUrl: string | null;
+  // Verified primary email, when available. Used as a display/identity
+  // fallback for Google-only accounts.
+  email: string | null;
 };
 
 export type KindrawSession = {

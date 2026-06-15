@@ -720,6 +720,7 @@
     "actions": {
       "openWorkspace": "Open workspace",
       "signInWithGitHub": "Sign in with GitHub",
+      "signInWithGoogle": "Sign in with Google",
       "createPublicLink": "Create public link",
       "createPublicViewLink": "Create public view link",
       "copyPublicLink": "Copy public link",

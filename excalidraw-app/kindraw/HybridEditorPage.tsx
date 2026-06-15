@@ -36,7 +36,7 @@ import { LibraryIcon } from "@excalidraw/excalidraw/components/icons";
 import { AppSidebar } from "../components/AppSidebar";
 
 import { parseDrawingContent } from "./content";
-import { colorForUser } from "./identity";
+import { colorForUser, userHandle } from "./identity";
 import { HybridMarkdownPane } from "./HybridMarkdownPane";
 import { KindrawIcon } from "./icons";
 import { PresenceFacepile } from "./PresenceFacepile";
@@ -517,7 +517,7 @@ export const HybridEditorPage = ({
     const provider = new KindrawYjsProvider({
       roomId: `hdoc:${hybridId}`,
       user: {
-        name: currentUser.name || currentUser.githubLogin,
+        name: currentUser.name || userHandle(currentUser),
         color: colorForUser(currentUser.id),
         avatarUrl: currentUser.avatarUrl,
         githubLogin: currentUser.githubLogin,
@@ -573,7 +573,7 @@ export const HybridEditorPage = ({
     roomId: `hcanvas:${hybridId}`,
     roomKey: canvasRoomKey,
     profile: {
-      name: currentUser?.name || currentUser?.githubLogin || "Você",
+      name: currentUser?.name || (currentUser ? userHandle(currentUser) : "") || "Você",
       userId: currentUser?.id ?? null,
       avatarUrl: currentUser?.avatarUrl ?? null,
       githubLogin: currentUser?.githubLogin ?? null,
@@ -1007,7 +1007,7 @@ export const HybridEditorPage = ({
         collabUser={
           currentUser
             ? {
-                name: currentUser.name || currentUser.githubLogin,
+                name: currentUser.name || userHandle(currentUser),
                 color: colorForUser(currentUser.id),
                 avatarUrl: currentUser.avatarUrl,
                 githubLogin: currentUser.githubLogin,

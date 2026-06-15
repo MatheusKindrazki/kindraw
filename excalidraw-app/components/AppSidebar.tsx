@@ -62,6 +62,10 @@ export const AppSidebar = ({ excalidrawAPI, route }: AppSidebarProps) => {
       !editorInterface.canFitSidebar ||
       route.kind === "public" ||
       route.kind === "share" ||
+      // No híbrido o canvas divide a tela com o documento; abrir o painel de
+      // ícones/templates sozinho rouba espaço. Vem fechado — o usuário abre
+      // pelo botão da Library quando quiser.
+      route.kind === "hybrid" ||
       openSidebar
     ) {
       return;

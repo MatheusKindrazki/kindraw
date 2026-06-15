@@ -48,6 +48,16 @@ export const initialsForName = (name: string): string => {
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 };
 
+// Handle de exibição de um usuário. Contas GitHub têm githubLogin; contas só
+// com Google não — caem para a parte local do email e, por fim, para o nome.
+// Use sempre isto em vez de ler user.githubLogin direto (que pode ser null).
+export const userHandle = (user: {
+  githubLogin: string | null;
+  email?: string | null;
+  name?: string;
+}): string =>
+  user.githubLogin || user.email?.split("@")[0] || user.name || "user";
+
 // Identidade de um participante normalizada para a UI de presença.
 export type PresenceUser = {
   // chave estável p/ dedupe (userId quando logado, senão o socket/cliente id)

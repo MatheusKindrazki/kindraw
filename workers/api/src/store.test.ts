@@ -57,9 +57,10 @@ type HybridItemRow = {
 
 type UserRow = {
   id: string;
-  github_login: string;
+  github_login: string | null;
   name: string;
   avatar_url: string | null;
+  email?: string | null;
 };
 
 type FolderShareRow = {
@@ -180,22 +181,39 @@ class FakeStatement implements D1PreparedStatement {
     }
 
     if (
-      query ===
-      "SELECT id, github_login, name, avatar_url FROM users WHERE github_login = ? COLLATE NOCASE LIMIT 1"
+      query.startsWith(
+        "SELECT id, github_login, name, avatar_url FROM users WHERE github_login = ? COLLATE NOCASE",
+      )
     ) {
-      const [login] = this.values as [string];
-      const user = this.state.users.find(
-        (entry) =>
-          entry.github_login.toLowerCase() === login.toLowerCase(),
-      );
-      return (user
-        ? {
-            id: user.id,
-            github_login: user.github_login,
-            name: user.name,
-            avatar_url: user.avatar_url,
-          }
-        : null) as T | null;
+      // getUserByLogin: matches @github_login, full email, or email local-part.
+      const [login, email, emailLocalPattern] = this.values as [
+        string,
+        string,
+        string,
+      ];
+      const localPrefix = emailLocalPattern
+        .replace(/\\([\\%_])/g, "$1")
+        .replace(/@%$/, "@")
+        .toLowerCase();
+      const user = this.state.users.find((entry) => {
+        const byLogin =
+          (entry.github_login ?? "").toLowerCase() === login.toLowerCase();
+        const byEmail =
+          !!entry.email && entry.email.toLowerCase() === email.toLowerCase();
+        const byLocal =
+          !!entry.email && entry.email.toLowerCase().startsWith(localPrefix);
+        return byLogin || byEmail || byLocal;
+      });
+      return (
+        user
+          ? {
+              id: user.id,
+              github_login: user.github_login,
+              name: user.name,
+              avatar_url: user.avatar_url,
+            }
+          : null
+      ) as T | null;
     }
 
     if (
@@ -396,9 +414,11 @@ class FakeStatement implements D1PreparedStatement {
       const shareLink = this.state.shareLinks.find(
         (entry) => entry.token === token && entry.revoked_at === null,
       );
-      return (shareLink
-        ? { item_id: shareLink.item_id, access: shareLink.access ?? "read" }
-        : null) as T | null;
+      return (
+        shareLink
+          ? { item_id: shareLink.item_id, access: shareLink.access ?? "read" }
+          : null
+      ) as T | null;
     }
 
     if (
@@ -574,7 +594,10 @@ class FakeStatement implements D1PreparedStatement {
         .filter((row): row is NonNullable<typeof row> => row !== null)
         .sort((left, right) => {
           const byName = left.folder_name.localeCompare(right.folder_name);
-          return byName || left.folder_created_at.localeCompare(right.folder_created_at);
+          return (
+            byName ||
+            left.folder_created_at.localeCompare(right.folder_created_at)
+          );
         });
       return { results: results as T[] };
     }
@@ -651,7 +674,10 @@ class FakeStatement implements D1PreparedStatement {
         "SELECT id, github_login, name, avatar_url FROM users WHERE id != ?",
       )
     ) {
-      const [excludeUserId, pattern, , limit] = this.values as [
+      // Binds: excludeUserId, pattern(login), pattern(name), pattern(email),
+      // limit. All three patterns are identical, so we read the first one.
+      const [excludeUserId, pattern, , , limit] = this.values as [
+        string,
         string,
         string,
         string,
@@ -665,11 +691,12 @@ class FakeStatement implements D1PreparedStatement {
         .filter((entry) => entry.id !== excludeUserId)
         .filter(
           (entry) =>
-            entry.github_login.toLowerCase().includes(term) ||
-            entry.name.toLowerCase().includes(term),
+            (entry.github_login ?? "").toLowerCase().includes(term) ||
+            entry.name.toLowerCase().includes(term) ||
+            (entry.email ?? "").toLowerCase().includes(term),
         )
         .sort((left, right) =>
-          left.github_login.localeCompare(right.github_login),
+          (left.github_login ?? "").localeCompare(right.github_login ?? ""),
         )
         .slice(0, limit)
         .map((entry) => ({
@@ -996,15 +1023,8 @@ class FakeStatement implements D1PreparedStatement {
       query ===
       "INSERT INTO folder_shares (id, folder_id, user_id, role, granted_by_user_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)"
     ) {
-      const [
-        id,
-        folderId,
-        userId,
-        role,
-        grantedBy,
-        createdAt,
-        updatedAt,
-      ] = this.values as [
+      const [id, folderId, userId, role, grantedBy, createdAt, updatedAt] = this
+        .values as [
         string,
         string,
         string,
@@ -1061,9 +1081,7 @@ class FakeStatement implements D1PreparedStatement {
       return { meta: { changes: share ? 1 : 0 } };
     }
 
-    if (
-      query === "DELETE FROM folder_shares WHERE id = ? AND folder_id = ?"
-    ) {
+    if (query === "DELETE FROM folder_shares WHERE id = ? AND folder_id = ?") {
       const [id, folderId] = this.values as [string, string];
       const before = this.state.folderShares.length;
       this.state.folderShares = this.state.folderShares.filter(
@@ -1076,15 +1094,8 @@ class FakeStatement implements D1PreparedStatement {
       query ===
       "INSERT INTO hybrid_shares (id, hybrid_id, user_id, role, granted_by_user_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)"
     ) {
-      const [
-        id,
-        hybridId,
-        userId,
-        role,
-        grantedBy,
-        createdAt,
-        updatedAt,
-      ] = this.values as [
+      const [id, hybridId, userId, role, grantedBy, createdAt, updatedAt] = this
+        .values as [
         string,
         string,
         string,
@@ -1141,9 +1152,7 @@ class FakeStatement implements D1PreparedStatement {
       return { meta: { changes: share ? 1 : 0 } };
     }
 
-    if (
-      query === "DELETE FROM hybrid_shares WHERE id = ? AND hybrid_id = ?"
-    ) {
+    if (query === "DELETE FROM hybrid_shares WHERE id = ? AND hybrid_id = ?") {
       const [id, hybridId] = this.values as [string, string];
       const before = this.state.hybridShares.length;
       this.state.hybridShares = this.state.hybridShares.filter(
@@ -2305,6 +2314,7 @@ describe("KindrawStore folder sharing", () => {
       githubLogin: "hubot",
       name: "Hu Bot",
       avatarUrl: null,
+      email: null,
     });
 
     // por name (case-insensitive)
@@ -2322,7 +2332,10 @@ describe("KindrawStore folder sharing", () => {
     // o "_" literal nao casa qualquer caractere
     const literalUnderscore = await store.searchUsers("weird_name", "owner-1");
     expect(literalUnderscore.map((u) => u.id)).toEqual(["guest-3"]);
-    const wouldMatchIfWildcard = await store.searchUsers("weirdXname", "owner-1");
+    const wouldMatchIfWildcard = await store.searchUsers(
+      "weirdXname",
+      "owner-1",
+    );
     expect(wouldMatchIfWildcard).toEqual([]);
   });
 
@@ -2334,6 +2347,7 @@ describe("KindrawStore folder sharing", () => {
       githubLogin: "hubot",
       name: "Hu Bot",
       avatarUrl: null,
+      email: null,
     });
     await expect(store.getUserByLogin("ghost")).resolves.toBeNull();
   });
@@ -2371,6 +2385,7 @@ describe("KindrawStore folder sharing", () => {
         githubLogin: "hubot",
         name: "Hu Bot",
         avatarUrl: null,
+        email: null,
       },
     });
     expect(state.folderShares).toHaveLength(1);
@@ -2495,6 +2510,7 @@ describe("KindrawStore folder sharing", () => {
           githubLogin: "hubot",
           name: "Hu Bot",
           avatarUrl: null,
+          email: null,
         },
       },
       {
@@ -2506,6 +2522,7 @@ describe("KindrawStore folder sharing", () => {
           githubLogin: "monalisa",
           name: "Mona Lisa",
           avatarUrl: null,
+          email: null,
         },
       },
     ]);
@@ -2557,7 +2574,8 @@ describe("KindrawStore folder sharing", () => {
           folder_id: "folder-shared",
           kind: "drawing",
           title: "Roadmap",
-          content_blob_key: "users/owner-1/items/shared-item/current.excalidraw",
+          content_blob_key:
+            "users/owner-1/items/shared-item/current.excalidraw",
           archived_at: null,
           collaboration_room_key: null,
           collaboration_enabled_at: null,
@@ -2716,7 +2734,8 @@ describe("KindrawStore folder sharing", () => {
           folder_id: "folder-shared",
           kind: "drawing",
           title: "Roadmap",
-          content_blob_key: "users/owner-1/items/shared-item/current.excalidraw",
+          content_blob_key:
+            "users/owner-1/items/shared-item/current.excalidraw",
           archived_at: null,
           collaboration_room_key: null,
           collaboration_enabled_at: null,
@@ -2768,7 +2787,9 @@ describe("KindrawStore folder sharing", () => {
     ).toBe('{"elements":[1]}');
 
     // EDITOR pode editar metadados (titulo) de item do dono — owner_id preservado
-    await store.patchItemMeta("guest-1", "shared-item", { title: "Roadmap v2" });
+    await store.patchItemMeta("guest-1", "shared-item", {
+      title: "Roadmap v2",
+    });
     const editedByEditor = state.items.find((i) => i.id === "shared-item");
     expect(editedByEditor?.title).toBe("Roadmap v2");
     expect(editedByEditor?.owner_id).toBe("owner-1");
@@ -2794,15 +2815,15 @@ describe("KindrawStore folder sharing", () => {
     ).rejects.toMatchObject({ status: 404 });
 
     // VIEWER PODE ler
-    await expect(store.getItem("guest-2", "shared-item")).resolves.toMatchObject(
-      { item: { id: "shared-item" } },
-    );
+    await expect(
+      store.getItem("guest-2", "shared-item"),
+    ).resolves.toMatchObject({ item: { id: "shared-item" } });
 
     // ESTRANHO (sem share) nao le nem escreve => 404
     const stranger = "guest-3";
-    await expect(
-      store.getItem(stranger, "shared-item"),
-    ).rejects.toMatchObject({ status: 404 });
+    await expect(store.getItem(stranger, "shared-item")).rejects.toMatchObject({
+      status: 404,
+    });
     await expect(
       store.putItemContent(stranger, "shared-item", "x"),
     ).rejects.toMatchObject({ status: 404 });
@@ -2910,6 +2931,7 @@ describe("KindrawStore hybrid sharing", () => {
         githubLogin: "hubot",
         name: "Hu Bot",
         avatarUrl: null,
+        email: null,
       },
     });
     expect(state.hybridShares).toHaveLength(1);
@@ -3014,6 +3036,7 @@ describe("KindrawStore hybrid sharing", () => {
           githubLogin: "hubot",
           name: "Hu Bot",
           avatarUrl: null,
+          email: null,
         },
       },
       {
@@ -3025,6 +3048,7 @@ describe("KindrawStore hybrid sharing", () => {
           githubLogin: "monalisa",
           name: "Mona Lisa",
           avatarUrl: null,
+          email: null,
         },
       },
     ]);
@@ -3072,5 +3096,289 @@ describe("KindrawStore hybrid sharing", () => {
       sharedRole?: string;
     };
     expect(ownerHybrid?.sharedRole).toBeUndefined();
+  });
+});
+
+// --- Account linking (upsertOAuthUser) --------------------------------------
+// The big FakeStatement above matches whole SQL strings and doesn't model the
+// users table's full column set. This suite uses a small, dedicated in-memory
+// D1 double that understands exactly the queries upsertOAuthUser issues, so we
+// can assert the merge-by-email behaviour (the security-critical path).
+
+type FullUserRow = {
+  id: string;
+  github_id: string | null;
+  google_sub: string | null;
+  email: string | null;
+  github_login: string | null;
+  name: string;
+  avatar_url: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+class AuthFakeStatement implements D1PreparedStatement {
+  private values: unknown[] = [];
+
+  constructor(
+    private readonly query: string,
+    private readonly users: FullUserRow[],
+  ) {}
+
+  bind(...values: unknown[]) {
+    this.values = values;
+    return this;
+  }
+
+  async first<T = Record<string, unknown>>() {
+    const q = normalizeQuery(this.query);
+    if (q === "SELECT * FROM users WHERE github_id = ?") {
+      const [id] = this.values as [string];
+      return (this.users.find((u) => u.github_id === id) ?? null) as T | null;
+    }
+    if (q === "SELECT * FROM users WHERE google_sub = ?") {
+      const [id] = this.values as [string];
+      return (this.users.find((u) => u.google_sub === id) ?? null) as T | null;
+    }
+    if (q === "SELECT * FROM users WHERE email = ?") {
+      const [email] = this.values as [string];
+      return (this.users.find((u) => u.email === email) ?? null) as T | null;
+    }
+    if (q === "SELECT id FROM users WHERE email = ? AND id != ?") {
+      const [email, excludeId] = this.values as [string, string];
+      const owner = this.users.find(
+        (u) => u.email === email && u.id !== excludeId,
+      );
+      return (owner ? { id: owner.id } : null) as T | null;
+    }
+    throw new Error(`Unsupported auth first() query: ${q}`);
+  }
+
+  async all<T = Record<string, unknown>>() {
+    return { results: [] as T[] };
+  }
+
+  async run() {
+    const q = normalizeQuery(this.query);
+    if (q.startsWith("UPDATE users SET github_id = ?")) {
+      const [
+        githubId,
+        googleSub,
+        email,
+        githubLogin,
+        name,
+        avatarUrl,
+        updatedAt,
+        id,
+      ] = this.values as [
+        string | null,
+        string | null,
+        string | null,
+        string | null,
+        string,
+        string | null,
+        string,
+        string,
+      ];
+      const row = this.users.find((u) => u.id === id);
+      if (row) {
+        Object.assign(row, {
+          github_id: githubId,
+          google_sub: googleSub,
+          email,
+          github_login: githubLogin,
+          name,
+          avatar_url: avatarUrl,
+          updated_at: updatedAt,
+        });
+      }
+      return {};
+    }
+    if (q.startsWith("INSERT INTO users")) {
+      const [
+        id,
+        githubId,
+        googleSub,
+        email,
+        githubLogin,
+        name,
+        avatarUrl,
+        createdAt,
+        updatedAt,
+      ] = this.values as [
+        string,
+        string | null,
+        string | null,
+        string | null,
+        string | null,
+        string,
+        string | null,
+        string,
+        string,
+      ];
+      this.users.push({
+        id,
+        github_id: githubId,
+        google_sub: googleSub,
+        email,
+        github_login: githubLogin,
+        name,
+        avatar_url: avatarUrl,
+        created_at: createdAt,
+        updated_at: updatedAt,
+      });
+      return {};
+    }
+    throw new Error(`Unsupported auth run() query: ${q}`);
+  }
+}
+
+class AuthFakeD1 implements D1Database {
+  constructor(readonly users: FullUserRow[]) {}
+  prepare(query: string) {
+    return new AuthFakeStatement(query, this.users);
+  }
+  async batch() {
+    return [];
+  }
+}
+
+const createAuthStore = (users: FullUserRow[] = []) => {
+  const blobs = new FakeR2Bucket();
+  return {
+    users,
+    store: new KindrawStore(new AuthFakeD1(users), blobs),
+  };
+};
+
+describe("KindrawStore.upsertOAuthUser (account linking)", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-15T12:00:00.000Z"));
+  });
+
+  it("cria uma conta nova quando o Google sub ainda nao existe", async () => {
+    const { users, store } = createAuthStore([]);
+    const user = await store.upsertOAuthUser({
+      provider: "google",
+      providerId: "google-123",
+      email: "alice@test.dev",
+      name: "Alice",
+      avatarUrl: "https://avatar.test/a.png",
+    });
+
+    expect(users).toHaveLength(1);
+    expect(user.google_sub).toBe("google-123");
+    expect(user.github_id).toBeNull();
+    expect(user.email).toBe("alice@test.dev");
+  });
+
+  it("vincula o Google a uma conta GitHub existente quando o email confere", async () => {
+    const { users, store } = createAuthStore([
+      {
+        id: "u-existing",
+        github_id: "gh-42",
+        google_sub: null,
+        email: "bob@test.dev",
+        github_login: "bob",
+        name: "Bob",
+        avatar_url: null,
+        created_at: "2026-01-01T00:00:00.000Z",
+        updated_at: "2026-01-01T00:00:00.000Z",
+      },
+    ]);
+
+    const user = await store.upsertOAuthUser({
+      provider: "google",
+      providerId: "google-999",
+      email: "bob@test.dev",
+      name: "Bob G",
+      avatarUrl: "https://avatar.test/b.png",
+    });
+
+    // NAO criou conta nova — vinculou na existente.
+    expect(users).toHaveLength(1);
+    expect(user.id).toBe("u-existing");
+    expect(user.github_id).toBe("gh-42");
+    expect(user.google_sub).toBe("google-999");
+    expect(user.github_login).toBe("bob");
+    expect(user.email).toBe("bob@test.dev");
+  });
+
+  it("NAO vincula quando nao ha email (provider sem email verificado cria conta separada)", async () => {
+    const { users, store } = createAuthStore([
+      {
+        id: "u-existing",
+        github_id: "gh-42",
+        google_sub: null,
+        email: "carol@test.dev",
+        github_login: "carol",
+        name: "Carol",
+        avatar_url: null,
+        created_at: "2026-01-01T00:00:00.000Z",
+        updated_at: "2026-01-01T00:00:00.000Z",
+      },
+    ]);
+
+    // Sem email (ex.: Google sem email_verified) => nao casa por email.
+    const user = await store.upsertOAuthUser({
+      provider: "google",
+      providerId: "google-777",
+      email: null,
+      name: "Impostor",
+      avatarUrl: null,
+    });
+
+    expect(users).toHaveLength(2);
+    expect(user.id).not.toBe("u-existing");
+    expect(user.google_sub).toBe("google-777");
+  });
+
+  it("login GitHub repetido atualiza a conta sem duplicar", async () => {
+    const { users, store } = createAuthStore([]);
+
+    const first = await store.upsertOAuthUser({
+      provider: "github",
+      providerId: "gh-7",
+      email: "dave@test.dev",
+      name: "Dave",
+      avatarUrl: null,
+      githubLogin: "dave",
+    });
+    const second = await store.upsertOAuthUser({
+      provider: "github",
+      providerId: "gh-7",
+      email: "dave@test.dev",
+      name: "Dave Renamed",
+      avatarUrl: "https://avatar.test/d.png",
+      githubLogin: "dave",
+    });
+
+    expect(users).toHaveLength(1);
+    expect(second.id).toBe(first.id);
+    expect(second.name).toBe("Dave Renamed");
+    expect(second.avatar_url).toBe("https://avatar.test/d.png");
+  });
+
+  it("preserva o email existente quando um login posterior nao traz email", async () => {
+    const { store } = createAuthStore([]);
+    await store.upsertOAuthUser({
+      provider: "github",
+      providerId: "gh-8",
+      email: "erin@test.dev",
+      name: "Erin",
+      avatarUrl: null,
+      githubLogin: "erin",
+    });
+    // Login seguinte (mesmo github_id) sem email — nao deve apagar o email.
+    const updated = await store.upsertOAuthUser({
+      provider: "github",
+      providerId: "gh-8",
+      email: null,
+      name: "Erin",
+      avatarUrl: null,
+      githubLogin: "erin",
+    });
+    expect(updated.email).toBe("erin@test.dev");
   });
 });

@@ -68,6 +68,13 @@ export const openGithubLogin = () => {
   );
 };
 
+export const openGoogleLogin = () => {
+  const returnTo = encodeURIComponent(window.location.origin);
+  window.location.assign(
+    createUrl(`/api/auth/login/google?returnTo=${returnTo}`),
+  );
+};
+
 export const getSession = () =>
   requestJson<KindrawSession | null>("/api/auth/session");
 

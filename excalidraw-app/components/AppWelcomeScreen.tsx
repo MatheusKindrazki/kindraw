@@ -12,6 +12,7 @@ type AppWelcomeScreenProps = {
   kindrawSession: KindrawSession | null | undefined;
   onCollabDialogOpen: () => any;
   onGithubLogin: () => void;
+  onGoogleLogin: () => void;
   routeKind: KindrawRoute["kind"];
 };
 
@@ -22,6 +23,7 @@ export const AppWelcomeScreen: React.FC<AppWelcomeScreenProps> = React.memo(
     kindrawSession,
     onCollabDialogOpen,
     onGithubLogin,
+    onGoogleLogin,
     routeKind,
   }) => {
     const { t } = useI18n();
@@ -70,6 +72,16 @@ export const AppWelcomeScreen: React.FC<AppWelcomeScreenProps> = React.memo(
                 shortcut={null}
               >
                 {t("kindraw.actions.signInWithGitHub")}
+              </WelcomeScreen.Center.MenuItem>
+            ) : null}
+
+            {!kindrawSession ? (
+              <WelcomeScreen.Center.MenuItem
+                icon={loginIcon}
+                onSelect={onGoogleLogin}
+                shortcut={null}
+              >
+                {t("kindraw.actions.signInWithGoogle")}
               </WelcomeScreen.Center.MenuItem>
             ) : null}
 

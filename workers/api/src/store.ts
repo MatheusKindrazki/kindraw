@@ -36,8 +36,10 @@ import type {
 
 type UserRow = {
   id: string;
-  github_id: string;
-  github_login: string;
+  github_id: string | null;
+  google_sub: string | null;
+  email: string | null;
+  github_login: string | null;
   name: string;
   avatar_url: string | null;
   created_at: string;
@@ -247,7 +249,7 @@ const isoNow = () => new Date().toISOString();
 
 const toKindrawUser = (row: {
   id: string;
-  github_login: string;
+  github_login: string | null;
   name: string;
   avatar_url: string | null;
 }): KindrawUser => ({
@@ -255,6 +257,9 @@ const toKindrawUser = (row: {
   githubLogin: row.github_login,
   name: row.name,
   avatarUrl: row.avatar_url,
+  // Email is only surfaced for the authenticated self (the session payload).
+  // Directory/share/token contexts don't expose it, so it's null here.
+  email: null,
 });
 
 // Escapa os wildcards do LIKE (%, _) e o próprio caractere de escape, para que
@@ -267,7 +272,10 @@ const base64UrlEncode = (bytes: Uint8Array): string => {
   for (const byte of bytes) {
     binary += String.fromCharCode(byte);
   }
-  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  return btoa(binary)
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/, "");
 };
 
 const sha256Hex = async (input: string): Promise<string> => {
@@ -348,53 +356,120 @@ export class KindrawStore {
     private readonly blobs: R2Bucket,
   ) {}
 
-  async upsertGithubUser(input: {
-    githubId: string;
-    githubLogin: string;
+  // Upsert a user identified by an OAuth provider, linking accounts by verified
+  // email. Resolution order:
+  //   1. Match the provider id (github_id / google_sub) -> same account.
+  //   2. Else, if we have a *verified* email, match it -> link this provider to
+  //      the existing account (the GitHub user and Google user are the same
+  //      person).
+  //   3. Else create a new account.
+  // SECURITY: only pass `email` when the provider asserts it is verified.
+  // Linking on an unverified email would let an attacker take over an account
+  // by signing up to the other provider with someone else's address.
+  async upsertOAuthUser(input: {
+    provider: "github" | "google";
+    providerId: string;
+    email: string | null;
     name: string;
     avatarUrl: string | null;
-  }) {
+    // Only meaningful for GitHub; preserved/updated on the account.
+    githubLogin?: string | null;
+  }): Promise<UserRow> {
     const now = isoNow();
-    const existing = await this.db
-      .prepare("SELECT * FROM users WHERE github_id = ?")
-      .bind(input.githubId)
+    const providerColumn =
+      input.provider === "github" ? "github_id" : "google_sub";
+
+    // 1. Existing account for this exact provider identity.
+    let existing = await this.db
+      .prepare(`SELECT * FROM users WHERE ${providerColumn} = ?`)
+      .bind(input.providerId)
       .first<UserRow>();
 
+    // 2. No provider match: try to link by verified email.
+    if (!existing && input.email) {
+      existing = await this.db
+        .prepare("SELECT * FROM users WHERE email = ?")
+        .bind(input.email)
+        .first<UserRow>();
+    }
+
     if (existing) {
+      // Merge: set this provider's id (links the account on first cross-login),
+      // backfill email if missing, keep github_login when GitHub, refresh
+      // profile. We never clear an existing email with a null.
+      const githubId =
+        input.provider === "github" ? input.providerId : existing.github_id;
+      const googleSub =
+        input.provider === "google" ? input.providerId : existing.google_sub;
+      const githubLogin =
+        input.provider === "github"
+          ? input.githubLogin ?? existing.github_login
+          : existing.github_login;
+      // Backfill email only when this account has none yet AND no *other*
+      // account already owns it. Without this guard, a GitHub re-login that
+      // newly exposes a verified email already held by a separate account
+      // would violate users_email_idx and 500 the login. We keep the existing
+      // email otherwise (never clear it with a null).
+      let email = existing.email;
+      if (!email && input.email) {
+        const emailOwner = await this.db
+          .prepare("SELECT id FROM users WHERE email = ? AND id != ?")
+          .bind(input.email, existing.id)
+          .first<{ id: string }>();
+        if (!emailOwner) {
+          email = input.email;
+        }
+      }
+
       await this.db
         .prepare(
           `UPDATE users
-           SET github_login = ?, name = ?, avatar_url = ?, updated_at = ?
-           WHERE github_id = ?`,
+           SET github_id = ?, google_sub = ?, email = ?, github_login = ?,
+               name = ?, avatar_url = ?, updated_at = ?
+           WHERE id = ?`,
         )
         .bind(
-          input.githubLogin,
+          githubId,
+          googleSub,
+          email,
+          githubLogin,
           input.name,
           input.avatarUrl,
           now,
-          input.githubId,
+          existing.id,
         )
         .run();
 
       return {
         ...existing,
-        github_login: input.githubLogin,
+        github_id: githubId,
+        google_sub: googleSub,
+        email,
+        github_login: githubLogin,
         name: input.name,
         avatar_url: input.avatarUrl,
         updated_at: now,
       };
     }
 
+    // 3. Brand-new account.
     const id = crypto.randomUUID();
+    const githubId = input.provider === "github" ? input.providerId : null;
+    const googleSub = input.provider === "google" ? input.providerId : null;
+    const githubLogin =
+      input.provider === "github" ? input.githubLogin ?? null : null;
+
     await this.db
       .prepare(
-        `INSERT INTO users (id, github_id, github_login, name, avatar_url, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO users (id, github_id, google_sub, email, github_login, name, avatar_url, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .bind(
         id,
-        input.githubId,
-        input.githubLogin,
+        githubId,
+        googleSub,
+        input.email,
+        githubLogin,
         input.name,
         input.avatarUrl,
         now,
@@ -404,13 +479,34 @@ export class KindrawStore {
 
     return {
       id,
-      github_id: input.githubId,
-      github_login: input.githubLogin,
+      github_id: githubId,
+      google_sub: googleSub,
+      email: input.email,
+      github_login: githubLogin,
       name: input.name,
       avatar_url: input.avatarUrl,
       created_at: now,
       updated_at: now,
     };
+  }
+
+  // Back-compat wrapper. Existing callers (and the CLI flow) keep working; new
+  // code can call upsertOAuthUser directly.
+  async upsertGithubUser(input: {
+    githubId: string;
+    githubLogin: string;
+    name: string;
+    avatarUrl: string | null;
+    email?: string | null;
+  }) {
+    return this.upsertOAuthUser({
+      provider: "github",
+      providerId: input.githubId,
+      email: input.email ?? null,
+      name: input.name,
+      avatarUrl: input.avatarUrl,
+      githubLogin: input.githubLogin,
+    });
   }
 
   async createSession(userId: string) {
@@ -458,6 +554,7 @@ export class KindrawStore {
            sessions.created_at,
            sessions.last_seen_at,
            users.github_login,
+           users.email,
            users.name,
            users.avatar_url
          FROM sessions
@@ -467,7 +564,8 @@ export class KindrawStore {
       .bind(sessionId)
       .first<
         SessionRow & {
-          github_login: string;
+          github_login: string | null;
+          email: string | null;
           name: string;
           avatar_url: string | null;
         }
@@ -501,6 +599,7 @@ export class KindrawStore {
         githubLogin: row.github_login,
         name: row.name,
         avatarUrl: row.avatar_url,
+        email: row.email,
       },
     };
   }
@@ -585,7 +684,7 @@ export class KindrawStore {
       .bind(id)
       .first<
         ApiTokenRow & {
-          github_login: string;
+          github_login: string | null;
           user_name: string;
           avatar_url: string | null;
         }
@@ -619,6 +718,7 @@ export class KindrawStore {
         githubLogin: row.github_login,
         name: row.user_name,
         avatarUrl: row.avatar_url,
+        email: null,
       },
       apiToken: {
         id: row.id,
@@ -685,9 +785,7 @@ export class KindrawStore {
 
   // Atomically consume a CLI auth code: returns the bound user + mints a PAT,
   // then deletes the code so it can never be reused.
-  async exchangeCliAuthCode(
-    code: string,
-  ): Promise<ApiTokenSecret | null> {
+  async exchangeCliAuthCode(code: string): Promise<ApiTokenSecret | null> {
     if (!code) {
       return null;
     }
@@ -841,7 +939,12 @@ export class KindrawStore {
     // self-share, mas dedupamos por garantia abaixo.
     const sharedFolders = new Map<
       string,
-      { role: KindrawShareRole; ownerId: string; ownerLogin: string; ownerName: string }
+      {
+        role: KindrawShareRole;
+        ownerId: string;
+        ownerLogin: string;
+        ownerName: string;
+      }
     >();
     for (const row of incomingShareRows) {
       if (row.folder_owner_id === ownerId) {
@@ -983,7 +1086,8 @@ export class KindrawStore {
         .map((entry) => entry.id),
     );
     const directHybridRows = incomingHybridShareRows.filter(
-      (row) => row.hybrid_owner_id !== ownerId && !alreadyInTree.has(row.hybrid_id),
+      (row) =>
+        row.hybrid_owner_id !== ownerId && !alreadyInTree.has(row.hybrid_id),
     );
     if (directHybridRows.length) {
       const docIds = directHybridRows.map((row) => row.doc_item_id);
@@ -1051,7 +1155,9 @@ export class KindrawStore {
     // null, já que a hierarquia original do dono não é minha), marcadas com
     // metadados `shared`.
     for (const [folderId, meta] of sharedFolders) {
-      const row = incomingShareRows.find((entry) => entry.folder_id === folderId);
+      const row = incomingShareRows.find(
+        (entry) => entry.folder_id === folderId,
+      );
       if (!row) {
         continue;
       }
@@ -1091,19 +1197,21 @@ export class KindrawStore {
     }
     const safeLimit = Math.max(1, Math.min(limit, 50));
     const pattern = `%${escapeLike(trimmed)}%`;
+    // Also match on email so Google-only accounts (github_login NULL) are
+    // findable by the email-derived handle the UI shows for them.
     const { results } = await this.db
       .prepare(
         `SELECT id, github_login, name, avatar_url
            FROM users
            WHERE id != ?
-             AND (github_login LIKE ? ESCAPE '\\' OR name LIKE ? ESCAPE '\\')
+             AND (github_login LIKE ? ESCAPE '\\' OR name LIKE ? ESCAPE '\\' OR email LIKE ? ESCAPE '\\')
            ORDER BY github_login COLLATE NOCASE ASC
            LIMIT ?`,
       )
-      .bind(excludeUserId, pattern, pattern, safeLimit)
+      .bind(excludeUserId, pattern, pattern, pattern, safeLimit)
       .all<{
         id: string;
-        github_login: string;
+        github_login: string | null;
         name: string;
         avatar_url: string | null;
       }>();
@@ -1111,23 +1219,29 @@ export class KindrawStore {
     return results.map(toKindrawUser);
   }
 
-  // Resolve um @login exato (case-insensitive) para o usuário, ou null.
+  // Resolve um handle para o usuário, ou null. Aceita um @github_login exato
+  // (case-insensitive) OU um email completo OU a parte local do email (o
+  // "handle" que a UI mostra para contas só-Google, ex.: "alice" de
+  // "alice@x.com").
   async getUserByLogin(login: string): Promise<KindrawUser | null> {
     const trimmed = login.trim();
     if (!trimmed) {
       return null;
     }
+    const emailLocalPattern = `${escapeLike(trimmed)}@%`;
     const row = await this.db
       .prepare(
         `SELECT id, github_login, name, avatar_url
            FROM users
            WHERE github_login = ? COLLATE NOCASE
+              OR email = ? COLLATE NOCASE
+              OR email LIKE ? ESCAPE '\\' COLLATE NOCASE
            LIMIT 1`,
       )
-      .bind(trimmed)
+      .bind(trimmed, trimmed, emailLocalPattern)
       .first<{
         id: string;
-        github_login: string;
+        github_login: string | null;
         name: string;
         avatar_url: string | null;
       }>();
@@ -1255,7 +1369,7 @@ export class KindrawStore {
         share_role: KindrawShareRole;
         share_created_at: string;
         user_id: string;
-        github_login: string;
+        github_login: string | null;
         user_name: string;
         avatar_url: string | null;
       }>();
@@ -1269,6 +1383,7 @@ export class KindrawStore {
         githubLogin: row.github_login,
         name: row.user_name,
         avatarUrl: row.avatar_url,
+        email: null,
       },
     }));
   }
@@ -1296,7 +1411,7 @@ export class KindrawStore {
         share_role: KindrawShareRole;
         share_created_at: string;
         user_id: string;
-        github_login: string;
+        github_login: string | null;
         user_name: string;
         avatar_url: string | null;
       }>();
@@ -1314,6 +1429,7 @@ export class KindrawStore {
         githubLogin: row.github_login,
         name: row.user_name,
         avatarUrl: row.avatar_url,
+        email: null,
       },
     };
   }
@@ -1440,7 +1556,7 @@ export class KindrawStore {
         share_role: KindrawShareRole;
         share_created_at: string;
         user_id: string;
-        github_login: string;
+        github_login: string | null;
         user_name: string;
         avatar_url: string | null;
       }>();
@@ -1454,6 +1570,7 @@ export class KindrawStore {
         githubLogin: row.github_login,
         name: row.user_name,
         avatarUrl: row.avatar_url,
+        email: null,
       },
     }));
   }
@@ -1481,7 +1598,7 @@ export class KindrawStore {
         share_role: KindrawShareRole;
         share_created_at: string;
         user_id: string;
-        github_login: string;
+        github_login: string | null;
         user_name: string;
         avatar_url: string | null;
       }>();
@@ -1499,6 +1616,7 @@ export class KindrawStore {
         githubLogin: row.github_login,
         name: row.user_name,
         avatarUrl: row.avatar_url,
+        email: null,
       },
     };
   }

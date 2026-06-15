@@ -8,6 +8,7 @@ import {
   updateFolderShareRole,
 } from "./api";
 import { KindrawIcon } from "./icons";
+import { userHandle } from "./identity";
 import { getErrorMessage } from "./utils";
 
 import type { ChangeEvent } from "react";
@@ -34,7 +35,7 @@ const KindrawPersonAvatar = ({ user }: { user: KindrawUser }) =>
       aria-hidden="true"
       className="kindraw-sharemodal__avatar kindraw-sharemodal__avatar--fallback"
     >
-      {(user.name || user.githubLogin).charAt(0).toUpperCase()}
+      {(user.name || userHandle(user)).charAt(0).toUpperCase()}
     </span>
   );
 
@@ -147,12 +148,12 @@ export const ShareFolderModal = ({
   }, [query, selectedUser]);
 
   const existingLogins = new Set(
-    (shares || []).map((share) => share.user.githubLogin.toLowerCase()),
+    (shares || []).map((share) => userHandle(share.user).toLowerCase()),
   );
 
   const handleSelectUser = useCallback((user: KindrawUser) => {
     setSelectedUser(user);
-    setQuery(`@${user.githubLogin}`);
+    setQuery(`@${userHandle(user)}`);
     setResultsOpen(false);
     setInviteError(null);
   }, []);
@@ -168,7 +169,8 @@ export const ShareFolderModal = ({
 
   const handleInvite = useCallback(async () => {
     const login = (
-      selectedUser?.githubLogin || query.trim().replace(/^@/, "")
+      (selectedUser ? userHandle(selectedUser) : "") ||
+      query.trim().replace(/^@/, "")
     ).trim();
     if (!login) {
       return;
@@ -306,7 +308,7 @@ export const ShareFolderModal = ({
               ) : null}
               {results.map((user) => {
                 const already = existingLogins.has(
-                  user.githubLogin.toLowerCase(),
+                  userHandle(user).toLowerCase(),
                 );
                 return (
                   <li key={user.id}>
@@ -320,8 +322,8 @@ export const ShareFolderModal = ({
                     >
                       <KindrawPersonAvatar user={user} />
                       <span className="kindraw-sharemodal__result-text">
-                        <strong>{user.name || user.githubLogin}</strong>
-                        <span>@{user.githubLogin}</span>
+                        <strong>{user.name || userHandle(user)}</strong>
+                        <span>@{userHandle(user)}</span>
                       </span>
                       {already ? (
                         <span className="kindraw-sharemodal__result-tag">
@@ -359,12 +361,12 @@ export const ShareFolderModal = ({
                     <KindrawPersonAvatar user={share.user} />
                     <span className="kindraw-sharemodal__person-text">
                       <strong>
-                        {share.user.name || share.user.githubLogin}
+                        {share.user.name || userHandle(share.user)}
                       </strong>
-                      <span>@{share.user.githubLogin}</span>
+                      <span>@{userHandle(share.user)}</span>
                     </span>
                     <select
-                      aria-label={`Papel de @${share.user.githubLogin}`}
+                      aria-label={`Papel de @${userHandle(share.user)}`}
                       className="kindraw-sharemodal__roleselect kindraw-sharemodal__roleselect--inline"
                       disabled={busy}
                       onChange={(event) =>
@@ -379,7 +381,7 @@ export const ShareFolderModal = ({
                       <option value="viewer">{ROLE_LABEL.viewer}</option>
                     </select>
                     <button
-                      aria-label={`Remover @${share.user.githubLogin}`}
+                      aria-label={`Remover @${userHandle(share.user)}`}
                       className="kindraw-sharemodal__remove"
                       disabled={busy}
                       onClick={() => void handleRevoke(share)}

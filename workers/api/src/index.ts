@@ -244,6 +244,15 @@ const readJson = async <T>(request: Request): Promise<T> => {
   }
 };
 
+// Canonicalize an email so the same mailbox links regardless of casing GitHub
+// vs Google reports. Lowercase + trim only — we deliberately do NOT strip
+// Gmail dots/`+tags`, which would over-merge across distinct addresses. The
+// users.email unique index uses COLLATE NOCASE to match this.
+const normalizeEmail = (value: string | null | undefined): string | null => {
+  const trimmed = value?.trim().toLowerCase();
+  return trimmed ? trimmed : null;
+};
+
 const readGithubOAuthPayload = async (response: Response) => {
   try {
     return (await response.json()) as {
@@ -321,11 +330,26 @@ const fetchGithubUser = async (accessToken: string) => {
     avatar_url: string | null;
   };
 
-  if (!emailResponse.ok) {
-    return user;
+  // Resolve the primary, *verified* email so it can be used to link this
+  // account with a Google login. Only verified emails are trusted — see the
+  // security note on KindrawStore.upsertOAuthUser. `/user/emails` requires the
+  // `user:email` scope (already requested) and may fail for some token types,
+  // in which case we fall back to a null email (GitHub-id keyed account).
+  let email: string | null = null;
+  if (emailResponse.ok) {
+    const emails = (await emailResponse.json()) as Array<{
+      email: string;
+      primary: boolean;
+      verified: boolean;
+    }>;
+    if (Array.isArray(emails)) {
+      const primaryVerified = emails.find((e) => e.primary && e.verified);
+      const anyVerified = emails.find((e) => e.verified);
+      email = normalizeEmail((primaryVerified ?? anyVerified)?.email);
+    }
   }
 
-  return user;
+  return { ...user, email };
 };
 
 const handleAuthLogin = async (request: Request, env: Env) => {
@@ -422,7 +446,33 @@ const handleAuthCallback = async (request: Request, env: Env) => {
     githubLogin: githubUser.login,
     name: githubUser.name || githubUser.login,
     avatarUrl: githubUser.avatar_url,
+    email: githubUser.email,
   });
+
+  return finishAuth({
+    request,
+    store,
+    userId: user.id,
+    cookies,
+    appOrigin,
+    sessionCookieSameSite,
+  });
+};
+
+// Shared tail of every OAuth callback (GitHub or Google). Either issues a CLI
+// one-time code (loopback flow) or a web session cookie, and clears the
+// transient OAuth cookies. Kept provider-agnostic so adding providers means
+// adding a fetch+upsert, not duplicating session handling.
+const finishAuth = async (params: {
+  request: Request;
+  store: ReturnType<typeof createStore>;
+  userId: string;
+  cookies: Map<string, string>;
+  appOrigin: string;
+  sessionCookieSameSite: "Lax" | "Strict" | "None";
+}) => {
+  const { request, store, userId, cookies, appOrigin, sessionCookieSameSite } =
+    params;
 
   // CLI loopback flow: issue a one-time code and redirect to the local server,
   // which exchanges it for a PAT. No web session cookie is set.
@@ -430,7 +480,7 @@ const handleAuthCallback = async (request: Request, env: Env) => {
     cookies.get(CLI_RETURN_TO_COOKIE) ?? null,
   );
   if (cliReturnTo) {
-    const { code } = await store.createCliAuthCode(user.id, "kindraw CLI");
+    const { code } = await store.createCliAuthCode(userId, "kindraw CLI");
     const target = new URL(cliReturnTo);
     target.searchParams.set("code", code);
     const cliResponse = new Response(null, {
@@ -454,7 +504,7 @@ const handleAuthCallback = async (request: Request, env: Env) => {
     return cliResponse;
   }
 
-  const session = await store.createSession(user.id);
+  const session = await store.createSession(userId);
 
   const response = new Response(null, {
     status: 302,
@@ -487,6 +537,191 @@ const handleAuthCallback = async (request: Request, env: Env) => {
     }),
   );
   return response;
+};
+
+// --- Google OAuth -----------------------------------------------------------
+// Mirrors the GitHub flow above (direct OAuth, no Firebase). Login redirects to
+// Google, the callback exchanges the code, fetches the OpenID userinfo, and
+// upserts the user — linking to an existing GitHub account when the verified
+// email matches.
+
+const requireGoogleConfig = (env: Env) => {
+  if (!env.GOOGLE_CLIENT_ID || !env.GOOGLE_CLIENT_SECRET) {
+    throw new HttpError(503, "Google login is not configured.");
+  }
+  return {
+    clientId: env.GOOGLE_CLIENT_ID,
+    clientSecret: env.GOOGLE_CLIENT_SECRET,
+  };
+};
+
+const handleGoogleLogin = async (request: Request, env: Env) => {
+  const { clientId } = requireGoogleConfig(env);
+  const state = crypto.randomUUID().replace(/-/g, "");
+  const appOrigin = resolveAppOrigin(request, env);
+  const redirectUri = new URL(
+    "/api/auth/callback/google",
+    request.url,
+  ).toString();
+
+  const googleUrl = new URL("https://accounts.google.com/o/oauth2/v2/auth");
+  googleUrl.searchParams.set("client_id", clientId);
+  googleUrl.searchParams.set("redirect_uri", redirectUri);
+  googleUrl.searchParams.set("response_type", "code");
+  googleUrl.searchParams.set("scope", "openid email profile");
+  googleUrl.searchParams.set("state", state);
+  // Always show the account chooser; avoids silently reusing a stale session.
+  googleUrl.searchParams.set("prompt", "select_account");
+
+  const response = new Response(null, {
+    status: 302,
+    headers: {
+      Location: googleUrl.toString(),
+    },
+  });
+  response.headers.append(
+    "Set-Cookie",
+    buildCookie(OAUTH_STATE_COOKIE, state, {
+      maxAge: 60 * 10,
+      sameSite: "Lax",
+      secure: isSecureRequest(request),
+    }),
+  );
+  response.headers.append(
+    "Set-Cookie",
+    buildCookie(OAUTH_RETURN_TO_COOKIE, appOrigin, {
+      maxAge: 60 * 10,
+      sameSite: "Lax",
+      secure: isSecureRequest(request),
+    }),
+  );
+
+  // CLI loopback login: remember the localhost callback (same as GitHub).
+  const cliReturnTo = parseLoopbackReturnTo(
+    new URL(request.url).searchParams.get("returnTo"),
+  );
+  if (cliReturnTo) {
+    response.headers.append(
+      "Set-Cookie",
+      buildCookie(CLI_RETURN_TO_COOKIE, cliReturnTo, {
+        maxAge: 60 * 10,
+        sameSite: "Lax",
+        secure: isSecureRequest(request),
+      }),
+    );
+  }
+  return response;
+};
+
+const exchangeGoogleCode = async (request: Request, env: Env, code: string) => {
+  const { clientId, clientSecret } = requireGoogleConfig(env);
+  const redirectUri = new URL(
+    "/api/auth/callback/google",
+    request.url,
+  ).toString();
+
+  // Google's token endpoint expects form-encoded params, not JSON.
+  const body = new URLSearchParams({
+    client_id: clientId,
+    client_secret: clientSecret,
+    code,
+    grant_type: "authorization_code",
+    redirect_uri: redirectUri,
+  });
+
+  const response = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: body.toString(),
+  });
+
+  const data = (await response.json().catch(() => null)) as {
+    access_token?: string;
+    error?: string;
+    error_description?: string;
+  } | null;
+
+  if (!response.ok || !data?.access_token) {
+    throw new HttpError(
+      502,
+      `Google token exchange failed: ${
+        data?.error_description || data?.error || `status ${response.status}`
+      }.`,
+    );
+  }
+
+  return data.access_token;
+};
+
+const fetchGoogleUser = async (accessToken: string) => {
+  const response = await fetch(
+    "https://openidconnect.googleapis.com/v1/userinfo",
+    {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    },
+  );
+
+  if (!response.ok) {
+    throw new HttpError(502, "Google profile request failed.");
+  }
+
+  const profile = (await response.json()) as {
+    sub: string;
+    email?: string;
+    email_verified?: boolean;
+    name?: string;
+    picture?: string;
+  };
+
+  if (!profile.sub) {
+    throw new HttpError(502, "Google profile missing subject id.");
+  }
+
+  // Only trust a verified email for account linking (see upsertOAuthUser).
+  const email =
+    profile.email && profile.email_verified
+      ? normalizeEmail(profile.email)
+      : null;
+
+  return {
+    sub: profile.sub,
+    email,
+    name: profile.name || profile.email || "Google user",
+    avatarUrl: profile.picture ?? null,
+  };
+};
+
+const handleGoogleCallback = async (request: Request, env: Env) => {
+  const url = new URL(request.url);
+  const cookies = parseCookies(request.headers.get("Cookie"));
+  const appOrigin = resolveAppOrigin(request, env, cookies);
+  const sessionCookieSameSite = getSessionCookieSameSite(request, appOrigin);
+  const state = url.searchParams.get("state");
+  const code = url.searchParams.get("code");
+
+  if (!state || !code || cookies.get(OAUTH_STATE_COOKIE) !== state) {
+    throw new HttpError(400, "Invalid Google OAuth state.");
+  }
+
+  const accessToken = await exchangeGoogleCode(request, env, code);
+  const googleUser = await fetchGoogleUser(accessToken);
+  const store = createStore(env.KINDRAW_DB, env.KINDRAW_BLOBS);
+  const user = await store.upsertOAuthUser({
+    provider: "google",
+    providerId: googleUser.sub,
+    email: googleUser.email,
+    name: googleUser.name,
+    avatarUrl: googleUser.avatarUrl,
+  });
+
+  return finishAuth({
+    request,
+    store,
+    userId: user.id,
+    cookies,
+    appOrigin,
+    sessionCookieSameSite,
+  });
 };
 
 const getAuthSession = async (
@@ -566,6 +801,14 @@ export const routeRequest = async (request: Request, env: Env) => {
     return handleAuthCallback(request, env);
   }
 
+  if (pathname === "/api/auth/login/google" && request.method === "GET") {
+    return handleGoogleLogin(request, env);
+  }
+
+  if (pathname === "/api/auth/callback/google" && request.method === "GET") {
+    return handleGoogleCallback(request, env);
+  }
+
   if (pathname === "/api/auth/session" && request.method === "GET") {
     return json(await getAuthSession(request, env));
   }
@@ -623,10 +866,7 @@ export const routeRequest = async (request: Request, env: Env) => {
     return json(created, { status: 201 });
   }
 
-  if (
-    pathname.startsWith("/api/auth/tokens/") &&
-    request.method === "DELETE"
-  ) {
+  if (pathname.startsWith("/api/auth/tokens/") && request.method === "DELETE") {
     const prefix = pathname.replace("/api/auth/tokens/", "");
     const { auth, store } = await requireSession(request, env);
     const revoked = await store.revokeApiToken(auth.user.id, prefix);
@@ -660,9 +900,12 @@ export const routeRequest = async (request: Request, env: Env) => {
     const { auth, store } = await requireAuth(request, env);
     const input = await readJson<CreateItemInput>(request);
     const itemId = await store.createItem(auth.user.id, input);
-    return json({ itemId, url: drawingUrl(request, env, itemId) }, {
-      status: 201,
-    });
+    return json(
+      { itemId, url: drawingUrl(request, env, itemId) },
+      {
+        status: 201,
+      },
+    );
   }
 
   // Create a drawing from pre-serialized Excalidraw content. Mermaid->Excalidraw
@@ -688,7 +931,10 @@ export const routeRequest = async (request: Request, env: Env) => {
       );
     }
     if (!input.content || typeof input.content !== "string") {
-      throw new HttpError(400, "`content` (serialized Excalidraw JSON) is required.");
+      throw new HttpError(
+        400,
+        "`content` (serialized Excalidraw JSON) is required.",
+      );
     }
     // Cheap structural validation — no DOM/rendering in the Worker.
     try {
@@ -706,9 +952,12 @@ export const routeRequest = async (request: Request, env: Env) => {
       folderId: input.folderId ?? null,
       content: input.content,
     });
-    return json({ itemId, url: drawingUrl(request, env, itemId) }, {
-      status: 201,
-    });
+    return json(
+      { itemId, url: drawingUrl(request, env, itemId) },
+      {
+        status: 201,
+      },
+    );
   }
 
   if (pathname.startsWith("/v1/api/items/") && pathname.endsWith("/content")) {
@@ -850,7 +1099,7 @@ export const routeRequest = async (request: Request, env: Env) => {
       // body é opcional: { access?: "read" | "live-edit" }. Sem body → "read".
       const body = await request
         .json()
-        .catch(() => ({}) as { access?: string });
+        .catch(() => ({} as { access?: string }));
       const access =
         (body as { access?: string }).access === "live-edit"
           ? "live-edit"
@@ -986,10 +1235,7 @@ export const routeRequest = async (request: Request, env: Env) => {
   }
 
   // Maintenance: list the authenticated user's empty drawings (read-only).
-  if (
-    pathname === "/api/admin/empty-drawings" &&
-    request.method === "GET"
-  ) {
+  if (pathname === "/api/admin/empty-drawings" && request.method === "GET") {
     const { auth, store } = await requireAuth(request, env);
     return json({ drawings: await store.listEmptyDrawings(auth.user.id) });
   }
@@ -1199,7 +1445,10 @@ export const routeRequest = async (request: Request, env: Env) => {
       }
 
       if (!authorized) {
-        return errorResponse(403, "Not authorized for this collaboration room.");
+        return errorResponse(
+          403,
+          "Not authorized for this collaboration room.",
+        );
       }
     }
 

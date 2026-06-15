@@ -3,9 +3,14 @@ export type KindrawHybridView = "document" | "both" | "canvas";
 
 export type KindrawUser = {
   id: string;
-  githubLogin: string;
+  // GitHub login handle. Null for accounts that only ever logged in with Google
+  // (kept for back-compat: callers use it as a stable display/identity hint).
+  githubLogin: string | null;
   name: string;
   avatarUrl: string | null;
+  // Verified primary email, when the provider exposed one. This is the key we
+  // use to link a GitHub and a Google login into a single account.
+  email: string | null;
 };
 
 export type KindrawSession = {
@@ -287,6 +292,11 @@ export type Env = {
   KINDRAW_COLLAB: DurableObjectNamespace;
   GITHUB_CLIENT_ID: string;
   GITHUB_CLIENT_SECRET: string;
+  // Google OAuth (Web application credentials). Set via `wrangler secret put`,
+  // mirroring the GitHub secrets. Optional so a deploy without Google
+  // configured still type-checks and falls back to GitHub-only login.
+  GOOGLE_CLIENT_ID?: string;
+  GOOGLE_CLIENT_SECRET?: string;
   KINDRAW_APP_ORIGIN?: string;
   OPENROUTER_API_KEY?: string;
   OPENROUTER_BASE_URL?: string;

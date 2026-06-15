@@ -540,7 +540,9 @@ describe("routeRequest", () => {
       )
       .mockResolvedValueOnce(
         new Response(
-          JSON.stringify([{ email: "me@test.dev", primary: true }]),
+          JSON.stringify([
+            { email: "me@test.dev", primary: true, verified: true },
+          ]),
           {
             status: 200,
             headers: { "Content-Type": "application/json" },
@@ -571,6 +573,8 @@ describe("routeRequest", () => {
       githubLogin: "matheus",
       name: "Matheus",
       avatarUrl: "https://avatar.test/me.png",
+      // Verified primary email is now extracted for account linking.
+      email: "me@test.dev",
     });
 
     fetchMock.mockRestore();
@@ -917,7 +921,12 @@ describe("routeRequest", () => {
         id: "share-1",
         role: "viewer",
         createdAt: "2026-03-09T11:00:00.000Z",
-        user: { id: "u-2", githubLogin: "hubot", name: "Hu Bot", avatarUrl: null },
+        user: {
+          id: "u-2",
+          githubLogin: "hubot",
+          name: "Hu Bot",
+          avatarUrl: null,
+        },
       },
     ]);
 
@@ -962,7 +971,12 @@ describe("routeRequest", () => {
       id: "share-1",
       role: "editor",
       createdAt: "2026-03-09T12:00:00.000Z",
-      user: { id: "u-2", githubLogin: "hubot", name: "Hu Bot", avatarUrl: null },
+      user: {
+        id: "u-2",
+        githubLogin: "hubot",
+        name: "Hu Bot",
+        avatarUrl: null,
+      },
     });
 
     const response = await worker.fetch(
@@ -1049,22 +1063,24 @@ describe("routeRequest", () => {
       id: "share-1",
       role: "viewer",
       createdAt: "2026-03-09T12:00:00.000Z",
-      user: { id: "u-2", githubLogin: "hubot", name: "Hu Bot", avatarUrl: null },
+      user: {
+        id: "u-2",
+        githubLogin: "hubot",
+        name: "Hu Bot",
+        avatarUrl: null,
+      },
     });
 
     const response = await worker.fetch(
-      new Request(
-        "http://localhost:8787/api/folders/folder-1/shares/share-1",
-        {
-          method: "PATCH",
-          headers: {
-            Cookie: "kindraw_session=s-1",
-            Origin: "http://localhost:3001",
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ role: "viewer" }),
+      new Request("http://localhost:8787/api/folders/folder-1/shares/share-1", {
+        method: "PATCH",
+        headers: {
+          Cookie: "kindraw_session=s-1",
+          Origin: "http://localhost:3001",
+          "Content-Type": "application/json",
         },
-      ),
+        body: JSON.stringify({ role: "viewer" }),
+      }),
       env,
     );
 
@@ -1082,16 +1098,13 @@ describe("routeRequest", () => {
     mockStore.revokeFolderAccess.mockResolvedValue(undefined);
 
     const response = await worker.fetch(
-      new Request(
-        "http://localhost:8787/api/folders/folder-1/shares/share-1",
-        {
-          method: "DELETE",
-          headers: {
-            Cookie: "kindraw_session=s-1",
-            Origin: "http://localhost:3001",
-          },
+      new Request("http://localhost:8787/api/folders/folder-1/shares/share-1", {
+        method: "DELETE",
+        headers: {
+          Cookie: "kindraw_session=s-1",
+          Origin: "http://localhost:3001",
         },
-      ),
+      }),
       env,
     );
 
@@ -1108,16 +1121,13 @@ describe("routeRequest", () => {
     mockStore.revokeFolderAccess.mockResolvedValue(undefined);
 
     const response = await worker.fetch(
-      new Request(
-        "http://localhost:8787/api/folders/folder-1/shares/share-1",
-        {
-          method: "DELETE",
-          headers: {
-            Cookie: "kindraw_session=s-1",
-            Origin: "http://localhost:3001",
-          },
+      new Request("http://localhost:8787/api/folders/folder-1/shares/share-1", {
+        method: "DELETE",
+        headers: {
+          Cookie: "kindraw_session=s-1",
+          Origin: "http://localhost:3001",
         },
-      ),
+      }),
       env,
     );
 

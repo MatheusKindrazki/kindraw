@@ -170,6 +170,7 @@ import {
   getTree,
   logout as logoutKindraw,
   openGithubLogin,
+  openGoogleLogin,
   revokeShareLink,
   restoreItem,
   updateItemMeta,
@@ -188,6 +189,7 @@ import {
   shouldAutoCreateRootDrawing,
   subscribeToLocation,
 } from "./kindraw/router";
+import { userHandle } from "./kindraw/identity";
 import { generateKindrawCanvasTitle } from "./kindraw/naming";
 import {
   createKindrawItemPageMeta,
@@ -330,7 +332,7 @@ const copyToClipboard = async (value: string) => {
 };
 
 const getKindrawUserDisplayName = (session: KindrawSession["user"]) =>
-  session.name.trim() || session.githubLogin;
+  session.name.trim() || userHandle(session);
 
 const getUserInitial = (label: string) =>
   label.trim().charAt(0).toUpperCase() || "K";
@@ -2193,13 +2195,22 @@ const ExcalidrawWrapper = () => {
                   </span>
                 </button>
               ) : (
-                <button
-                  className="kindraw-top-right-actions__button"
-                  onClick={openGithubLogin}
-                  type="button"
-                >
-                  {t("kindraw.actions.signInWithGitHub")}
-                </button>
+                <>
+                  <button
+                    className="kindraw-top-right-actions__button"
+                    onClick={openGithubLogin}
+                    type="button"
+                  >
+                    {t("kindraw.actions.signInWithGitHub")}
+                  </button>
+                  <button
+                    className="kindraw-top-right-actions__button"
+                    onClick={openGoogleLogin}
+                    type="button"
+                  >
+                    {t("kindraw.actions.signInWithGoogle")}
+                  </button>
+                </>
               )}
               {kindrawIsDrawingRoute && kindrawCurrentItem ? (
                 <Tooltip
@@ -2342,6 +2353,7 @@ const ExcalidrawWrapper = () => {
           currentItemTitle={kindrawCurrentItem?.title || null}
           kindrawSession={kindrawSession}
           onGithubLogin={openGithubLogin}
+          onGoogleLogin={openGoogleLogin}
           onCollabDialogOpen={handleRealtimeAction}
           isCollabEnabled={!isCollabDisabled}
           routeKind={kindrawRoute.kind}
