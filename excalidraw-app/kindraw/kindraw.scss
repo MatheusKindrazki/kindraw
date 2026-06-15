@@ -39,6 +39,9 @@
 
   /* tipografia */
   --kd-font: "Hanken Grotesk", system-ui, sans-serif;
+  /* fonte do CONTEÚDO do documento (editor de texto do híbrido) — geométrica
+     estilo Gotham. Só no doc; o shell mantém a Hanken Grotesk. */
+  --kd-doc-font: "Inter", "Hanken Grotesk", system-ui, sans-serif;
 
   /* raios */
   --kd-r-card: 13px;
@@ -1887,6 +1890,8 @@
   border-radius: var(--kd-r-card);
   background: var(--kd-surface);
   overflow: hidden;
+  // conteúdo do documento usa a fonte do doc (Inter), não a do shell
+  font-family: var(--kd-doc-font);
 }
 
 /* ── Bubble menu (seleção, headless estilo Outline) ──────── */
@@ -2227,6 +2232,7 @@
   display: flex;
   flex-direction: column;
   gap: 16px;
+  font-family: var(--kd-doc-font);
 }
 
 .kindraw-markdown h1,
