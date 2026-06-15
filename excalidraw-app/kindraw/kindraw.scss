@@ -2514,25 +2514,6 @@
   gap: 12px;
 }
 
-.kindraw-hybrid-doc__title-input {
-  box-sizing: border-box;
-  width: 100%;
-  border: 1px solid var(--kd-line);
-  border-radius: var(--kd-r-btn);
-  background: var(--kd-surface);
-  padding: 9px 12px;
-  font-family: var(--kd-font);
-  font-size: 15px;
-  font-weight: 700;
-  color: var(--kd-ink);
-}
-
-.kindraw-hybrid-doc__title-input:focus {
-  outline: none;
-  border-color: var(--kd-amber);
-  box-shadow: 0 0 0 3px var(--kd-amber-soft);
-}
-
 .kindraw-hybrid-doc__editor-actions {
   display: flex;
   align-items: center;
@@ -2540,23 +2521,10 @@
   gap: 8px;
 }
 
-.kindraw-hybrid-doc__textarea {
-  min-height: 220px;
-  border: 1px solid var(--kd-line);
-  border-radius: var(--kd-r-btn);
-  padding: 14px;
-  resize: vertical;
-  background: var(--kd-surface);
-  font: inherit;
-  font-family: var(--kd-font);
-  font-size: 13px;
-  line-height: 1.6;
-}
-
-.kindraw-hybrid-doc__textarea:focus {
-  outline: none;
-  border-color: #d9b36a;
-  box-shadow: 0 0 0 3px var(--kd-amber-soft);
+/* Ação "Excluir" da seção — só fica vermelha no hover, discreta no resto */
+.kindraw-hybrid-doc__action--danger:hover {
+  background: rgba(201, 74, 74, 0.12);
+  color: #c94a4a;
 }
 
 /* Cabeçalho de seção vinculada — clicável, foca no canvas */

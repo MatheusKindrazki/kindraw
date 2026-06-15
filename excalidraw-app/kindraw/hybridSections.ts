@@ -138,21 +138,52 @@ export const parseHybridMarkdownSections = (
       ];
 };
 
+/**
+ * Substitui o markdown da seção na posição `sectionIndex` e devolve o markdown
+ * recomposto, preservando as demais seções na ordem.
+ *
+ * A identificação é POSICIONAL (índice na lista parseada), não por `id` de slug.
+ * O `id` é derivado do título e é recalculado a cada parse — se o título mudar
+ * (ou houver colisão de slug), o `id` antigo deixa de existir e o match falhava,
+ * fazendo a edição virar uma seção nova (bug). O índice é estável durante a
+ * edição da seção, então o update sempre acerta a seção certa.
+ */
 export const replaceHybridMarkdownSection = (
   markdown: string,
-  sectionId: string,
+  sectionIndex: number,
   nextSectionMarkdown: string,
 ) => {
   const sections = parseHybridMarkdownSections(markdown);
   return sections
-    .map((section) =>
-      section.id === sectionId
+    .map((section, index) =>
+      index === sectionIndex
         ? nextSectionMarkdown.trimEnd()
         : section.markdown.trimEnd(),
     )
     .join("\n\n")
     .trimEnd()
     .concat("\n");
+};
+
+/**
+ * Remove a seção na posição `sectionIndex` e devolve o markdown recomposto.
+ * Se sobrar nenhuma seção, devolve string vazia (o parser recria uma intro).
+ */
+export const deleteHybridMarkdownSection = (
+  markdown: string,
+  sectionIndex: number,
+) => {
+  const sections = parseHybridMarkdownSections(markdown);
+  const remaining = sections
+    .filter((_, index) => index !== sectionIndex)
+    .map((section) => section.markdown.trimEnd())
+    .filter((entry) => entry.length > 0);
+
+  if (!remaining.length) {
+    return "";
+  }
+
+  return remaining.join("\n\n").trimEnd().concat("\n");
 };
 
 /**
