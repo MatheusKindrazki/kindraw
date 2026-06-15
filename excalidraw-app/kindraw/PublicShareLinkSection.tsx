@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { buildPublicShareUrl } from "./api";
 import { KindrawIcon } from "./icons";
+import { useKindrawI18n } from "./i18n";
 
 import type { KindrawShareLink, KindrawShareLinkAccess } from "./types";
 
@@ -28,6 +29,7 @@ export const PublicShareLinkSection = ({
   buildShareUrl = buildPublicShareUrl,
   supportsLiveEdit,
 }: PublicShareLinkSectionProps) => {
+  const { t } = useKindrawI18n();
   const [copied, setCopied] = useState(false);
   const copyTimeoutRef = useRef<number | null>(null);
 
@@ -67,12 +69,12 @@ export const PublicShareLinkSection = ({
     <>
       <div className="kindraw-share__row">
         <div className="kindraw-share__rowtext">
-          <strong>Link público</strong>
-          <span>Qualquer pessoa com o link pode ver</span>
+          <strong>{t("kindraw.publicShareSection.title")}</strong>
+          <span>{t("kindraw.publicShareSection.description")}</span>
         </div>
         <button
           aria-checked={Boolean(activeShareLink)}
-          aria-label="Link público"
+          aria-label={t("kindraw.publicShareSection.title")}
           className={`kindraw-toggle${
             activeShareLink ? " kindraw-toggle--on" : ""
           }`}
@@ -94,10 +96,10 @@ export const PublicShareLinkSection = ({
           {supportsLiveEdit ? (
             <div className="kindraw-share__access">
               <label className="kindraw-share__access-label">
-                Permissão do link
+                {t("kindraw.publicShareSection.accessLabel")}
               </label>
               <select
-                aria-label="Permissão do link"
+                aria-label={t("kindraw.publicShareSection.accessLabel")}
                 className="kindraw-sharemodal__roleselect"
                 disabled={busy}
                 onChange={(event) =>
@@ -107,8 +109,12 @@ export const PublicShareLinkSection = ({
                 }
                 value={activeShareLink.access || "read"}
               >
-                <option value="read">Somente leitura</option>
-                <option value="live-edit">Pode editar ao vivo</option>
+                <option value="read">
+                  {t("kindraw.publicShareSection.accessReadOption")}
+                </option>
+                <option value="live-edit">
+                  {t("kindraw.publicShareSection.accessLiveEditOption")}
+                </option>
               </select>
             </div>
           ) : null}
@@ -123,11 +129,12 @@ export const PublicShareLinkSection = ({
             >
               {copied ? (
                 <>
-                  Copiado <KindrawIcon name="check" size={13} />
+                  {t("kindraw.publicShareSection.copied")}{" "}
+                  <KindrawIcon name="check" size={13} />
                 </>
               ) : (
                 <>
-                  <KindrawIcon name="copy" size={14} /> Copiar
+                  <KindrawIcon name="copy" size={14} /> {t("kindraw.actions.copy")}
                 </>
               )}
             </button>
@@ -138,8 +145,7 @@ export const PublicShareLinkSection = ({
       {supportsLiveEdit ? (
         <p className="kindraw-share__live-note">
           <span className="kindraw-share__live-dot" />
-          A edição é colaborativa em tempo real — todos com acesso de edição
-          veem as mudanças ao vivo.
+          {t("kindraw.publicShareSection.liveNote")}
         </p>
       ) : null}
     </>

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import { useKindrawI18n } from "./i18n";
 import { KindrawIcon } from "./icons";
 import { MarkdownPreview } from "./MarkdownPreview";
 import { RichTextEditor } from "./RichTextEditor";
@@ -62,6 +63,7 @@ export const HybridMarkdownPane = ({
   onFocusSectionOnCanvas,
   onStatusMessage,
 }: HybridMarkdownPaneProps) => {
+  const { t } = useKindrawI18n();
   const sections = useMemo(
     () => parseHybridMarkdownSections(markdown),
     [markdown],
@@ -129,7 +131,7 @@ export const HybridMarkdownPane = ({
       replaceHybridMarkdownSection(markdown, sectionIndex, draftMarkdown),
     );
     setEditingSectionIndex(null);
-    onStatusMessage("Secao atualizada.");
+    onStatusMessage(t("kindraw.hybrid.sectionUpdated"));
   };
 
   let sectionNumber = 0;
@@ -147,7 +149,7 @@ export const HybridMarkdownPane = ({
               provider: collabProvider,
               fieldName: "default",
               user: collabUser || {
-                name: "Você",
+                name: t("kindraw.hybrid.collabYou"),
                 color: "#888",
                 avatarUrl: null,
                 githubLogin: null,
@@ -155,7 +157,7 @@ export const HybridMarkdownPane = ({
               },
             }}
             onChange={onMarkdownChange}
-            placeholder="Escreva em conjunto…"
+            placeholder={t("kindraw.hybrid.liveEditorPlaceholder")}
             seedMarkdown={markdown}
             value={markdown}
           />
@@ -198,24 +200,29 @@ export const HybridMarkdownPane = ({
                   }}
                   role="button"
                   tabIndex={0}
-                  title="Ir ao desenho desta seção"
+                  title={t("kindraw.hybrid.goToDrawingTitle")}
                 >
                   <span className="kindraw-hybrid-doc__eyebrow">
                     {section.isIntro
-                      ? "Intro"
-                      : `Seção ${formatSectionNumber(sectionNumber)}`}
+                      ? t("kindraw.hybrid.introEyebrow")
+                      : t("kindraw.hybrid.sectionLabel", {
+                          number: formatSectionNumber(sectionNumber),
+                        })}
                   </span>
                   <h3>{section.title}</h3>
                   <span className="kindraw-sectionchip">
-                    <KindrawIcon name="link" size={11} /> ir ao desenho
+                    <KindrawIcon name="link" size={11} />{" "}
+                    {t("kindraw.hybrid.goToDrawingChip")}
                   </span>
                 </div>
               ) : (
                 <div className="kindraw-hybrid-doc__section-heading">
                   <span className="kindraw-hybrid-doc__eyebrow">
                     {section.isIntro
-                      ? "Intro"
-                      : `Seção ${formatSectionNumber(sectionNumber)}`}
+                      ? t("kindraw.hybrid.introEyebrow")
+                      : t("kindraw.hybrid.sectionLabel", {
+                          number: formatSectionNumber(sectionNumber),
+                        })}
                   </span>
                   <h3>{section.title}</h3>
                 </div>
@@ -226,14 +233,14 @@ export const HybridMarkdownPane = ({
                   onClick={() => setEditingSectionIndex(sectionIndex)}
                   type="button"
                 >
-                  Editar
+                  {t("kindraw.hybrid.editAction")}
                 </button>
                 <button
                   className="kindraw-hybrid-doc__action"
                   onClick={() => void onOpenCanvas(section.id)}
                   type="button"
                 >
-                  Canvas
+                  {t("kindraw.actions.currentCanvas")}
                 </button>
                 <button
                   className={`kindraw-hybrid-doc__action${
@@ -246,8 +253,8 @@ export const HybridMarkdownPane = ({
                   type="button"
                 >
                   {linkingSectionId === section.id
-                    ? "Aguardando seleção…"
-                    : "Vincular"}
+                    ? t("kindraw.hybrid.waitingSelection")
+                    : t("kindraw.hybrid.linkAction")}
                 </button>
                 <button
                   className="kindraw-hybrid-doc__action"
@@ -256,30 +263,30 @@ export const HybridMarkdownPane = ({
                       .writeText(buildKindrawSectionLink(hybridId, section.id))
                       .then(() =>
                         onStatusMessage(
-                          "Link da secao copiado para a area de transferencia.",
+                          t("kindraw.hybrid.sectionLinkCopied"),
                         ),
                       )
                       .catch((error) =>
                         onStatusMessage(
                           error instanceof Error
                             ? error.message
-                            : "Falha ao copiar o link da secao.",
+                            : t("kindraw.hybrid.sectionLinkCopyFailed"),
                         ),
                       );
                   }}
                   type="button"
                 >
-                  Copiar link
+                  {t("kindraw.hybrid.copyLinkAction")}
                 </button>
                 {section.isIntro ? null : (
                   <button
-                    aria-label="Excluir seção"
+                    aria-label={t("kindraw.hybrid.deleteSectionAria")}
                     className="kindraw-hybrid-doc__action kindraw-hybrid-doc__action--danger"
                     onClick={() => setDeletingSectionIndex(sectionIndex)}
-                    title="Excluir seção"
+                    title={t("kindraw.hybrid.deleteSectionAria")}
                     type="button"
                   >
-                    Excluir
+                    {t("kindraw.hybrid.deleteAction")}
                   </button>
                 )}
               </div>
@@ -289,7 +296,7 @@ export const HybridMarkdownPane = ({
               <div className="kindraw-hybrid-doc__editor">
                 <RichTextEditor
                   onChange={setDraftMarkdown}
-                  placeholder="Escreva o conteúdo da seção…"
+                  placeholder={t("kindraw.hybrid.sectionEditorPlaceholder")}
                   value={draftMarkdown}
                 />
                 <div className="kindraw-hybrid-doc__editor-actions">
@@ -298,14 +305,14 @@ export const HybridMarkdownPane = ({
                     onClick={() => setEditingSectionIndex(null)}
                     type="button"
                   >
-                    Cancelar
+                    {t("kindraw.hybrid.cancelAction")}
                   </button>
                   <button
                     className="kindraw-btn kindraw-btn--primary kindraw-btn--sm"
                     onClick={() => handleSaveSection(sectionIndex)}
                     type="button"
                   >
-                    Salvar seção
+                    {t("kindraw.hybrid.saveSectionAction")}
                   </button>
                 </div>
               </div>
@@ -316,7 +323,7 @@ export const HybridMarkdownPane = ({
               <div
                 className="kindraw-hybrid-doc__preview"
                 onDoubleClick={() => setEditingSectionIndex(sectionIndex)}
-                title="Clique duas vezes para editar"
+                title={t("kindraw.hybrid.doubleClickToEdit")}
               >
                 <MarkdownPreview
                   itemsById={itemsById}
@@ -333,7 +340,7 @@ export const HybridMarkdownPane = ({
         onClick={handleAddSection}
         type="button"
       >
-        <KindrawIcon name="plus" size={14} /> Nova seção
+        <KindrawIcon name="plus" size={14} /> {t("kindraw.hybrid.addSection")}
       </button>
 
       {deletingSectionIndex !== null ? (
@@ -346,18 +353,15 @@ export const HybridMarkdownPane = ({
           }}
         >
           <div aria-modal="true" className="kindraw-modal" role="dialog">
-            <h2>Excluir seção</h2>
-            <p>
-              Excluir esta seção do documento? O conteúdo dela será removido.
-              Essa ação não pode ser desfeita.
-            </p>
+            <h2>{t("kindraw.hybrid.deleteSectionTitle")}</h2>
+            <p>{t("kindraw.hybrid.deleteSectionConfirm")}</p>
             <div className="kindraw-modal__actions">
               <button
                 className="kindraw-btn kindraw-btn--soft"
                 onClick={() => setDeletingSectionIndex(null)}
                 type="button"
               >
-                Cancelar
+                {t("kindraw.hybrid.cancelAction")}
               </button>
               <button
                 className="kindraw-btn kindraw-btn--danger"
@@ -368,11 +372,11 @@ export const HybridMarkdownPane = ({
                     setEditingSectionIndex(null);
                   }
                   onMarkdownChange(deleteHybridMarkdownSection(markdown, index));
-                  onStatusMessage("Secao excluida.");
+                  onStatusMessage(t("kindraw.hybrid.sectionDeleted"));
                 }}
                 type="button"
               >
-                Excluir
+                {t("kindraw.hybrid.deleteAction")}
               </button>
             </div>
           </div>

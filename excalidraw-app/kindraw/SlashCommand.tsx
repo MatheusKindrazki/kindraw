@@ -2,6 +2,8 @@ import { Extension } from "@tiptap/core";
 import { ReactRenderer } from "@tiptap/react";
 import Suggestion from "@tiptap/suggestion";
 
+import { t } from "@excalidraw/excalidraw/i18n";
+
 import { SlashCommandMenu } from "./SlashCommandMenu";
 
 import type { Editor, Range } from "@tiptap/core";
@@ -103,11 +105,14 @@ const ICONS = {
   ),
 };
 
-export const SLASH_COMMANDS: SlashCommandItem[] = [
+// Constrói a lista de comandos resolvendo as strings via t() no momento da
+// chamada (a cada abertura do menu, em filterCommands), refletindo o idioma
+// corrente sem precisar de hook reativo — o popup é recriado a cada "/".
+export const getSlashCommands = (): SlashCommandItem[] => [
   {
     id: "heading1",
-    title: "Título 1",
-    description: "Cabeçalho de seção grande",
+    title: t("kindraw.slashCommand.heading1.title"),
+    description: t("kindraw.slashCommand.heading1.description"),
     keywords: ["titulo", "heading", "h1", "header"],
     icon: ICONS.h1,
     command: ({ editor, range }) =>
@@ -115,8 +120,8 @@ export const SLASH_COMMANDS: SlashCommandItem[] = [
   },
   {
     id: "heading2",
-    title: "Título 2",
-    description: "Cabeçalho de seção médio",
+    title: t("kindraw.slashCommand.heading2.title"),
+    description: t("kindraw.slashCommand.heading2.description"),
     keywords: ["titulo", "heading", "h2", "header"],
     icon: ICONS.h2,
     command: ({ editor, range }) =>
@@ -124,8 +129,8 @@ export const SLASH_COMMANDS: SlashCommandItem[] = [
   },
   {
     id: "heading3",
-    title: "Título 3",
-    description: "Cabeçalho de seção pequeno",
+    title: t("kindraw.slashCommand.heading3.title"),
+    description: t("kindraw.slashCommand.heading3.description"),
     keywords: ["titulo", "heading", "h3", "header"],
     icon: ICONS.h3,
     command: ({ editor, range }) =>
@@ -133,8 +138,8 @@ export const SLASH_COMMANDS: SlashCommandItem[] = [
   },
   {
     id: "bulletList",
-    title: "Lista",
-    description: "Lista com marcadores",
+    title: t("kindraw.slashCommand.bulletList.title"),
+    description: t("kindraw.slashCommand.bulletList.description"),
     keywords: ["lista", "bullet", "marcador", "ul"],
     icon: ICONS.bullet,
     command: ({ editor, range }) =>
@@ -142,8 +147,8 @@ export const SLASH_COMMANDS: SlashCommandItem[] = [
   },
   {
     id: "orderedList",
-    title: "Lista numerada",
-    description: "Lista ordenada por números",
+    title: t("kindraw.slashCommand.orderedList.title"),
+    description: t("kindraw.slashCommand.orderedList.description"),
     keywords: ["lista", "numerada", "ordered", "ol", "numero"],
     icon: ICONS.ordered,
     command: ({ editor, range }) =>
@@ -151,8 +156,8 @@ export const SLASH_COMMANDS: SlashCommandItem[] = [
   },
   {
     id: "taskList",
-    title: "Lista de tarefas",
-    description: "Checklist com caixas de seleção",
+    title: t("kindraw.slashCommand.taskList.title"),
+    description: t("kindraw.slashCommand.taskList.description"),
     keywords: ["tarefa", "task", "todo", "checkbox", "checklist"],
     icon: ICONS.task,
     command: ({ editor, range }) =>
@@ -160,8 +165,8 @@ export const SLASH_COMMANDS: SlashCommandItem[] = [
   },
   {
     id: "blockquote",
-    title: "Citação",
-    description: "Destaque um trecho citado",
+    title: t("kindraw.slashCommand.blockquote.title"),
+    description: t("kindraw.slashCommand.blockquote.description"),
     keywords: ["citacao", "quote", "blockquote"],
     icon: ICONS.quote,
     command: ({ editor, range }) =>
@@ -169,8 +174,8 @@ export const SLASH_COMMANDS: SlashCommandItem[] = [
   },
   {
     id: "codeBlock",
-    title: "Bloco de código",
-    description: "Trecho de código formatado",
+    title: t("kindraw.slashCommand.codeBlock.title"),
+    description: t("kindraw.slashCommand.codeBlock.description"),
     keywords: ["codigo", "code", "snippet"],
     icon: ICONS.code,
     command: ({ editor, range }) =>
@@ -178,8 +183,8 @@ export const SLASH_COMMANDS: SlashCommandItem[] = [
   },
   {
     id: "horizontalRule",
-    title: "Divisor",
-    description: "Linha separadora horizontal",
+    title: t("kindraw.slashCommand.horizontalRule.title"),
+    description: t("kindraw.slashCommand.horizontalRule.description"),
     keywords: ["divisor", "divider", "linha", "hr", "separador"],
     icon: ICONS.divider,
     command: ({ editor, range }) =>
@@ -195,11 +200,13 @@ const normalize = (value: string) =>
     .replace(/[\u0300-\u036f]/g, "");
 
 const filterCommands = (query: string): SlashCommandItem[] => {
+  // Resolve os títulos/descrições no idioma corrente a cada abertura do menu.
+  const commands = getSlashCommands();
   const q = normalize(query.trim());
   if (!q) {
-    return SLASH_COMMANDS;
+    return commands;
   }
-  return SLASH_COMMANDS.filter((item) => {
+  return commands.filter((item) => {
     const haystack = normalize(`${item.title} ${item.keywords.join(" ")}`);
     return haystack.includes(q);
   });

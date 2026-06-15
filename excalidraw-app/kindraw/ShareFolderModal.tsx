@@ -10,6 +10,7 @@ import {
   updateFolderShareRole,
 } from "./api";
 import { KindrawIcon } from "./icons";
+import { useKindrawI18n } from "./i18n";
 import { userHandle, userSubtitle } from "./identity";
 import { CreatedInviteBox, SharePendingInvites } from "./SharePendingInvites";
 import { getErrorMessage } from "./utils";
@@ -26,11 +27,6 @@ import type {
 } from "./types";
 
 const SEARCH_DEBOUNCE_MS = 250;
-
-const ROLE_LABEL: Record<KindrawShareRole, string> = {
-  viewer: "Visualizador",
-  editor: "Editor",
-};
 
 const KindrawPersonAvatar = ({ user }: { user: KindrawUser }) =>
   user.avatarUrl ? (
@@ -54,6 +50,7 @@ export const ShareFolderModal = ({
   /** Disparado após qualquer mutação bem-sucedida (ex.: refreshTree). */
   onChange?: () => void;
 }) => {
+  const { t } = useKindrawI18n();
   const [shares, setShares] = useState<KindrawFolderShare[] | null>(null);
   const [invites, setInvites] = useState<KindrawPendingInvite[]>([]);
   const [createdInvite, setCreatedInvite] =
@@ -84,10 +81,12 @@ export const ShareFolderModal = ({
       setShares(sharesResponse.shares);
       setInvites(invitesResponse.invites);
     } catch (error) {
-      setListError(getErrorMessage(error, "Falha ao carregar acessos."));
+      setListError(
+        getErrorMessage(error, t("kindraw.shareFolder.loadSharesFailed")),
+      );
       setShares([]);
     }
-  }, [folder.id]);
+  }, [folder.id, t]);
 
   useEffect(() => {
     void loadShares();
@@ -202,11 +201,13 @@ export const ShareFolderModal = ({
       await loadShares();
       onChange?.();
     } catch (error) {
-      setInviteError(getErrorMessage(error, "Não foi possível convidar."));
+      setInviteError(
+        getErrorMessage(error, t("kindraw.shareFolder.inviteFailed")),
+      );
     } finally {
       setInviting(false);
     }
-  }, [selectedUser, query, folder.id, role, loadShares, onChange]);
+  }, [selectedUser, query, folder.id, role, loadShares, onChange, t]);
 
   const handleRevokeInvite = useCallback(
     async (invite: KindrawPendingInvite) => {
@@ -220,12 +221,14 @@ export const ShareFolderModal = ({
         await loadShares();
         onChange?.();
       } catch (error) {
-        setListError(getErrorMessage(error, "Falha ao cancelar o convite."));
+        setListError(
+          getErrorMessage(error, t("kindraw.shareFolder.revokeInviteFailed")),
+        );
       } finally {
         setBusyInviteId(null);
       }
     },
-    [folder.id, createdInvite, loadShares, onChange],
+    [folder.id, createdInvite, loadShares, onChange, t],
   );
 
   const handleRoleChange = useCallback(
@@ -240,12 +243,14 @@ export const ShareFolderModal = ({
         await loadShares();
         onChange?.();
       } catch (error) {
-        setListError(getErrorMessage(error, "Falha ao alterar o papel."));
+        setListError(
+          getErrorMessage(error, t("kindraw.shareFolder.roleChangeFailed")),
+        );
       } finally {
         setBusyShareId(null);
       }
     },
-    [folder.id, loadShares, onChange],
+    [folder.id, loadShares, onChange, t],
   );
 
   const handleRevoke = useCallback(
@@ -257,12 +262,14 @@ export const ShareFolderModal = ({
         await loadShares();
         onChange?.();
       } catch (error) {
-        setListError(getErrorMessage(error, "Falha ao remover o acesso."));
+        setListError(
+          getErrorMessage(error, t("kindraw.shareFolder.revokeShareFailed")),
+        );
       } finally {
         setBusyShareId(null);
       }
     },
-    [folder.id, loadShares, onChange],
+    [folder.id, loadShares, onChange, t],
   );
 
   const canInvite = !inviting && query.trim().replace(/^@/, "").length > 0;
@@ -283,9 +290,11 @@ export const ShareFolderModal = ({
         role="dialog"
       >
         <div className="kindraw-sharemodal__head">
-          <h2 id="kindraw-sharemodal-title">Compartilhar “{folder.name}”</h2>
+          <h2 id="kindraw-sharemodal-title">
+            {t("kindraw.shareFolder.title", { name: folder.name })}
+          </h2>
           <button
-            aria-label="Fechar"
+            aria-label={t("kindraw.shareFolder.closeAria")}
             className="kindraw-sharemodal__close"
             onClick={onClose}
             type="button"
@@ -298,7 +307,7 @@ export const ShareFolderModal = ({
           <div className="kindraw-sharemodal__invite-row">
             <div className="kindraw-sharemodal__field">
               <input
-                aria-label="Convidar por nome, usuário ou e-mail"
+                aria-label={t("kindraw.shareFolder.inviteInputAria")}
                 autoComplete="off"
                 className="kindraw-sharemodal__input"
                 onChange={handleQueryChange}
@@ -307,22 +316,26 @@ export const ShareFolderModal = ({
                     setResultsOpen(true);
                   }
                 }}
-                placeholder="nome, @usuário ou e-mail"
+                placeholder={t("kindraw.shareFolder.invitePlaceholder")}
                 ref={inputRef}
                 type="text"
                 value={query}
               />
             </div>
             <select
-              aria-label="Papel do convidado"
+              aria-label={t("kindraw.shareFolder.inviteRoleAria")}
               className="kindraw-sharemodal__roleselect"
               onChange={(event) =>
                 setRole(event.target.value as KindrawShareRole)
               }
               value={role}
             >
-              <option value="editor">{ROLE_LABEL.editor}</option>
-              <option value="viewer">{ROLE_LABEL.viewer}</option>
+              <option value="editor">
+                {t("kindraw.shareFolder.roleEditor")}
+              </option>
+              <option value="viewer">
+                {t("kindraw.shareFolder.roleViewer")}
+              </option>
             </select>
             <button
               className="kindraw-btn kindraw-btn--primary kindraw-btn--sm"
@@ -330,19 +343,22 @@ export const ShareFolderModal = ({
               onClick={() => void handleInvite()}
               type="button"
             >
-              {inviting ? "Gerando…" : "Convidar"}
+              {inviting
+                ? t("kindraw.shareFolder.inviting")
+                : t("kindraw.shareFolder.invite")}
             </button>
           </div>
 
           <p className="kindraw-sharemodal__invite-help">
-            Gera um link de convite para você copiar e enviar. Quem abrir e
-            entrar ganha acesso (mesmo sem conta ainda).
+            {t("kindraw.shareFolder.inviteHelp")}
           </p>
 
           {resultsOpen && (results.length > 0 || searching) ? (
             <ul className="kindraw-sharemodal__results" role="listbox">
               {searching && results.length === 0 ? (
-                <li className="kindraw-sharemodal__result-empty">Buscando…</li>
+                <li className="kindraw-sharemodal__result-empty">
+                  {t("kindraw.shareFolder.searching")}
+                </li>
               ) : null}
               {results.map((user) => {
                 const already = existingLogins.has(
@@ -365,7 +381,7 @@ export const ShareFolderModal = ({
                       </span>
                       {already ? (
                         <span className="kindraw-sharemodal__result-tag">
-                          já tem acesso
+                          {t("kindraw.shareFolder.alreadyHasAccess")}
                         </span>
                       ) : null}
                     </button>
@@ -384,13 +400,15 @@ export const ShareFolderModal = ({
 
         <div className="kindraw-sharemodal__people">
           <span className="kindraw-sharemodal__people-label">
-            Pessoas com acesso
+            {t("kindraw.shareFolder.peopleLabel")}
           </span>
           {shares === null ? (
-            <p className="kindraw-sharemodal__hint">Carregando…</p>
+            <p className="kindraw-sharemodal__hint">
+              {t("kindraw.status.loadingCanvas")}
+            </p>
           ) : shares.length === 0 && invites.length === 0 ? (
             <p className="kindraw-sharemodal__hint">
-              Ninguém tem acesso ainda além de você.
+              {t("kindraw.shareFolder.empty")}
             </p>
           ) : (
             <ul className="kindraw-sharemodal__list">
@@ -411,7 +429,9 @@ export const ShareFolderModal = ({
                       <span>{userSubtitle(share.user)}</span>
                     </span>
                     <select
-                      aria-label={`Papel de @${userHandle(share.user)}`}
+                      aria-label={t("kindraw.shareFolder.personRoleAria", {
+                        handle: userHandle(share.user),
+                      })}
                       className="kindraw-sharemodal__roleselect kindraw-sharemodal__roleselect--inline"
                       disabled={busy}
                       onChange={(event) =>
@@ -422,11 +442,17 @@ export const ShareFolderModal = ({
                       }
                       value={share.role}
                     >
-                      <option value="editor">{ROLE_LABEL.editor}</option>
-                      <option value="viewer">{ROLE_LABEL.viewer}</option>
+                      <option value="editor">
+                        {t("kindraw.shareFolder.roleEditor")}
+                      </option>
+                      <option value="viewer">
+                        {t("kindraw.shareFolder.roleViewer")}
+                      </option>
                     </select>
                     <button
-                      aria-label={`Remover @${userHandle(share.user)}`}
+                      aria-label={t("kindraw.shareFolder.removePersonAria", {
+                        handle: userHandle(share.user),
+                      })}
                       className="kindraw-sharemodal__remove"
                       disabled={busy}
                       onClick={() => void handleRevoke(share)}

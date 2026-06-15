@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { buildInviteUrl } from "./api";
+import { useKindrawI18n } from "./i18n";
 import { KindrawIcon } from "./icons";
 
 import type { KindrawPendingInvite } from "./types";
@@ -9,11 +10,13 @@ import type { KindrawPendingInvite } from "./types";
 // link RELATIVO do convite (/invite/<token>) e monta a URL absoluta.
 const CopyInviteLinkButton = ({
   link,
-  label = "Copiar link",
+  label,
 }: {
   link: string;
   label?: string;
 }) => {
+  const { t } = useKindrawI18n();
+  const resolvedLabel = label ?? t("kindraw.actions.copyLink");
   const [copied, setCopied] = useState(false);
   const timeoutRef = useRef<number | null>(null);
 
@@ -51,11 +54,11 @@ const CopyInviteLinkButton = ({
     >
       {copied ? (
         <>
-          Copiado <KindrawIcon name="check" size={13} />
+          {t("kindraw.actions.copied")} <KindrawIcon name="check" size={13} />
         </>
       ) : (
         <>
-          <KindrawIcon name="copy" size={14} /> {label}
+          <KindrawIcon name="copy" size={14} /> {resolvedLabel}
         </>
       )}
     </button>
@@ -68,19 +71,22 @@ export const CreatedInviteBox = ({
   invite,
 }: {
   invite: KindrawPendingInvite;
-}) => (
-  <div className="kindraw-invite-created">
-    <span className="kindraw-invite-created__label">
-      Link de convite gerado — envie para quem você quer convidar:
-    </span>
-    <div className="kindraw-linkbox">
-      <a href={buildInviteUrl(invite.link)} rel="noreferrer" target="_blank">
-        {buildInviteUrl(invite.link).replace(/^https?:\/\//, "")}
-      </a>
-      <CopyInviteLinkButton link={invite.link} label="Copiar" />
+}) => {
+  const { t } = useKindrawI18n();
+  return (
+    <div className="kindraw-invite-created">
+      <span className="kindraw-invite-created__label">
+        {t("kindraw.invites.createdLabel")}
+      </span>
+      <div className="kindraw-linkbox">
+        <a href={buildInviteUrl(invite.link)} rel="noreferrer" target="_blank">
+          {buildInviteUrl(invite.link).replace(/^https?:\/\//, "")}
+        </a>
+        <CopyInviteLinkButton link={invite.link} label={t("kindraw.actions.copy")} />
+      </div>
     </div>
-  </div>
-);
+  );
+};
 
 // Itens <li> de convites pendentes (selo "Pendente" + copiar-link + cancelar)
 // renderizados dentro da lista "Pessoas com acesso", tanto em ShareFolderModal
@@ -94,6 +100,8 @@ export const SharePendingInvites = ({
   busyInviteId: string | null;
   onRevoke: (invite: KindrawPendingInvite) => void;
 }) => {
+  const { t } = useKindrawI18n();
+
   if (invites.length === 0) {
     return null;
   }
@@ -114,15 +122,24 @@ export const SharePendingInvites = ({
               <KindrawIcon name="link" size={15} />
             </span>
             <span className="kindraw-sharemodal__person-text">
-              <strong>{invite.email || "Convite por link"}</strong>
+              <strong>
+                {invite.email || t("kindraw.invites.linkInviteFallback")}
+              </strong>
               <span>
-                {invite.role === "editor" ? "Editor" : "Visualizador"}
+                {invite.role === "editor"
+                  ? t("kindraw.roles.editor")
+                  : t("kindraw.roles.viewer")}
               </span>
             </span>
-            <span className="kindraw-sharemodal__pending-tag">Pendente</span>
-            <CopyInviteLinkButton link={invite.link} label="Copiar link" />
+            <span className="kindraw-sharemodal__pending-tag">
+              {t("kindraw.invites.pendingTag")}
+            </span>
+            <CopyInviteLinkButton
+              link={invite.link}
+              label={t("kindraw.actions.copyLink")}
+            />
             <button
-              aria-label="Cancelar convite"
+              aria-label={t("kindraw.invites.cancelInviteAria")}
               className="kindraw-sharemodal__remove"
               disabled={busy}
               onClick={() => onRevoke(invite)}

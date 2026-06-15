@@ -59,6 +59,9 @@ import {
 } from "./hybridSections";
 
 import { KindrawYjsProvider } from "./yjsProvider";
+import { useKindrawI18n } from "./i18n";
+
+import type { TranslationKeys } from "@excalidraw/excalidraw/i18n";
 
 import type { PointerEvent as ReactPointerEvent } from "react";
 import type {
@@ -79,10 +82,17 @@ type HybridEditorPageProps = {
   currentUser?: KindrawUser | null;
 };
 
-const HYBRID_VIEW_LABELS: { view: KindrawHybridView; label: string }[] = [
-  { view: "document", label: "Documento" },
-  { view: "both", label: "Ambos" },
-  { view: "canvas", label: "Canvas" },
+// Sentinela usado para dividir a instrução da linkbar em torno do título da
+// seção, permitindo renderizar o <strong>{title}</strong> como componente no
+// meio da string traduzida (interpolação com componente, não só texto).
+const LINKBAR_TITLE_SENTINEL = " __title__ ";
+
+const getHybridViewLabels = (
+  t: (key: TranslationKeys) => string,
+): { view: KindrawHybridView; label: string }[] => [
+  { view: "document", label: t("kindraw.hybrid.viewDocument") },
+  { view: "both", label: t("kindraw.hybrid.viewBoth") },
+  { view: "canvas", label: t("kindraw.actions.currentCanvas") },
 ];
 
 const useNarrowLayout = () => {
@@ -115,6 +125,7 @@ export const HybridEditorPage = ({
   folders,
   currentUser,
 }: HybridEditorPageProps) => {
+  const { t } = useKindrawI18n();
   const [response, setResponse] = useState<KindrawHybridItemResponse | null>(
     null,
   );
@@ -126,7 +137,9 @@ export const HybridEditorPage = ({
   );
   const [serializedDrawing, setSerializedDrawing] = useState("");
   const [lastSavedDrawing, setLastSavedDrawing] = useState("");
-  const [statusMessage, setStatusMessage] = useState("Carregando hibrido...");
+  const [statusMessage, setStatusMessage] = useState(() =>
+    t("kindraw.hybrid.statusLoading"),
+  );
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [saveState, setSaveState] = useState<"idle" | "saving" | "error">(
     "idle",
@@ -223,7 +236,7 @@ export const HybridEditorPage = ({
 
   const loadHybrid = useCallback(async () => {
     setErrorMessage(null);
-    setStatusMessage("Carregando hibrido...");
+    setStatusMessage(t("kindraw.hybrid.statusLoading"));
 
     try {
       const nextResponse = await getHybridItem(hybridId);
@@ -265,12 +278,14 @@ export const HybridEditorPage = ({
         setDrawingSeedContent(restoredDrawing);
         setSerializedDrawing(restoredDrawing);
         setLastSavedDrawing(nextResponse.drawing.content);
-        setStatusMessage("Hibrido sincronizado.");
+        setStatusMessage(t("kindraw.hybrid.statusSynced"));
       });
     } catch (error) {
-      setErrorMessage(getErrorMessage(error, "Falha ao carregar o hibrido."));
+      setErrorMessage(
+        getErrorMessage(error, t("kindraw.hybrid.statusLoadFailed")),
+      );
     }
-  }, [hybridId]);
+  }, [hybridId, t]);
 
   useEffect(() => {
     void loadHybrid();
@@ -317,7 +332,7 @@ export const HybridEditorPage = ({
         await updateItemContent(response.document.item.id, content);
         setLastSavedMarkdown(content);
         setSaveState("idle");
-        setStatusMessage("Documento salvo.");
+        setStatusMessage(t("kindraw.hybrid.statusDocumentSaved"));
         setResponse((current) =>
           current
             ? {
@@ -337,11 +352,11 @@ export const HybridEditorPage = ({
       } catch (error) {
         setSaveState("error");
         setStatusMessage(
-          getErrorMessage(error, "Falha ao salvar o documento."),
+          getErrorMessage(error, t("kindraw.hybrid.statusDocumentSaveFailed")),
         );
       }
     },
-    [onTreeRefresh, response],
+    [onTreeRefresh, response, t],
   );
 
   useEffect(() => {
@@ -390,7 +405,7 @@ export const HybridEditorPage = ({
         await updateItemContent(response.drawing.item.id, content);
         setLastSavedDrawing(content);
         setSaveState("idle");
-        setStatusMessage("Canvas salvo.");
+        setStatusMessage(t("kindraw.hybrid.statusCanvasSaved"));
         setResponse((current) =>
           current
             ? {
@@ -409,10 +424,12 @@ export const HybridEditorPage = ({
         await onTreeRefresh();
       } catch (error) {
         setSaveState("error");
-        setStatusMessage(getErrorMessage(error, "Falha ao salvar o canvas."));
+        setStatusMessage(
+          getErrorMessage(error, t("kindraw.hybrid.statusCanvasSaveFailed")),
+        );
       }
     },
-    [onTreeRefresh, response],
+    [onTreeRefresh, response, t],
   );
 
   useEffect(() => {
@@ -497,13 +514,15 @@ export const HybridEditorPage = ({
             }
           : current,
       );
-      setStatusMessage("Titulo atualizado.");
+      setStatusMessage(t("kindraw.hybrid.statusTitleUpdated"));
       await onTreeRefresh();
     } catch (error) {
-      setStatusMessage(getErrorMessage(error, "Falha ao atualizar o titulo."));
+      setStatusMessage(
+        getErrorMessage(error, t("kindraw.hybrid.statusTitleUpdateFailed")),
+      );
       setTitle(response.hybrid.title);
     }
-  }, [hybridId, onTreeRefresh, response, title]);
+  }, [hybridId, onTreeRefresh, response, title, t]);
 
   const handleCreateShareLink = useCallback(
     async (access: "read" | "live-edit" = "read") => {
@@ -523,17 +542,17 @@ export const HybridEditorPage = ({
         );
         setStatusMessage(
           access === "live-edit"
-            ? "Link de edição ao vivo criado."
-            : "Link publico criado.",
+            ? t("kindraw.hybrid.statusLiveEditLinkCreated")
+            : t("kindraw.status.publicLinkCreated"),
         );
         await onTreeRefresh();
       } catch (error) {
         setStatusMessage(
-          getErrorMessage(error, "Falha ao criar link publico."),
+          getErrorMessage(error, t("kindraw.hybrid.statusPublicLinkCreateFailed")),
         );
       }
     },
-    [hybridId, onTreeRefresh],
+    [hybridId, onTreeRefresh, t],
   );
 
   // SEMPRE-AO-VIVO: assim que o híbrido carrega e há um editor (usuário logado),
@@ -625,7 +644,10 @@ export const HybridEditorPage = ({
     roomId: `hcanvas:${hybridId}`,
     roomKey: canvasRoomKey,
     profile: {
-      name: currentUser?.name || (currentUser ? userHandle(currentUser) : "") || "Você",
+      name:
+        currentUser?.name ||
+        (currentUser ? userHandle(currentUser) : "") ||
+        t("kindraw.hybrid.youLabel"),
       userId: currentUser?.id ?? null,
       avatarUrl: currentUser?.avatarUrl ?? null,
       githubLogin: currentUser?.githubLogin ?? null,
@@ -695,11 +717,11 @@ export const HybridEditorPage = ({
         await onTreeRefresh();
       } catch (error) {
         setStatusMessage(
-          getErrorMessage(error, "Falha ao revogar link publico."),
+          getErrorMessage(error, t("kindraw.hybrid.statusPublicLinkRevokeFailed")),
         );
       }
     },
-    [onTreeRefresh],
+    [onTreeRefresh, t],
   );
 
   const handleUnlink = useCallback(async () => {
@@ -713,10 +735,10 @@ export const HybridEditorPage = ({
       navigateKindraw(buildItemPath(response.document.item));
     } catch (error) {
       setStatusMessage(
-        getErrorMessage(error, "Falha ao desvincular o hibrido."),
+        getErrorMessage(error, t("kindraw.hybrid.statusUnlinkFailed")),
       );
     }
-  }, [hybridId, onTreeRefresh, response]);
+  }, [hybridId, onTreeRefresh, response, t]);
 
   const setView = useCallback(
     async (view: KindrawHybridView, sectionId?: string | null) => {
@@ -756,12 +778,12 @@ export const HybridEditorPage = ({
   const linkElementsToSection = useCallback(
     (sectionId: string, selectedIds: string[]) => {
       if (!sceneElements.length || !sceneAppState) {
-        setStatusMessage("Canvas ainda nao esta pronto.");
+        setStatusMessage(t("kindraw.hybrid.statusCanvasNotReady"));
         return false;
       }
 
       if (!selectedIds.length) {
-        setStatusMessage("Selecione ao menos um elemento no canvas.");
+        setStatusMessage(t("kindraw.hybrid.statusSelectAtLeastOne"));
         return false;
       }
 
@@ -783,7 +805,7 @@ export const HybridEditorPage = ({
       );
       return true;
     },
-    [hybridId, sceneAppState, sceneElements, sceneFiles],
+    [hybridId, sceneAppState, sceneElements, sceneFiles, t],
   );
 
   /**
@@ -802,7 +824,7 @@ export const HybridEditorPage = ({
       if (selectedIds.length > 0) {
         if (linkElementsToSection(sectionId, selectedIds)) {
           setLinkingSectionId(null);
-          setStatusMessage("Selecao vinculada a secao.");
+          setStatusMessage(t("kindraw.hybrid.statusSelectionLinked"));
         }
         return;
       }
@@ -811,21 +833,21 @@ export const HybridEditorPage = ({
       setLinkingSectionId(sectionId);
       setActiveSectionId(sectionId);
       void setView("both", sectionId);
-      setStatusMessage("Selecione elementos no canvas para vincular.");
+      setStatusMessage(t("kindraw.hybrid.statusSelectToLink"));
     },
-    [linkElementsToSection, linkingSectionId, selectedElementIds, setView],
+    [linkElementsToSection, linkingSectionId, selectedElementIds, setView, t],
   );
 
   const handleAddSection = useCallback(() => {
     const { markdown: nextMarkdown, sectionId } = appendHybridSection(
       markdown,
-      "Nova seção",
+      t("kindraw.hybrid.newSectionTitle"),
     );
     setMarkdown(nextMarkdown);
     setActiveSectionId(sectionId);
-    setStatusMessage("Nova secao criada.");
+    setStatusMessage(t("kindraw.hybrid.statusSectionCreated"));
     return sectionId;
-  }, [markdown]);
+  }, [markdown, t]);
 
   const handleFocusSectionOnCanvas = useCallback(
     (sectionId: string) => {
@@ -1015,22 +1037,26 @@ export const HybridEditorPage = ({
       return;
     }
 
-    const sectionTitle = linkingSection?.title || "secao";
+    const sectionTitle =
+      linkingSection?.title || t("kindraw.hybrid.sectionFallback");
     if (linkElementsToSection(linkingSectionId, selectedIds)) {
       setLinkingSectionId(null);
-      setStatusMessage(`Selecao vinculada a ${sectionTitle}.`);
+      setStatusMessage(
+        t("kindraw.hybrid.statusSelectionLinkedTo", { section: sectionTitle }),
+      );
     }
   }, [
     linkElementsToSection,
     linkingSection,
     linkingSectionId,
     selectedElementIds,
+    t,
   ]);
 
   if (errorMessage) {
     return (
       <div className="kindraw-empty-state">
-        <h2>Hibrido indisponivel</h2>
+        <h2>{t("kindraw.hybrid.unavailableTitle")}</h2>
         <p>{errorMessage}</p>
       </div>
     );
@@ -1048,7 +1074,7 @@ export const HybridEditorPage = ({
   const showCanvas = initialView === "canvas" || initialView === "both";
   const folderName =
     folders?.find((folder) => folder.id === response.hybrid.folderId)?.name ||
-    "Biblioteca";
+    t("kindraw.sidebar.backToLibrary");
 
   const documentPane = (
     <section className="kindraw-hybrid-shell__document">
@@ -1090,15 +1116,26 @@ export const HybridEditorPage = ({
       {linkingSection ? (
         <div className="kindraw-linkbar" role="status">
           <span className="kindraw-linkbar__text">
-            <KindrawIcon name="link" size={13} /> Selecione elementos no canvas
-            para vincular à <strong>{linkingSection.title}</strong>
+            <KindrawIcon name="link" size={13} />{" "}
+            {t("kindraw.hybrid.linkbarInstruction", {
+              title: LINKBAR_TITLE_SENTINEL,
+            })
+              .split(LINKBAR_TITLE_SENTINEL)
+              .flatMap((segment, index) =>
+                index === 0
+                  ? [segment]
+                  : [
+                      <strong key="title">{linkingSection.title}</strong>,
+                      segment,
+                    ],
+              )}
           </span>
           <button
             className="kindraw-linkbar__cancel"
             onClick={() => setLinkingSectionId(null)}
             type="button"
           >
-            Cancelar
+            {t("kindraw.hybrid.cancel")}
           </button>
         </div>
       ) : null}
@@ -1126,12 +1163,12 @@ export const HybridEditorPage = ({
         renderTopRightUI={(isMobile) =>
           isMobile ? null : (
             <button
-              aria-label="Inserir ícones e templates"
+              aria-label={t("kindraw.hybrid.insertIconsTemplates")}
               className="kindraw-insert-trigger"
               onClick={() =>
                 excalidrawAPIRef.current?.toggleSidebar({ name: "kindraw" })
               }
-              title="Inserir ícones e templates"
+              title={t("kindraw.hybrid.insertIconsTemplates")}
               type="button"
             >
               {LibraryIcon}
@@ -1159,7 +1196,7 @@ export const HybridEditorPage = ({
       <header className="kindraw-editor-header">
         <div className="kindraw-editor-header__leading">
           <button
-            aria-label="Voltar para a pasta"
+            aria-label={t("kindraw.hybrid.backToFolder")}
             className="kindraw-iconbtn"
             onClick={() =>
               navigateKindraw(buildFolderPath(response.hybrid.folderId))
@@ -1171,7 +1208,7 @@ export const HybridEditorPage = ({
           <span className="kindraw-editor-crumb">{folderName} /</span>
           <div className="kindraw-editor-title">
             <input
-              aria-label="Titulo do híbrido"
+              aria-label={t("kindraw.hybrid.titleInputAria")}
               className="kindraw-editor-title__input"
               onBlur={() => void commitTitle()}
               onChange={(event) => setTitle(event.target.value)}
@@ -1188,7 +1225,7 @@ export const HybridEditorPage = ({
           </div>
         </div>
         <div className="kindraw-segment kindraw-editor-header__segment">
-          {HYBRID_VIEW_LABELS.map(({ view, label }) => (
+          {getHybridViewLabels(t).map(({ view, label }) => (
             <button
               className={`kindraw-segment__btn${
                 initialView === view ? " kindraw-segment__btn--active" : ""
@@ -1220,12 +1257,12 @@ export const HybridEditorPage = ({
             onClick={() => setShareModalOpen(true)}
             type="button"
           >
-            <KindrawIcon name="share" size={16} /> Compartilhar
+            <KindrawIcon name="share" size={16} /> {t("kindraw.hybrid.share")}
           </button>
           <div className="kindraw-menuwrap" ref={headerMenuRef}>
             <button
               aria-expanded={headerMenuOpen}
-              aria-label="Mais ações do híbrido"
+              aria-label={t("kindraw.hybrid.moreActions")}
               className="kindraw-dots kindraw-dots--visible"
               onClick={() => setHeaderMenuOpen(!headerMenuOpen)}
               type="button"
@@ -1244,7 +1281,7 @@ export const HybridEditorPage = ({
                     role="menuitem"
                     type="button"
                   >
-                    Desvincular
+                    {t("kindraw.hybrid.unlink")}
                   </button>
                 </div>
               </div>
@@ -1264,7 +1301,7 @@ export const HybridEditorPage = ({
               onClick={() => setMobilePane("document")}
               type="button"
             >
-              Documento
+              {t("kindraw.hybrid.viewDocument")}
             </button>
             <button
               className={`kindraw-segment__btn${
@@ -1273,7 +1310,7 @@ export const HybridEditorPage = ({
               onClick={() => setMobilePane("canvas")}
               type="button"
             >
-              Canvas
+              {t("kindraw.actions.currentCanvas")}
             </button>
           </div>
           <div className="kindraw-hybrid-shell__body">
@@ -1299,7 +1336,7 @@ export const HybridEditorPage = ({
           {showDocument ? documentPane : null}
           {initialView === "both" ? (
             <button
-              aria-label="Redimensionar documento e canvas"
+              aria-label={t("kindraw.hybrid.resizeSplitAria")}
               className="kindraw-hybrid-shell__divider"
               onPointerDown={handleSplitPointerDown}
               type="button"
@@ -1323,18 +1360,15 @@ export const HybridEditorPage = ({
           }}
         >
           <div aria-modal="true" className="kindraw-modal" role="dialog">
-            <h2>Desvincular híbrido</h2>
-            <p>
-              Desvincular documento e canvas deste híbrido? Os dois itens
-              continuam existindo separadamente.
-            </p>
+            <h2>{t("kindraw.hybrid.unlinkModalTitle")}</h2>
+            <p>{t("kindraw.hybrid.unlinkModalDescription")}</p>
             <div className="kindraw-modal__actions">
               <button
                 className="kindraw-btn kindraw-btn--soft"
                 onClick={() => setUnlinkConfirmOpen(false)}
                 type="button"
               >
-                Cancelar
+                {t("kindraw.hybrid.cancel")}
               </button>
               <button
                 className="kindraw-btn kindraw-btn--danger"
@@ -1344,7 +1378,7 @@ export const HybridEditorPage = ({
                 }}
                 type="button"
               >
-                Desvincular
+                {t("kindraw.hybrid.unlink")}
               </button>
             </div>
           </div>

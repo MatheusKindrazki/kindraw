@@ -743,12 +743,32 @@
       "copy": "Copy",
       "revoke": "Revoke",
       "generateLink": "Generate link",
-      "backToWorkspace": "Back to {{name}}"
+      "backToWorkspace": "Back to {{name}}",
+      "cancel": "Cancel",
+      "rename": "Rename",
+      "convertToHybrid": "Convert to hybrid document",
+      "unlink": "Unlink",
+      "delete": "Delete",
+      "share": "Share",
+      "renameFolder": "Rename folder",
+      "deleteFolder": "Delete folder",
+      "newFolder": "New folder",
+      "new": "New",
+      "create": "Create",
+      "save": "Save",
+      "convert": "Convert",
+      "copyLink": "Copy link",
+      "copied": "Copied"
     },
     "commandPalette": {
       "publicLink": "Public view link",
       "github": "GitHub",
-      "homepage": "Homepage"
+      "homepage": "Homepage",
+      "searchAria": "Search the entire workspace",
+      "searchPlaceholder": "Search the entire workspace…",
+      "noResults": "No items found.",
+      "emptyWorkspace": "No items in the workspace yet.",
+      "keyboardHint": "↑↓ navigate · ↵ open · esc close"
     },
     "iconLibrary": {
       "sectionTitle": "Icons",
@@ -769,7 +789,11 @@
       "insert": "Insert template"
     },
     "presence": {
-      "activeWith": "In realtime with {{names}}"
+      "activeWith": "In realtime with {{names}}",
+      "selfLabel": "{{name}} (you)",
+      "sessionPeopleAria": "{{count}} people in this session",
+      "liveEditing": "Live editing",
+      "overflowMore": "+{{count}} more"
     },
     "status": {
       "workspaceRefreshFailed": "Failed to refresh the workspace.",
@@ -784,7 +808,19 @@
       "drawingLoadFailed": "Failed to load drawing.",
       "drawingSaving": "Saving drawing...",
       "drawingSaved": "Drawing saved.",
-      "drawingSaveFailed": "Failed to save drawing."
+      "drawingSaveFailed": "Failed to save drawing.",
+      "loadingKindraw": "Loading Kindraw...",
+      "loadingDrawing": "Loading drawing…",
+      "titleUpdated": "Title updated.",
+      "titleUpdateFailed": "Failed to update the title.",
+      "publicLinkCreateFailed": "Failed to create the public view link.",
+      "publicLinkRevokeFailed": "Failed to revoke the public view link.",
+      "liveSessionEnded": "Live session ended.",
+      "liveSessionActive": "Live session active.",
+      "liveSessionToggleFailed": "Failed to toggle the live session.",
+      "docSynced": "Document synced.",
+      "docSaved": "Document saved.",
+      "docSaveFailed": "Failed to save the document."
     },
     "welcome": {
       "editingTitle": "Editing {{title}}",
@@ -847,7 +883,13 @@
       "deleteCanvasConfirm": "Delete this canvas permanently?",
       "publicFlag": "Public",
       "liveFlag": "Live",
-      "archivedFlag": "Archived"
+      "archivedFlag": "Archived",
+      "root": "Root",
+      "sharedWithMe": "Shared with me",
+      "publicLinks": "Public links",
+      "liveSessions": "Live sessions",
+      "library": "Library",
+      "sharedSection": "Shared"
     },
     "shareDialog": {
       "publicLinkTitle": "Public link",
@@ -873,7 +915,8 @@
       "invalidTitle": "Invalid public view link",
       "signInToEditDocTitle": "Sign in with GitHub to edit this doc",
       "backToCanvas": "Back to canvas",
-      "loadingDocument": "Loading document..."
+      "loadingDocument": "Loading document...",
+      "signInToEditHybridTitle": "Sign in with GitHub to edit this hybrid doc"
     },
     "links": {
       "title": "Kindraw links"
@@ -894,19 +937,34 @@
       "lastUsed": "Last used {{date}}",
       "neverUsed": "Never used",
       "revoke": "Revoke",
-      "revokeConfirm": "Revoke this token? Apps using it will stop working."
+      "revokeConfirm": "Revoke this token? Apps using it will stop working.",
+      "nameAria": "Token name",
+      "revokeConfirmShort": "Revoke?",
+      "confirmYes": "Yes",
+      "confirmNo": "No",
+      "revokeAria": "Revoke token {{name}}",
+      "defaultName": "API token"
     },
     "settings": {
       "title": "Settings",
       "tabs": {
         "apiKeys": "API keys",
-        "agents": "Use in Agents/LLMs"
-      }
+        "agents": "Use in Agents/LLMs",
+        "general": "General"
+      },
+      "close": "Close",
+      "language": "Language",
+      "languageHelper": "Choose the language for the Kindraw interface."
     },
     "agents": {
       "intro": "Connect Kindraw to Claude, Cursor or any MCP-compatible agent, or drive it from your terminal with the CLI. Generate a key below to prefill the snippets.",
-      "generateKey": "Generate key for this integration",
-      "keyHint": "Generate a key to fill in the snippets below, or paste your own.",
+      "generateKey": "Generate key",
+      "generateAnother": "Generate another",
+      "generating": "Generating…",
+      "keybarTitle": "Start by generating a key",
+      "keybarIssuedTitle": "Done — key generated",
+      "keyHint": "It authenticates the agent on your account. It fills in the examples automatically.",
+      "keybarIssuedHint": "We filled in the examples below. Copy the key now — it won't be shown again.",
       "copy": "Copy",
       "copied": "Copied!",
       "mcpTitle": "MCP setup (Claude / Cursor)",
@@ -938,6 +996,322 @@
       "empty": "This scene does not map cleanly to a Mermaid flowchart yet.",
       "hint": "Works best with labeled shapes connected by bound arrows.",
       "size": "{{size}} bytes of Mermaid output ready."
+    },
+    "kind": {
+      "hybrid": "Hybrid",
+      "drawing": "Drawing",
+      "doc": "Doc"
+    },
+    "card": {
+      "emptyThumb": "Empty",
+      "deselectAria": "Deselect {{title}}",
+      "selectAria": "Select {{title}}",
+      "openAria": "Open {{title}}",
+      "readOnlyTitle": "Read only",
+      "readOnlyLabel": "read only",
+      "publicLabel": "public",
+      "actionsAria": "Actions for {{title}}"
+    },
+    "breadcrumb": {
+      "shared": "Shared"
+    },
+    "workspace": {
+      "currentFolderActionsAria": "Current folder actions",
+      "sharedFrom": "from @{{login}}",
+      "breadcrumbAria": "Path",
+      "cancelSelection": "Cancel selection",
+      "select": "Select",
+      "folderActionsAria": "Actions for folder {{name}}",
+      "emptySearch": "No items match your search.",
+      "emptyPublicLinks": "No items with a public link yet.",
+      "emptyLive": "No active live sessions.",
+      "emptySharedWithMe": "No folders have been shared with you yet.",
+      "emptyFolder": "No drawings, docs, or hybrids in this folder.",
+      "bulkActionsAria": "Bulk actions",
+      "clearSelection": "Clear selection",
+      "selectAll": "Select all",
+      "moveToFolder": "Move to folder",
+      "searchFolderAria": "Search folder",
+      "searchFolderPlaceholder": "Search folder…",
+      "moveToRoot": "Root (no folder)",
+      "noFolders": "No folders.",
+      "newFolderNameAria": "New folder name",
+      "folderNamePlaceholder": "Folder name",
+      "newFolderEllipsis": "New folder…",
+      "folderCountOne": "{{count}} folder",
+      "folderCountOther": "{{count}} folders",
+      "itemCountOne": "{{count}} item",
+      "itemCountOther": "{{count}} items",
+      "selectedCountOne": "{{count}} selected",
+      "selectedCountOther": "{{count}} selected"
+    },
+    "roles": {
+      "viewer": "Viewer",
+      "editor": "Editor"
+    },
+    "dialog": {
+      "newFolderTitle": "New folder",
+      "createFolder": "Create folder",
+      "newDrawingTitle": "New drawing",
+      "newDocTitle": "New doc",
+      "newDrawingDefault": "New drawing",
+      "newDocDefault": "New markdown note",
+      "itemTitlePlaceholder": "Item title",
+      "newHybridTitle": "New hybrid",
+      "newHybridDefault": "New visual note",
+      "hybridTitlePlaceholder": "Hybrid title",
+      "deleteFolderMessage": "Delete the folder \"{{name}}\"?",
+      "renameItemTitle": "Rename item",
+      "deleteItemTitle": "Delete item",
+      "deleteItemMessage": "Delete \"{{title}}\"?",
+      "convertToHybridMessage": "Turn \"{{title}}\" into a hybrid document? The canvas is kept and a text document is created alongside it.",
+      "renameHybridTitle": "Rename hybrid",
+      "unlinkHybridTitle": "Unlink hybrid",
+      "unlinkHybridMessage": "Unlink \"{{title}}\"? The doc and the canvas remain as separate items.",
+      "deleteItemsTitle": "Delete items",
+      "bulkDeleteMessageOne": "Delete {{count}} item?",
+      "bulkDeleteMessageOther": "Delete {{count}} items?",
+      "bulkDeleteWithHybridMessageOne": "Delete {{count}} item? Hybrids will be unlinked.",
+      "bulkDeleteWithHybridMessageOther": "Delete {{count}} items? Hybrids will be unlinked."
+    },
+    "login": {
+      "eyebrow": "Kindraw",
+      "title": "Draw. Document. Share.",
+      "subtitle": "Your workspace for drawings, docs, and hybrids — with folders, autosave, and public links.",
+      "google": "Google",
+      "exploreWithoutAccount": "Explore without an account",
+      "privacyNote": "We use your GitHub or Google only for sign-in and presence in live sessions."
+    },
+    "topbar": {
+      "searchPlaceholder": "Search drawings, docs, and hybrids…",
+      "openGlobalSearchAria": "Open global search (⌘K)"
+    },
+    "hybrid": {
+      "viewDocument": "Document",
+      "viewBoth": "Both",
+      "statusLoading": "Loading hybrid…",
+      "statusSynced": "Hybrid synced.",
+      "statusLoadFailed": "Failed to load the hybrid.",
+      "statusDocumentSaved": "Document saved.",
+      "statusDocumentSaveFailed": "Failed to save the document.",
+      "statusCanvasSaved": "Canvas saved.",
+      "statusCanvasSaveFailed": "Failed to save the canvas.",
+      "statusTitleUpdated": "Title updated.",
+      "statusTitleUpdateFailed": "Failed to update the title.",
+      "statusLiveEditLinkCreated": "Live editing link created.",
+      "statusPublicLinkCreateFailed": "Failed to create the public link.",
+      "youLabel": "You",
+      "statusPublicLinkRevokeFailed": "Failed to revoke the public link.",
+      "statusUnlinkFailed": "Failed to unlink the hybrid.",
+      "statusCanvasNotReady": "The canvas is not ready yet.",
+      "statusSelectAtLeastOne": "Select at least one element on the canvas.",
+      "statusSelectionLinked": "Selection linked to the section.",
+      "statusSelectToLink": "Select elements on the canvas to link.",
+      "newSectionTitle": "New section",
+      "statusSectionCreated": "New section created.",
+      "sectionFallback": "section",
+      "statusSelectionLinkedTo": "Selection linked to {{section}}.",
+      "unavailableTitle": "Hybrid unavailable",
+      "linkbarInstruction": "Select elements on the canvas to link to {{title}}",
+      "cancel": "Cancel",
+      "insertIconsTemplates": "Insert icons and templates",
+      "backToFolder": "Back to folder",
+      "titleInputAria": "Hybrid title",
+      "share": "Share",
+      "moreActions": "More hybrid actions",
+      "unlink": "Unlink",
+      "resizeSplitAria": "Resize document and canvas",
+      "unlinkModalTitle": "Unlink hybrid",
+      "unlinkModalDescription": "Unlink the document and canvas from this hybrid? Both items keep existing separately.",
+      "collabYou": "You",
+      "liveEditorPlaceholder": "Write together…",
+      "goToDrawingTitle": "Go to this section's drawing",
+      "introEyebrow": "Intro",
+      "sectionLabel": "Section {{number}}",
+      "goToDrawingChip": "go to drawing",
+      "editAction": "Edit",
+      "waitingSelection": "Waiting for selection…",
+      "linkAction": "Link",
+      "sectionLinkCopied": "Section link copied to the clipboard.",
+      "sectionLinkCopyFailed": "Failed to copy the section link.",
+      "copyLinkAction": "Copy link",
+      "deleteSectionAria": "Delete section",
+      "deleteAction": "Delete",
+      "sectionEditorPlaceholder": "Write the section content…",
+      "cancelAction": "Cancel",
+      "saveSectionAction": "Save section",
+      "sectionUpdated": "Section updated.",
+      "doubleClickToEdit": "Double-click to edit",
+      "addSection": "New section",
+      "deleteSectionTitle": "Delete section",
+      "deleteSectionConfirm": "Delete this section from the document? Its content will be removed. This action cannot be undone.",
+      "sectionDeleted": "Section deleted.",
+      "roleViewer": "Viewer",
+      "roleEditor": "Editor",
+      "loadAccessFailed": "Failed to load access.",
+      "inviteFailed": "Could not send the invite.",
+      "cancelInviteFailed": "Failed to cancel the invite.",
+      "changeRoleFailed": "Failed to change the role.",
+      "removeAccessFailed": "Failed to remove access.",
+      "title": "Share “{{title}}”",
+      "close": "Close",
+      "hint": "Editors can edit the document and the canvas in real time with you. Viewers can only read.",
+      "linkAccessLabel": "Link access",
+      "inviteInputAria": "Invite by name, username, or email",
+      "invitePlaceholder": "name, @username, or email",
+      "inviteRoleAria": "Guest role",
+      "inviting": "Generating…",
+      "invite": "Invite",
+      "inviteHelp": "Generates an invite link for you to copy and send. Anyone who opens it and joins gets access (even without an account yet).",
+      "searching": "Searching…",
+      "alreadyHasAccess": "already has access",
+      "peopleLabel": "People with access",
+      "loading": "Loading…",
+      "noPeople": "Nobody has access yet besides you.",
+      "roleForUser": "Role for @{{handle}}",
+      "removeUser": "Remove @{{handle}}",
+      "invalidLink": "This link does not point to an editable hybrid document.",
+      "liveEditEyebrow": "Live editing",
+      "namePrompt": "How do you want to appear to others in this session?",
+      "nameInputAria": "Your name in this session",
+      "nameInputPlaceholder": "Your name",
+      "enterSession": "Join session",
+      "docPlaceholder": "Write together…",
+      "connecting": "Connecting to the session…",
+      "guestFallbackName": "Guest",
+      "editorPlaceholder": "Write here…",
+      "format": {
+        "bold": "Bold",
+        "italic": "Italic",
+        "underline": "Underline",
+        "strikethrough": "Strikethrough",
+        "highlight": "Highlight",
+        "code": "Code",
+        "link": "Link"
+      },
+      "linkPrompt": "Link URL",
+      "introLabel": "Intro"
+    },
+    "slashCommand": {
+      "heading1": {
+        "title": "Heading 1",
+        "description": "Big section heading"
+      },
+      "heading2": {
+        "title": "Heading 2",
+        "description": "Medium section heading"
+      },
+      "heading3": {
+        "title": "Heading 3",
+        "description": "Small section heading"
+      },
+      "bulletList": {
+        "title": "Bulleted list",
+        "description": "List with bullet markers"
+      },
+      "orderedList": {
+        "title": "Numbered list",
+        "description": "List ordered by numbers"
+      },
+      "taskList": {
+        "title": "To-do list",
+        "description": "Checklist with checkboxes"
+      },
+      "blockquote": {
+        "title": "Quote",
+        "description": "Highlight a quoted passage"
+      },
+      "codeBlock": {
+        "title": "Code block",
+        "description": "Formatted code snippet"
+      },
+      "horizontalRule": {
+        "title": "Divider",
+        "description": "Horizontal separator line"
+      },
+      "empty": "No commands"
+    },
+    "invite": {
+      "role": {
+        "viewer": "viewer",
+        "editor": "editor"
+      },
+      "resource": {
+        "folder": "the folder",
+        "hybrid": "the document"
+      },
+      "invalidOrExpired": "This invite is not valid or has expired.",
+      "acceptFailed": "Could not accept the invite.",
+      "loading": "Loading invite…",
+      "brandEyebrow": "Kindraw",
+      "unavailableTitle": "Invite unavailable",
+      "goToKindraw": "Go to Kindraw",
+      "alreadyUsedTitle": "Invite already used",
+      "alreadyUsedBody": "This invite to {{resource}} {{name}} has already been accepted. Ask whoever invited you for a new link.",
+      "opening": "Access granted! Opening {{resource}}…",
+      "eyebrow": "Kindraw invite",
+      "title": "{{name}} invited you to collaborate",
+      "validBody": "You've been invited to {{resource}} {{name}} as {{role}}.",
+      "accepting": "Accepting…",
+      "accept": "Accept invite",
+      "acceptingAs": "Accepting as {{name}}.",
+      "signInToAccept": "Sign in to accept the invite.",
+      "providerGoogle": "Google",
+      "returnAfterLogin": "We'll bring you back to this page after sign-in so you can finish accepting."
+    },
+    "shareFolder": {
+      "roleViewer": "Viewer",
+      "roleEditor": "Editor",
+      "title": "Share \"{{name}}\"",
+      "closeAria": "Close",
+      "inviteInputAria": "Invite by name, username, or email",
+      "invitePlaceholder": "name, @username, or email",
+      "inviteRoleAria": "Invitee role",
+      "inviting": "Generating…",
+      "invite": "Invite",
+      "inviteHelp": "Generates an invite link for you to copy and send. Anyone who opens it and joins gets access (even without an account yet).",
+      "searching": "Searching…",
+      "alreadyHasAccess": "already has access",
+      "peopleLabel": "People with access",
+      "empty": "No one has access yet besides you.",
+      "personRoleAria": "Role for @{{handle}}",
+      "removePersonAria": "Remove @{{handle}}",
+      "loadSharesFailed": "Failed to load access list.",
+      "inviteFailed": "Could not send the invite.",
+      "revokeInviteFailed": "Failed to cancel the invite.",
+      "roleChangeFailed": "Failed to change the role.",
+      "revokeShareFailed": "Failed to remove access."
+    },
+    "publicShareSection": {
+      "title": "Public link",
+      "description": "Anyone with the link can view",
+      "accessLabel": "Link permission",
+      "accessReadOption": "View only",
+      "accessLiveEditOption": "Can edit live",
+      "copied": "Copied",
+      "liveNote": "Editing is collaborative in real time — everyone with edit access sees changes live."
+    },
+    "editor": {
+      "unavailableTitle": "Drawing unavailable",
+      "backToFolderAria": "Back to folder",
+      "titleInputAria": "Drawing title",
+      "openHybrid": "Open hybrid",
+      "endLiveSession": "End the live session",
+      "startLiveSession": "Start a live session",
+      "liveSession": "Live session"
+    },
+    "invites": {
+      "createdLabel": "Invite link created — send it to whoever you want to invite:",
+      "linkInviteFallback": "Link invite",
+      "pendingTag": "Pending",
+      "cancelInviteAria": "Cancel invite"
+    },
+    "docEditor": {
+      "unavailableTitle": "Document unavailable",
+      "backToFolderAria": "Back to folder",
+      "titleAria": "Document title",
+      "openHybrid": "Open hybrid",
+      "placeholder": "Write here…"
     }
   },
   "keys": {

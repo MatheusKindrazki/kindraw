@@ -15,6 +15,7 @@ import {
 } from "./api";
 import { KindrawIcon } from "./icons";
 import { RichTextEditor } from "./RichTextEditor";
+import { useKindrawI18n } from "./i18n";
 import { buildFolderPath, buildHybridPath, navigateKindraw } from "./router";
 import { ShareLinksPanel } from "./ShareLinksPanel";
 import { getKindrawDraft, setKindrawDraft } from "./storage";
@@ -33,12 +34,15 @@ export const DocEditorPage = ({
   onTreeRefresh,
   folders,
 }: DocEditorPageProps) => {
+  const { t } = useKindrawI18n();
   const [itemResponse, setItemResponse] = useState<KindrawItemResponse | null>(
     null,
   );
   const [title, setTitle] = useState("");
   const [markdown, setMarkdown] = useState("");
-  const [statusMessage, setStatusMessage] = useState("Carregando documento...");
+  const [statusMessage, setStatusMessage] = useState(() =>
+    t("kindraw.publicView.loadingDocument"),
+  );
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [saveState, setSaveState] = useState<"idle" | "saving" | "error">(
     "idle",
@@ -47,7 +51,7 @@ export const DocEditorPage = ({
 
   const loadItem = useCallback(async () => {
     setErrorMessage(null);
-    setStatusMessage("Carregando documento...");
+    setStatusMessage(t("kindraw.publicView.loadingDocument"));
 
     try {
       const response = await getItem(itemId);
@@ -68,14 +72,14 @@ export const DocEditorPage = ({
         setLastSavedContent(response.content);
         setStatusMessage(
           draft && isDraftNewer(draft.updatedAt, response.item.updatedAt)
-            ? "Rascunho local restaurado."
-            : "Documento sincronizado.",
+            ? t("kindraw.status.draftRestored")
+            : t("kindraw.status.docSynced"),
         );
       });
     } catch (error) {
       setErrorMessage(getErrorMessage(error));
     }
-  }, [itemId]);
+  }, [itemId, t]);
 
   useEffect(() => {
     void loadItem();
@@ -94,7 +98,7 @@ export const DocEditorPage = ({
         await updateItemContent(itemId, content);
         setLastSavedContent(content);
         setSaveState("idle");
-        setStatusMessage("Documento salvo.");
+        setStatusMessage(t("kindraw.status.docSaved"));
         setItemResponse((current) =>
           current
             ? {
@@ -111,11 +115,11 @@ export const DocEditorPage = ({
       } catch (error) {
         setSaveState("error");
         setStatusMessage(
-          getErrorMessage(error, "Falha ao salvar o documento."),
+          getErrorMessage(error, t("kindraw.status.docSaveFailed")),
         );
       }
     },
-    [itemId, onTreeRefresh],
+    [itemId, onTreeRefresh, t],
   );
 
   useEffect(() => {
@@ -184,13 +188,15 @@ export const DocEditorPage = ({
             }
           : current,
       );
-      setStatusMessage("Titulo atualizado.");
+      setStatusMessage(t("kindraw.status.titleUpdated"));
       await onTreeRefresh();
     } catch (error) {
-      setStatusMessage(getErrorMessage(error, "Falha ao atualizar o titulo."));
+      setStatusMessage(
+        getErrorMessage(error, t("kindraw.status.titleUpdateFailed")),
+      );
       setTitle(itemResponse.item.title);
     }
-  }, [itemId, itemResponse, onTreeRefresh, title]);
+  }, [itemId, itemResponse, onTreeRefresh, title, t]);
 
   const handleCreateShareLink = useCallback(async () => {
     try {
@@ -206,12 +212,14 @@ export const DocEditorPage = ({
             }
           : current,
       );
-      setStatusMessage("Link publico criado.");
+      setStatusMessage(t("kindraw.status.publicLinkCreated"));
       await onTreeRefresh();
     } catch (error) {
-      setStatusMessage(getErrorMessage(error, "Falha ao criar link publico."));
+      setStatusMessage(
+        getErrorMessage(error, t("kindraw.status.publicLinkCreateFailed")),
+      );
     }
-  }, [itemId, onTreeRefresh]);
+  }, [itemId, onTreeRefresh, t]);
 
   const handleRevokeShareLink = useCallback(
     async (shareLinkId: string) => {
@@ -231,17 +239,17 @@ export const DocEditorPage = ({
         await onTreeRefresh();
       } catch (error) {
         setStatusMessage(
-          getErrorMessage(error, "Falha ao revogar link publico."),
+          getErrorMessage(error, t("kindraw.status.publicLinkRevokeFailed")),
         );
       }
     },
-    [onTreeRefresh],
+    [onTreeRefresh, t],
   );
 
   if (errorMessage) {
     return (
       <div className="kindraw-empty-state">
-        <h2>Documento indisponivel</h2>
+        <h2>{t("kindraw.docEditor.unavailableTitle")}</h2>
         <p>{errorMessage}</p>
       </div>
     );
@@ -258,14 +266,14 @@ export const DocEditorPage = ({
   const hybridMeta = itemResponse.item.hybrid || null;
   const folderName =
     folders?.find((folder) => folder.id === itemResponse.item.folderId)?.name ||
-    "Biblioteca";
+    t("kindraw.sidebar.backToLibrary");
 
   return (
     <div className="kindraw-editor-shell">
       <header className="kindraw-editor-header">
         <div className="kindraw-editor-header__leading">
           <button
-            aria-label="Voltar para a pasta"
+            aria-label={t("kindraw.docEditor.backToFolderAria")}
             className="kindraw-iconbtn"
             onClick={() =>
               navigateKindraw(buildFolderPath(itemResponse.item.folderId))
@@ -277,7 +285,7 @@ export const DocEditorPage = ({
           <span className="kindraw-editor-crumb">{folderName} /</span>
           <div className="kindraw-editor-title">
             <input
-              aria-label="Titulo do documento"
+              aria-label={t("kindraw.docEditor.titleAria")}
               className="kindraw-editor-title__input"
               onBlur={() => void commitTitle()}
               onChange={(event) => setTitle(event.target.value)}
@@ -315,7 +323,8 @@ export const DocEditorPage = ({
               }
               type="button"
             >
-              <KindrawIcon name="hybrid" size={15} /> Abrir híbrido
+              <KindrawIcon name="hybrid" size={15} />{" "}
+              {t("kindraw.docEditor.openHybrid")}
             </button>
           ) : null}
           <ShareLinksPanel
@@ -331,7 +340,7 @@ export const DocEditorPage = ({
         <div className="kindraw-doc-layout kindraw-doc-layout--rte">
           <RichTextEditor
             onChange={setMarkdown}
-            placeholder="Escreva aqui…"
+            placeholder={t("kindraw.docEditor.placeholder")}
             value={markdown}
           />
         </div>

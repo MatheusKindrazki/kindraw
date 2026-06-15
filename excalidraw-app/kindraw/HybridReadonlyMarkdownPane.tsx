@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef } from "react";
 
 import { MarkdownPreview } from "./MarkdownPreview";
 import { parseHybridMarkdownSections } from "./hybridSections";
+import { useKindrawI18n } from "./i18n";
 
 type HybridReadonlyMarkdownPaneProps = {
   markdown: string;
@@ -19,6 +20,7 @@ export const HybridReadonlyMarkdownPane = ({
   onNavigate,
   resolveInternalHref,
 }: HybridReadonlyMarkdownPaneProps) => {
+  const { t } = useKindrawI18n();
   const sections = useMemo(
     () => parseHybridMarkdownSections(markdown),
     [markdown],
@@ -61,8 +63,10 @@ export const HybridReadonlyMarkdownPane = ({
               <div className="kindraw-hybrid-doc__section-heading">
                 <span className="kindraw-hybrid-doc__eyebrow">
                   {section.isIntro
-                    ? "Intro"
-                    : `Seção ${String(sectionNumber).padStart(2, "0")}`}
+                    ? t("kindraw.hybrid.introLabel")
+                    : t("kindraw.hybrid.sectionLabel", {
+                        number: String(sectionNumber).padStart(2, "0"),
+                      })}
                 </span>
                 <h3>{section.title}</h3>
               </div>

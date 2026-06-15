@@ -1,5 +1,7 @@
 import { forwardRef, useEffect, useImperativeHandle, useState } from "react";
 
+import { useKindrawI18n } from "./i18n";
+
 import type { SlashCommandItem } from "./SlashCommand";
 
 // Popup do slash "/" command (estilo Notion/Outline). Lista vertical de
@@ -21,6 +23,7 @@ export const SlashCommandMenu = forwardRef<
   SlashCommandMenuRef,
   SlashCommandMenuProps
 >(({ items, command }, ref) => {
+  const { t } = useKindrawI18n();
   const [selectedIndex, setSelectedIndex] = useState(0);
 
   // Sempre que a lista filtrada muda, volta a seleção pro topo.
@@ -59,7 +62,9 @@ export const SlashCommandMenu = forwardRef<
   if (items.length === 0) {
     return (
       <div className="kindraw-rte__slash">
-        <div className="kindraw-rte__slash-empty">Nenhum comando</div>
+        <div className="kindraw-rte__slash-empty">
+          {t("kindraw.slashCommand.empty")}
+        </div>
       </div>
     );
   }

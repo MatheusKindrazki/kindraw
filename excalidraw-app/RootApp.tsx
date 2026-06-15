@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from "react";
 
 import ExcalidrawApp from "./App";
+import { useKindrawLangBootstrap } from "./kindraw/i18n";
 import { InvitePage } from "./kindraw/InvitePage";
 import { KindrawApp } from "./kindraw/KindrawApp";
 import {
@@ -21,6 +22,12 @@ const RootApp = () => {
     getLocationPathname,
   );
   const route = matchKindrawRoute(pathname);
+
+  // Carrega os dados de tradução do idioma preferido (detectado do navegador
+  // ou escolhido pelo usuário) para todas as telas do shell Kindraw, que
+  // renderizam fora do `<Excalidraw>` e não passam pelo `<InitializeApp>`.
+  // O `<ExcalidrawApp>` (rota default) faz isso por conta própria.
+  useKindrawLangBootstrap();
 
   if (route.kind === "workspace") {
     return <KindrawApp />;

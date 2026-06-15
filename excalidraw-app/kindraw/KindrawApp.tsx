@@ -25,11 +25,15 @@ import {
   updateHybridItemMeta,
   updateItemMeta,
 } from "./api";
+import { getLanguage, t } from "@excalidraw/excalidraw/i18n";
+
 import { useSetAtom } from "../app-jotai";
 import {
   SettingsDialog,
   settingsDialogStateAtom,
 } from "../components/SettingsDialog";
+
+import { tCount, useKindrawI18n } from "./i18n";
 
 import { DocEditorPage } from "./DocEditorPage";
 import { DrawingEditorPage } from "./DrawingEditorPage";
@@ -77,7 +81,7 @@ import type {
    ──────────────────────────────────────────────────────── */
 
 const formatUpdatedAt = (updatedAt: string) =>
-  new Date(updatedAt).toLocaleString("pt-BR", {
+  new Date(updatedAt).toLocaleString(getLanguage().code, {
     dateStyle: "short",
     timeStyle: "short",
   });
@@ -95,11 +99,10 @@ const RELATIVE_TIME_DIVISIONS: {
   { amount: Number.POSITIVE_INFINITY, unit: "year" },
 ];
 
-const relativeTimeFormatter = new Intl.RelativeTimeFormat("pt-BR", {
-  numeric: "auto",
-});
-
 const formatRelativeTime = (updatedAt: string) => {
+  const relativeTimeFormatter = new Intl.RelativeTimeFormat(getLanguage().code, {
+    numeric: "auto",
+  });
   let duration = (new Date(updatedAt).getTime() - Date.now()) / 1000;
   if (Number.isNaN(duration)) {
     return formatUpdatedAt(updatedAt);
@@ -114,9 +117,6 @@ const formatRelativeTime = (updatedAt: string) => {
 
   return formatUpdatedAt(updatedAt);
 };
-
-const pluralize = (count: number, singular: string, plural: string) =>
-  `${count} ${count === 1 ? singular : plural}`;
 
 const getFolderChildren = (folders: KindrawFolder[], parentId: string | null) =>
   folders.filter((folder) => folder.parentId === parentId);
@@ -152,10 +152,17 @@ const countItemsByFolder = (items: KindrawTreeItem[]) => {
 const getItemKindKey = (item: KindrawTreeItem) =>
   isKindrawHybridItem(item) ? "hybrid" : item.kind;
 
-const KIND_LABEL: Record<string, string> = {
-  drawing: "Drawing",
-  doc: "Doc",
-  hybrid: "Híbrido",
+const getKindLabel = (kindKey: string, translate: typeof t): string => {
+  switch (kindKey) {
+    case "drawing":
+      return translate("kindraw.kind.drawing");
+    case "doc":
+      return translate("kindraw.kind.doc");
+    case "hybrid":
+      return translate("kindraw.kind.hybrid");
+    default:
+      return kindKey;
+  }
 };
 
 const KIND_ICON: Record<string, KindrawIconName> = {
@@ -265,6 +272,7 @@ const KindrawDialogModal = ({
   dialog: KindrawDialog;
   onClose: () => void;
 }) => {
+  const { t } = useKindrawI18n();
   const [value, setValue] = useState(
     dialog.type === "prompt" ? dialog.initialValue : "",
   );
@@ -334,7 +342,7 @@ const KindrawDialogModal = ({
             onClick={onClose}
             type="button"
           >
-            Cancelar
+            {t("kindraw.actions.cancel")}
           </button>
           <button
             className={`kindraw-btn ${
@@ -372,6 +380,7 @@ const KindrawCommandPalette = ({
   items: KindrawTreeItem[];
   folders: KindrawFolder[];
 }) => {
+  const { t } = useKindrawI18n();
   const [query, setQuery] = useState("");
   const [activeIndex, setActiveIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -428,10 +437,12 @@ const KindrawCommandPalette = ({
 
   const folderNameForItem = (folderId: string | null) => {
     if (!folderId) {
-      return "Raiz";
+      return t("kindraw.sidebar.root");
     }
     const trail = getFolderTrail(folders, folderId);
-    return trail.length ? trail[trail.length - 1].name : "Raiz";
+    return trail.length
+      ? trail[trail.length - 1].name
+      : t("kindraw.sidebar.root");
   };
 
   const openResult = (item: KindrawTreeItem) => {
@@ -483,12 +494,12 @@ const KindrawCommandPalette = ({
                 ? `kindraw-cmdk-option-${results[activeIndex].id}`
                 : undefined
             }
-            aria-label="Buscar em todo o workspace"
+            aria-label={t("kindraw.commandPalette.searchAria")}
             aria-controls="kindraw-cmdk-list"
             autoComplete="off"
             className="kindraw-cmdk__input"
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="Buscar em todo o workspace…"
+            placeholder={t("kindraw.commandPalette.searchPlaceholder")}
             ref={inputRef}
             role="combobox"
             aria-expanded={results.length > 0}
@@ -524,7 +535,7 @@ const KindrawCommandPalette = ({
                   </span>
                   <span className="kindraw-cmdk__item-title">{item.title}</span>
                   <span className={`kindraw-kind kindraw-kind--${kindKey}`}>
-                    {KIND_LABEL[kindKey]}
+                    {getKindLabel(kindKey, t)}
                   </span>
                   <span className="kindraw-cmdk__item-folder">
                     {folderNameForItem(item.folderId)}
@@ -536,13 +547,13 @@ const KindrawCommandPalette = ({
         ) : (
           <div className="kindraw-cmdk__empty">
             {normalizedQuery
-              ? "Nenhum item encontrado."
-              : "Nenhum item no workspace ainda."}
+              ? t("kindraw.commandPalette.noResults")
+              : t("kindraw.commandPalette.emptyWorkspace")}
           </div>
         )}
 
         <div className="kindraw-cmdk__foot">
-          ↑↓ navegar · ↵ abrir · esc fechar
+          {t("kindraw.commandPalette.keyboardHint")}
         </div>
       </div>
     </div>
@@ -617,6 +628,7 @@ const CardThumb = ({
   item: KindrawTreeItem;
   kindKey: KindrawIconName;
 }) => {
+  const { t } = useKindrawI18n();
   const ref = useRef<HTMLSpanElement>(null);
   const [thumb, setThumb] = useState<KindrawThumbnail | null | "loading">(null);
 
@@ -704,7 +716,9 @@ const CardThumb = ({
       <span className="kindraw-card__thumb-fallback">
         <KindrawIcon name={kindKey} size={34} />
         {isEmpty ? (
-          <span className="kindraw-card__thumb-empty">Vazio</span>
+          <span className="kindraw-card__thumb-empty">
+            {t("kindraw.card.emptyThumb")}
+          </span>
         ) : null}
       </span>
     </span>
@@ -736,6 +750,7 @@ const WorkspaceItemCard = ({
   onToggleSelect: () => void;
   readOnly?: boolean;
 }) => {
+  const { t } = useKindrawI18n();
   const kindKey = getItemKindKey(item);
 
   return (
@@ -747,8 +762,10 @@ const WorkspaceItemCard = ({
       <button
         aria-label={
           selectionMode
-            ? `${selected ? "Desmarcar" : "Selecionar"} ${item.title}`
-            : `Abrir ${item.title}`
+            ? selected
+              ? t("kindraw.card.deselectAria", { title: item.title })
+              : t("kindraw.card.selectAria", { title: item.title })
+            : t("kindraw.card.openAria", { title: item.title })
         }
         aria-pressed={selectionMode ? selected : undefined}
         className="kindraw-card__thumb"
@@ -770,17 +787,22 @@ const WorkspaceItemCard = ({
       <div className="kindraw-card__body">
         <div className="kindraw-card__top">
           <span className={`kindraw-kind kindraw-kind--${kindKey}`}>
-            {KIND_LABEL[kindKey]}
+            {getKindLabel(kindKey, t)}
           </span>
           <span className="kindraw-card__topright">
             {readOnly ? (
-              <span className="kindraw-card__readonly" title="Somente leitura">
-                <KindrawIcon name="users" size={13} /> leitura
+              <span
+                className="kindraw-card__readonly"
+                title={t("kindraw.card.readOnlyTitle")}
+              >
+                <KindrawIcon name="users" size={13} />{" "}
+                {t("kindraw.card.readOnlyLabel")}
               </span>
             ) : null}
             {item.shareLinks.length ? (
               <span className="kindraw-card__shared">
-                <KindrawIcon name="link" size={13} /> público
+                <KindrawIcon name="link" size={13} />{" "}
+                {t("kindraw.card.publicLabel")}
               </span>
             ) : null}
             {selectionMode || readOnly ? null : (
@@ -788,7 +810,9 @@ const WorkspaceItemCard = ({
                 button={
                   <button
                     aria-expanded={menuOpen}
-                    aria-label={`Ações de ${item.title}`}
+                    aria-label={t("kindraw.card.actionsAria", {
+                      title: item.title,
+                    })}
                     className="kindraw-dots"
                     onClick={onToggleMenu}
                     type="button"
@@ -808,7 +832,7 @@ const WorkspaceItemCard = ({
                   role="menuitem"
                   type="button"
                 >
-                  Renomear
+                  {t("kindraw.actions.rename")}
                 </button>
                 {!isKindrawHybridItem(item) && item.kind === "drawing" ? (
                   <button
@@ -820,7 +844,7 @@ const WorkspaceItemCard = ({
                     role="menuitem"
                     type="button"
                   >
-                    Converter em documento híbrido
+                    {t("kindraw.actions.convertToHybrid")}
                   </button>
                 ) : null}
                 <button
@@ -832,7 +856,9 @@ const WorkspaceItemCard = ({
                   role="menuitem"
                   type="button"
                 >
-                  {isKindrawHybridItem(item) ? "Desvincular" : "Excluir"}
+                  {isKindrawHybridItem(item)
+                    ? t("kindraw.actions.unlink")
+                    : t("kindraw.actions.delete")}
                 </button>
               </KindrawMenuWrap>
             )}
@@ -913,6 +939,7 @@ const WorkspacePage = ({
     parentId: string | null,
   ) => Promise<void>;
 }) => {
+  const { t } = useKindrawI18n();
   const [newMenuOpen, setNewMenuOpen] = useState(false);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [selectionMode, setSelectionMode] = useState(false);
@@ -1005,11 +1032,11 @@ const WorkspacePage = ({
 
   const heading = sharedView
     ? sharedView === "links"
-      ? "Links públicos"
+      ? t("kindraw.sidebar.publicLinks")
       : sharedView === "live"
-      ? "Sessões ao vivo"
-      : "Compartilhados comigo"
-    : currentFolder?.name || "Biblioteca";
+      ? t("kindraw.sidebar.liveSessions")
+      : t("kindraw.sidebar.sharedWithMe")
+    : currentFolder?.name || t("kindraw.sidebar.library");
 
   // Seleção só existe no workspace autenticado, fora de visões compartilhadas
   // e fora de pastas compartilhadas comigo (não posso renomear/mover itens
@@ -1046,7 +1073,9 @@ const WorkspacePage = ({
       ? tree.folders.filter((folder) => folder.name.toLowerCase().includes(q))
       : tree.folders;
     return [...list].sort((a, b) =>
-      a.name.localeCompare(b.name, "pt-BR", { sensitivity: "base" }),
+      a.name.localeCompare(b.name, getLanguage().code, {
+        sensitivity: "base",
+      }),
     );
   })();
 
@@ -1092,20 +1121,23 @@ const WorkspacePage = ({
     <section className="kindraw-workspace">
       <div className="kindraw-main-head">
         <div>
-          <nav aria-label="Caminho" className="kindraw-crumb">
+          <nav
+            aria-label={t("kindraw.workspace.breadcrumbAria")}
+            className="kindraw-crumb"
+          >
             {sharedView ? (
-              <span>Compartilhados</span>
+              <span>{t("kindraw.breadcrumb.shared")}</span>
             ) : isSharedFolder ? (
               <>
                 <button onClick={() => onNavigateSharedWithMe()} type="button">
-                  Compartilhados comigo
+                  {t("kindraw.sidebar.sharedWithMe")}
                 </button>
                 {currentFolder ? <span>/ {currentFolder.name}</span> : null}
               </>
             ) : (
               <>
                 <button onClick={() => onNavigateFolder(null)} type="button">
-                  Raiz
+                  {t("kindraw.sidebar.root")}
                 </button>
                 {folderTrail.slice(0, -1).map((folder) => (
                   <span key={folder.id}>
@@ -1130,7 +1162,7 @@ const WorkspacePage = ({
                 button={
                   <button
                     aria-expanded={openMenuId === "current-folder"}
-                    aria-label="Ações da pasta atual"
+                    aria-label={t("kindraw.workspace.currentFolderActionsAria")}
                     className="kindraw-dots kindraw-dots--visible"
                     onClick={() =>
                       setOpenMenuId(
@@ -1156,7 +1188,7 @@ const WorkspacePage = ({
                   role="menuitem"
                   type="button"
                 >
-                  Compartilhar
+                  {t("kindraw.actions.share")}
                 </button>
                 <button
                   className="kindraw-menu__item"
@@ -1167,7 +1199,7 @@ const WorkspacePage = ({
                   role="menuitem"
                   type="button"
                 >
-                  Renomear pasta
+                  {t("kindraw.actions.renameFolder")}
                 </button>
                 <button
                   className="kindraw-menu__item kindraw-menu__item--danger"
@@ -1178,7 +1210,7 @@ const WorkspacePage = ({
                   role="menuitem"
                   type="button"
                 >
-                  Excluir pasta
+                  {t("kindraw.actions.deleteFolder")}
                 </button>
               </KindrawMenuWrap>
             ) : null}
@@ -1188,24 +1220,31 @@ const WorkspacePage = ({
                   isReadOnlyFolder ? " kindraw-sharebadge--viewer" : ""
                 }`}
               >
-                <KindrawIcon name="users" size={13} /> de @
-                {currentFolder.shared.ownerLogin} ·{" "}
-                {isReadOnlyFolder ? "Visualizador" : "Editor"}
+                <KindrawIcon name="users" size={13} />{" "}
+                {t("kindraw.workspace.sharedFrom", {
+                  login: currentFolder.shared.ownerLogin,
+                })}{" "}
+                ·{" "}
+                {isReadOnlyFolder
+                  ? t("kindraw.roles.viewer")
+                  : t("kindraw.roles.editor")}
               </span>
             ) : null}
           </div>
           <p className="kindraw-main-head__meta">
             {sharedView === "shared-with-me"
-              ? pluralize(visibleFolders.length, "pasta", "pastas")
+              ? tCount("kindraw.workspace.folderCount", visibleFolders.length)
               : sharedView
-              ? pluralize(visibleItems.length, "item", "itens")
+              ? tCount("kindraw.workspace.itemCount", visibleItems.length)
               : isSharedFolder
-              ? pluralize(visibleItems.length, "item", "itens")
-              : `${pluralize(
+              ? tCount("kindraw.workspace.itemCount", visibleItems.length)
+              : `${tCount(
+                  "kindraw.workspace.folderCount",
                   visibleFolders.length,
-                  "pasta",
-                  "pastas",
-                )} · ${pluralize(visibleItems.length, "item", "itens")}`}
+                )} · ${tCount(
+                  "kindraw.workspace.itemCount",
+                  visibleItems.length,
+                )}`}
           </p>
         </div>
         <div className="kindraw-main-head__actions">
@@ -1216,7 +1255,8 @@ const WorkspacePage = ({
               onClick={exitSelection}
               type="button"
             >
-              <KindrawIcon name="close" size={16} /> Cancelar seleção
+              <KindrawIcon name="close" size={16} />{" "}
+              {t("kindraw.workspace.cancelSelection")}
             </button>
           ) : (
             <>
@@ -1226,7 +1266,8 @@ const WorkspacePage = ({
                   onClick={() => setSelectionMode(true)}
                   type="button"
                 >
-                  <KindrawIcon name="check" size={16} /> Selecionar
+                  <KindrawIcon name="check" size={16} />{" "}
+                  {t("kindraw.workspace.select")}
                 </button>
               ) : null}
               <button
@@ -1234,7 +1275,8 @@ const WorkspacePage = ({
                 onClick={() => onCreateFolder(currentFolderId)}
                 type="button"
               >
-                <KindrawIcon name="folder" size={16} /> Nova pasta
+                <KindrawIcon name="folder" size={16} />{" "}
+                {t("kindraw.actions.newFolder")}
               </button>
               <KindrawMenuWrap
                 button={
@@ -1244,7 +1286,8 @@ const WorkspacePage = ({
                     onClick={() => setNewMenuOpen(!newMenuOpen)}
                     type="button"
                   >
-                    <KindrawIcon name="plus" size={16} /> Novo{" "}
+                    <KindrawIcon name="plus" size={16} />{" "}
+                    {t("kindraw.actions.new")}{" "}
                     <KindrawIcon name="chevD" size={14} />
                   </button>
                 }
@@ -1260,7 +1303,8 @@ const WorkspacePage = ({
                   role="menuitem"
                   type="button"
                 >
-                  <KindrawIcon name="pen" size={16} /> Drawing
+                  <KindrawIcon name="pen" size={16} />{" "}
+                  {t("kindraw.kind.drawing")}
                 </button>
                 <button
                   className="kindraw-menu__item"
@@ -1271,7 +1315,7 @@ const WorkspacePage = ({
                   role="menuitem"
                   type="button"
                 >
-                  <KindrawIcon name="doc" size={16} /> Doc
+                  <KindrawIcon name="doc" size={16} /> {t("kindraw.kind.doc")}
                 </button>
                 <button
                   className="kindraw-menu__item"
@@ -1282,7 +1326,8 @@ const WorkspacePage = ({
                   role="menuitem"
                   type="button"
                 >
-                  <KindrawIcon name="hybrid" size={16} /> Híbrido
+                  <KindrawIcon name="hybrid" size={16} />{" "}
+                  {t("kindraw.kind.hybrid")}
                 </button>
               </KindrawMenuWrap>
             </>
@@ -1309,10 +1354,13 @@ const WorkspacePage = ({
                   {folder.name}
                   {folder.shared ? (
                     <em className="kindraw-folderchip__from">
-                      de @{folder.shared.ownerLogin} ·{" "}
+                      {t("kindraw.workspace.sharedFrom", {
+                        login: folder.shared.ownerLogin,
+                      })}{" "}
+                      ·{" "}
                       {folder.shared.role === "viewer"
-                        ? "Visualizador"
-                        : "Editor"}
+                        ? t("kindraw.roles.viewer")
+                        : t("kindraw.roles.editor")}
                     </em>
                   ) : null}
                 </span>
@@ -1325,7 +1373,9 @@ const WorkspacePage = ({
                   button={
                     <button
                       aria-expanded={openMenuId === `folder:${folder.id}`}
-                      aria-label={`Ações da pasta ${folder.name}`}
+                      aria-label={t("kindraw.workspace.folderActionsAria", {
+                        name: folder.name,
+                      })}
                       className="kindraw-dots"
                       onClick={() =>
                         setOpenMenuId(
@@ -1351,7 +1401,7 @@ const WorkspacePage = ({
                     role="menuitem"
                     type="button"
                   >
-                    Compartilhar
+                    {t("kindraw.actions.share")}
                   </button>
                   <button
                     className="kindraw-menu__item"
@@ -1362,7 +1412,7 @@ const WorkspacePage = ({
                     role="menuitem"
                     type="button"
                   >
-                    Renomear
+                    {t("kindraw.actions.rename")}
                   </button>
                   <button
                     className="kindraw-menu__item kindraw-menu__item--danger"
@@ -1373,7 +1423,7 @@ const WorkspacePage = ({
                     role="menuitem"
                     type="button"
                   >
-                    Excluir
+                    {t("kindraw.actions.delete")}
                   </button>
                 </KindrawMenuWrap>
               )}
@@ -1420,14 +1470,14 @@ const WorkspacePage = ({
       ) : sharedView === "shared-with-me" && visibleFolders.length ? null : (
         <p className="kindraw-empty">
           {normalizedQuery
-            ? "Nenhum item corresponde à busca."
+            ? t("kindraw.workspace.emptySearch")
             : sharedView === "links"
-            ? "Nenhum item com link público ainda."
+            ? t("kindraw.workspace.emptyPublicLinks")
             : sharedView === "live"
-            ? "Nenhuma sessão ao vivo ativa."
+            ? t("kindraw.workspace.emptyLive")
             : sharedView === "shared-with-me"
-            ? "Nenhuma pasta foi compartilhada com você ainda."
-            : "Nenhum drawing, doc ou híbrido nesta pasta."}
+            ? t("kindraw.workspace.emptySharedWithMe")
+            : t("kindraw.workspace.emptyFolder")}
         </p>
       )}
 
@@ -1435,17 +1485,19 @@ const WorkspacePage = ({
         <div
           className="kindraw-bulkbar"
           role="toolbar"
-          aria-label="Ações em massa"
+          aria-label={t("kindraw.workspace.bulkActionsAria")}
         >
           <span className="kindraw-bulkbar__count">
-            {pluralize(selectedCount, "selecionado", "selecionados")}
+            {tCount("kindraw.workspace.selectedCount", selectedCount)}
           </span>
           <button
             className="kindraw-btn kindraw-btn--ghost kindraw-btn--sm"
             onClick={toggleSelectAll}
             type="button"
           >
-            {allSelected ? "Limpar seleção" : "Selecionar todos"}
+            {allSelected
+              ? t("kindraw.workspace.clearSelection")
+              : t("kindraw.workspace.selectAll")}
           </button>
           <span className="kindraw-bulkbar__sep" aria-hidden="true" />
           <KindrawMenuWrap
@@ -1458,7 +1510,8 @@ const WorkspacePage = ({
                 onClick={() => setMoveOpen((open) => !open)}
                 type="button"
               >
-                <KindrawIcon name="move" size={15} /> Mover para pasta
+                <KindrawIcon name="move" size={15} />{" "}
+                {t("kindraw.workspace.moveToFolder")}
               </button>
             }
             onClose={() => setMoveOpen(false)}
@@ -1466,10 +1519,10 @@ const WorkspacePage = ({
           >
             <div className="kindraw-movepop">
               <input
-                aria-label="Buscar pasta"
+                aria-label={t("kindraw.workspace.searchFolderAria")}
                 className="kindraw-movepop__search"
                 onChange={(event) => setFolderQuery(event.target.value)}
-                placeholder="Buscar pasta…"
+                placeholder={t("kindraw.workspace.searchFolderPlaceholder")}
                 type="search"
                 value={folderQuery}
               />
@@ -1480,7 +1533,8 @@ const WorkspacePage = ({
                   role="menuitem"
                   type="button"
                 >
-                  <KindrawIcon name="home" size={16} /> Raiz (sem pasta)
+                  <KindrawIcon name="home" size={16} />{" "}
+                  {t("kindraw.workspace.moveToRoot")}
                 </button>
                 {filteredFolders.map((folder) => (
                   <button
@@ -1494,7 +1548,9 @@ const WorkspacePage = ({
                   </button>
                 ))}
                 {filteredFolders.length === 0 ? (
-                  <p className="kindraw-movepop__empty">Nenhuma pasta.</p>
+                  <p className="kindraw-movepop__empty">
+                    {t("kindraw.workspace.noFolders")}
+                  </p>
                 ) : null}
               </div>
               <div className="kindraw-movepop__foot">
@@ -1507,11 +1563,11 @@ const WorkspacePage = ({
                     }}
                   >
                     <input
-                      aria-label="Nome da nova pasta"
+                      aria-label={t("kindraw.workspace.newFolderNameAria")}
                       autoFocus
                       className="kindraw-movepop__search"
                       onChange={(event) => setNewFolderName(event.target.value)}
-                      placeholder="Nome da pasta"
+                      placeholder={t("kindraw.workspace.folderNamePlaceholder")}
                       type="text"
                       value={newFolderName}
                     />
@@ -1520,7 +1576,7 @@ const WorkspacePage = ({
                       disabled={!newFolderName.trim()}
                       type="submit"
                     >
-                      Criar
+                      {t("kindraw.actions.create")}
                     </button>
                   </form>
                 ) : (
@@ -1530,7 +1586,8 @@ const WorkspacePage = ({
                     role="menuitem"
                     type="button"
                   >
-                    <KindrawIcon name="plus" size={16} /> Nova pasta…
+                    <KindrawIcon name="plus" size={16} />{" "}
+                    {t("kindraw.workspace.newFolderEllipsis")}
                   </button>
                 )}
               </div>
@@ -1542,14 +1599,14 @@ const WorkspacePage = ({
             onClick={() => void handleBulkDelete()}
             type="button"
           >
-            <KindrawIcon name="trash" size={15} /> Excluir
+            <KindrawIcon name="trash" size={15} /> {t("kindraw.actions.delete")}
           </button>
           <button
             className="kindraw-btn kindraw-btn--ghost kindraw-btn--sm"
             onClick={exitSelection}
             type="button"
           >
-            Cancelar
+            {t("kindraw.actions.cancel")}
           </button>
         </div>
       ) : null}
@@ -1562,6 +1619,7 @@ const WorkspacePage = ({
    ──────────────────────────────────────────────────────── */
 
 const PublicSharePage = ({ token }: { token: string }) => {
+  const { t } = useKindrawI18n();
   const [itemResponse, setItemResponse] =
     useState<KindrawPublicItemResponse | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -1591,7 +1649,7 @@ const PublicSharePage = ({ token }: { token: string }) => {
     return (
       <div className="kindraw-share-shell">
         <div className="kindraw-empty-state">
-          <h2>Link publico invalido</h2>
+          <h2>{t("kindraw.publicView.invalidTitle")}</h2>
           <p>{errorMessage}</p>
         </div>
       </div>
@@ -1601,7 +1659,9 @@ const PublicSharePage = ({ token }: { token: string }) => {
   if (!itemResponse) {
     return (
       <div className="kindraw-share-shell">
-        <p className="kindraw-loading-shell">Carregando link publico...</p>
+        <p className="kindraw-loading-shell">
+          {t("kindraw.publicView.loadingPublicView")}
+        </p>
       </div>
     );
   }
@@ -1624,6 +1684,7 @@ const isKindrawDocumentItem = (item: KindrawItem | KindrawHybridItem) =>
    ──────────────────────────────────────────────────────── */
 
 export const KindrawApp = () => {
+  const { t } = useKindrawI18n();
   const pathname = useSyncExternalStore(
     subscribeToLocation,
     getLocationPathname,
@@ -1664,9 +1725,11 @@ export const KindrawApp = () => {
         setTree(nextTree);
       });
     } catch (error) {
-      setErrorMessage(getErrorMessage(error, "Falha ao atualizar a arvore."));
+      setErrorMessage(
+        getErrorMessage(error, t("kindraw.status.workspaceRefreshFailed")),
+      );
     }
-  }, [session]);
+  }, [session, t]);
 
   const loadSession = useCallback(async () => {
     setErrorMessage(null);
@@ -1686,10 +1749,12 @@ export const KindrawApp = () => {
         });
       }
     } catch (error) {
-      setErrorMessage(getErrorMessage(error, "Falha ao carregar a sessao."));
+      setErrorMessage(
+        getErrorMessage(error, t("kindraw.status.workspaceLoadFailed")),
+      );
       setSession(null);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     if (route.kind !== "share" && typeof session === "undefined") {
@@ -1763,10 +1828,10 @@ export const KindrawApp = () => {
     (parentId: string | null) => {
       setDialog({
         type: "prompt",
-        title: "Nova pasta",
-        confirmLabel: "Criar pasta",
+        title: t("kindraw.dialog.newFolderTitle"),
+        confirmLabel: t("kindraw.dialog.createFolder"),
         initialValue: "",
-        placeholder: "Nome da pasta",
+        placeholder: t("kindraw.workspace.folderNamePlaceholder"),
         onSubmit: (name) => {
           void runMutation(async () => {
             await createFolder(name, parentId);
@@ -1775,18 +1840,23 @@ export const KindrawApp = () => {
         },
       });
     },
-    [refreshTree, runMutation],
+    [refreshTree, runMutation, t],
   );
 
   const handleCreateItem = useCallback(
     (kind: KindrawItemKind, folderId: string | null) => {
       setDialog({
         type: "prompt",
-        title: kind === "drawing" ? "Novo drawing" : "Novo doc",
-        confirmLabel: "Criar",
+        title:
+          kind === "drawing"
+            ? t("kindraw.dialog.newDrawingTitle")
+            : t("kindraw.dialog.newDocTitle"),
+        confirmLabel: t("kindraw.actions.create"),
         initialValue:
-          kind === "drawing" ? "Novo drawing" : "Nova nota markdown",
-        placeholder: "Título do item",
+          kind === "drawing"
+            ? t("kindraw.dialog.newDrawingDefault")
+            : t("kindraw.dialog.newDocDefault"),
+        placeholder: t("kindraw.dialog.itemTitlePlaceholder"),
         onSubmit: (title) => {
           void runMutation(async () => {
             const response = await createItem({
@@ -1809,17 +1879,17 @@ export const KindrawApp = () => {
         },
       });
     },
-    [refreshTree, runMutation],
+    [refreshTree, runMutation, t],
   );
 
   const handleCreateHybridItem = useCallback(
     (folderId: string | null) => {
       setDialog({
         type: "prompt",
-        title: "Novo híbrido",
-        confirmLabel: "Criar",
-        initialValue: "Nova nota visual",
-        placeholder: "Título do híbrido",
+        title: t("kindraw.dialog.newHybridTitle"),
+        confirmLabel: t("kindraw.actions.create"),
+        initialValue: t("kindraw.dialog.newHybridDefault"),
+        placeholder: t("kindraw.dialog.hybridTitlePlaceholder"),
         onSubmit: (title) => {
           void runMutation(async () => {
             const response = await createHybridItem({
@@ -1836,17 +1906,17 @@ export const KindrawApp = () => {
         },
       });
     },
-    [refreshTree, runMutation],
+    [refreshTree, runMutation, t],
   );
 
   const handleRenameFolder = useCallback(
     (folder: KindrawFolder) => {
       setDialog({
         type: "prompt",
-        title: "Renomear pasta",
-        confirmLabel: "Salvar",
+        title: t("kindraw.actions.renameFolder"),
+        confirmLabel: t("kindraw.actions.save"),
         initialValue: folder.name,
-        placeholder: "Nome da pasta",
+        placeholder: t("kindraw.workspace.folderNamePlaceholder"),
         onSubmit: (nextName) => {
           if (nextName === folder.name) {
             return;
@@ -1858,16 +1928,16 @@ export const KindrawApp = () => {
         },
       });
     },
-    [refreshTree, runMutation],
+    [refreshTree, runMutation, t],
   );
 
   const handleDeleteFolder = useCallback(
     (folder: KindrawFolder) => {
       setDialog({
         type: "confirm",
-        title: "Excluir pasta",
-        message: `Excluir a pasta "${folder.name}"?`,
-        confirmLabel: "Excluir",
+        title: t("kindraw.actions.deleteFolder"),
+        message: t("kindraw.dialog.deleteFolderMessage", { name: folder.name }),
+        confirmLabel: t("kindraw.actions.delete"),
         onConfirm: () => {
           void runMutation(async () => {
             await deleteFolder(folder.id);
@@ -1879,7 +1949,7 @@ export const KindrawApp = () => {
         },
       });
     },
-    [refreshTree, route, runMutation],
+    [refreshTree, route, runMutation, t],
   );
 
   const handleShareFolder = useCallback((folder: KindrawFolder) => {
@@ -1894,10 +1964,10 @@ export const KindrawApp = () => {
     (item: KindrawItem) => {
       setDialog({
         type: "prompt",
-        title: "Renomear item",
-        confirmLabel: "Salvar",
+        title: t("kindraw.dialog.renameItemTitle"),
+        confirmLabel: t("kindraw.actions.save"),
         initialValue: item.title,
-        placeholder: "Título do item",
+        placeholder: t("kindraw.dialog.itemTitlePlaceholder"),
         onSubmit: (nextTitle) => {
           if (nextTitle === item.title) {
             return;
@@ -1909,16 +1979,16 @@ export const KindrawApp = () => {
         },
       });
     },
-    [refreshTree, runMutation],
+    [refreshTree, runMutation, t],
   );
 
   const handleDeleteItem = useCallback(
     (item: KindrawItem) => {
       setDialog({
         type: "confirm",
-        title: "Excluir item",
-        message: `Excluir "${item.title}"?`,
-        confirmLabel: "Excluir",
+        title: t("kindraw.dialog.deleteItemTitle"),
+        message: t("kindraw.dialog.deleteItemMessage", { title: item.title }),
+        confirmLabel: t("kindraw.actions.delete"),
         onConfirm: () => {
           void runMutation(async () => {
             await deleteItem(item.id);
@@ -1935,7 +2005,7 @@ export const KindrawApp = () => {
         },
       });
     },
-    [refreshTree, route, runMutation],
+    [refreshTree, route, runMutation, t],
   );
 
   const handleConvertItemToHybrid = useCallback(
@@ -1945,9 +2015,11 @@ export const KindrawApp = () => {
       }
       setDialog({
         type: "confirm",
-        title: "Converter em documento híbrido",
-        message: `Transformar "${item.title}" em um documento híbrido? O canvas é mantido e um documento de texto é criado ao lado dele.`,
-        confirmLabel: "Converter",
+        title: t("kindraw.actions.convertToHybrid"),
+        message: t("kindraw.dialog.convertToHybridMessage", {
+          title: item.title,
+        }),
+        confirmLabel: t("kindraw.actions.convert"),
         onConfirm: () => {
           void runMutation(async () => {
             const response = await convertDrawingToHybrid(item.id);
@@ -1961,17 +2033,17 @@ export const KindrawApp = () => {
         },
       });
     },
-    [refreshTree, runMutation],
+    [refreshTree, runMutation, t],
   );
 
   const handleRenameHybridItem = useCallback(
     (item: KindrawHybridItem) => {
       setDialog({
         type: "prompt",
-        title: "Renomear híbrido",
-        confirmLabel: "Salvar",
+        title: t("kindraw.dialog.renameHybridTitle"),
+        confirmLabel: t("kindraw.actions.save"),
         initialValue: item.title,
-        placeholder: "Título do híbrido",
+        placeholder: t("kindraw.dialog.hybridTitlePlaceholder"),
         onSubmit: (nextTitle) => {
           if (nextTitle === item.title) {
             return;
@@ -1983,16 +2055,16 @@ export const KindrawApp = () => {
         },
       });
     },
-    [refreshTree, runMutation],
+    [refreshTree, runMutation, t],
   );
 
   const handleDeleteHybridItem = useCallback(
     (item: KindrawHybridItem) => {
       setDialog({
         type: "confirm",
-        title: "Desvincular híbrido",
-        message: `Desvincular "${item.title}"? O doc e o canvas continuam como itens separados.`,
-        confirmLabel: "Desvincular",
+        title: t("kindraw.dialog.unlinkHybridTitle"),
+        message: t("kindraw.dialog.unlinkHybridMessage", { title: item.title }),
+        confirmLabel: t("kindraw.actions.unlink"),
         onConfirm: () => {
           void runMutation(async () => {
             await deleteHybridItem(item.id);
@@ -2006,7 +2078,7 @@ export const KindrawApp = () => {
         },
       });
     },
-    [refreshTree, route, runMutation],
+    [refreshTree, route, runMutation, t],
   );
 
   const handleBulkDelete = useCallback(
@@ -2018,15 +2090,11 @@ export const KindrawApp = () => {
       return new Promise<void>((resolve) => {
         setDialog({
           type: "confirm",
-          title: "Excluir itens",
+          title: t("kindraw.dialog.deleteItemsTitle"),
           message: hasHybrid
-            ? `Excluir ${items.length} ${
-                items.length === 1 ? "item" : "itens"
-              }? Híbridos serão desvinculados.`
-            : `Excluir ${items.length} ${
-                items.length === 1 ? "item" : "itens"
-              }?`,
-          confirmLabel: "Excluir",
+            ? tCount("kindraw.dialog.bulkDeleteWithHybridMessage", items.length)
+            : tCount("kindraw.dialog.bulkDeleteMessage", items.length),
+          confirmLabel: t("kindraw.actions.delete"),
           onConfirm: () => {
             void runMutation(async () => {
               await Promise.all(
@@ -2042,7 +2110,7 @@ export const KindrawApp = () => {
         });
       });
     },
-    [refreshTree, runMutation],
+    [refreshTree, runMutation, t],
   );
 
   const handleBulkMove = useCallback(
@@ -2100,7 +2168,7 @@ export const KindrawApp = () => {
   if (typeof session === "undefined") {
     return (
       <div className="kindraw-loading-shell">
-        <p>Carregando Kindraw...</p>
+        <p>{t("kindraw.status.loadingKindraw")}</p>
       </div>
     );
   }
@@ -2112,12 +2180,9 @@ export const KindrawApp = () => {
           <span className="kindraw-logomark kindraw-logomark--lg">
             <KindrawIcon name="pen" size={22} strokeWidth={2.1} />
           </span>
-          <span className="kindraw-eyebrow">Kindraw</span>
-          <h1>Desenhe. Documente. Compartilhe.</h1>
-          <p>
-            Seu workspace de drawings, docs e híbridos — com pastas, autosave e
-            links públicos.
-          </p>
+          <span className="kindraw-eyebrow">{t("kindraw.login.eyebrow")}</span>
+          <h1>{t("kindraw.login.title")}</h1>
+          <p>{t("kindraw.login.subtitle")}</p>
           <div className="kindraw-login-providers">
             <button
               className="kindraw-btn kindraw-btn--primary kindraw-provider-btn"
@@ -2127,7 +2192,7 @@ export const KindrawApp = () => {
               <span className="kindraw-provider-glyph kindraw-provider-glyph--github">
                 <KindrawIcon name="github" size={18} />
               </span>
-              GitHub
+              {t("kindraw.commandPalette.github")}
             </button>
             <button
               className="kindraw-btn kindraw-btn--primary kindraw-provider-btn"
@@ -2137,16 +2202,13 @@ export const KindrawApp = () => {
               <span className="kindraw-provider-glyph kindraw-provider-glyph--google">
                 <GoogleGlyph size={16} />
               </span>
-              Google
+              {t("kindraw.login.google")}
             </button>
           </div>
           <a className="kindraw-ghostlink" href="/public">
-            Explorar sem conta
+            {t("kindraw.login.exploreWithoutAccount")}
           </a>
-          <small>
-            Usamos seu GitHub ou Google apenas para login e presença em sessões
-            ao vivo.
-          </small>
+          <small>{t("kindraw.login.privacyNote")}</small>
           {errorMessage ? (
             <p className="kindraw-error-copy">{errorMessage}</p>
           ) : null}
@@ -2158,7 +2220,7 @@ export const KindrawApp = () => {
   if (!tree) {
     return (
       <div className="kindraw-loading-shell">
-        <p>Carregando arvore do workspace...</p>
+        <p>{t("kindraw.sidebar.loadingWorkspaceTree")}</p>
       </div>
     );
   }
@@ -2187,13 +2249,13 @@ export const KindrawApp = () => {
           <KindrawIcon name="search" size={15} />
           <input
             onChange={(event) => setSearchQuery(event.target.value)}
-            placeholder="Buscar drawings, docs e híbridos…"
+            placeholder={t("kindraw.topbar.searchPlaceholder")}
             ref={searchInputRef}
             type="search"
             value={searchQuery}
           />
           <button
-            aria-label="Abrir busca global (⌘K)"
+            aria-label={t("kindraw.topbar.openGlobalSearchAria")}
             className="kindraw-kbd kindraw-kbd--button"
             onClick={() => setPaletteOpen(true)}
             type="button"
@@ -2239,7 +2301,7 @@ export const KindrawApp = () => {
             type="button"
           >
             <KindrawIcon name="settings" size={15} />
-            Configurações
+            {t("kindraw.settings.title")}
           </button>
           <button
             className="kindraw-menu__item"
@@ -2251,14 +2313,16 @@ export const KindrawApp = () => {
             role="menuitem"
             type="button"
           >
-            Sair
+            {t("kindraw.actions.signOut")}
           </button>
         </KindrawMenuWrap>
       </header>
 
       <div className="kindraw-shell__body">
         <aside className="kindraw-sidebar">
-          <div className="kindraw-sidebar__label">Workspace</div>
+          <div className="kindraw-sidebar__label">
+            {t("kindraw.sidebar.workspace")}
+          </div>
           <button
             className={`kindraw-tree__button${
               isWorkspaceRoute && !sharedView && route.folderId === null
@@ -2269,7 +2333,9 @@ export const KindrawApp = () => {
             type="button"
           >
             <KindrawIcon name="home" size={16} />
-            <span className="kindraw-tree__label">Biblioteca</span>
+            <span className="kindraw-tree__label">
+              {t("kindraw.sidebar.library")}
+            </span>
           </button>
           <FolderTree
             currentFolderId={currentFolderId}
@@ -2284,10 +2350,14 @@ export const KindrawApp = () => {
             type="button"
           >
             <KindrawIcon name="plus" size={15} />
-            <span className="kindraw-tree__label">Nova pasta</span>
+            <span className="kindraw-tree__label">
+              {t("kindraw.actions.newFolder")}
+            </span>
           </button>
 
-          <div className="kindraw-sidebar__label">Compartilhados</div>
+          <div className="kindraw-sidebar__label">
+            {t("kindraw.sidebar.sharedSection")}
+          </div>
           <button
             className={`kindraw-tree__button${
               isWorkspaceRoute && sharedView === "shared-with-me"
@@ -2298,7 +2368,9 @@ export const KindrawApp = () => {
             type="button"
           >
             <KindrawIcon name="users" size={16} />
-            <span className="kindraw-tree__label">Compartilhados comigo</span>
+            <span className="kindraw-tree__label">
+              {t("kindraw.sidebar.sharedWithMe")}
+            </span>
             <em className="kindraw-tree__count">{sharedWithMeCount}</em>
           </button>
           <button
@@ -2311,7 +2383,9 @@ export const KindrawApp = () => {
             type="button"
           >
             <KindrawIcon name="link" size={16} />
-            <span className="kindraw-tree__label">Links públicos</span>
+            <span className="kindraw-tree__label">
+              {t("kindraw.sidebar.publicLinks")}
+            </span>
             <em className="kindraw-tree__count">{publicLinksCount}</em>
           </button>
           <button
@@ -2324,7 +2398,9 @@ export const KindrawApp = () => {
             type="button"
           >
             <KindrawIcon name="users" size={16} />
-            <span className="kindraw-tree__label">Sessões ao vivo</span>
+            <span className="kindraw-tree__label">
+              {t("kindraw.sidebar.liveSessions")}
+            </span>
           </button>
         </aside>
 

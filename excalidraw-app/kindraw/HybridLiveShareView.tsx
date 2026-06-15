@@ -9,6 +9,7 @@ import type {
 
 import { createPublicDrawingInitialData } from "./content";
 import { colorForUser } from "./identity";
+import { useKindrawI18n } from "./i18n";
 import { PresenceFacepile } from "./PresenceFacepile";
 import { RichTextEditor } from "./RichTextEditor";
 import { useCanvasCollab } from "./useCanvasCollab";
@@ -54,6 +55,8 @@ export const HybridLiveShareView = ({
   itemResponse: KindrawPublicItemResponse;
   shareToken: string;
 }) => {
+  const { t } = useKindrawI18n();
+  const guestFallbackName = t("kindraw.hybrid.guestFallbackName");
   const hybrid = itemResponse.hybrid;
   const guestId = useMemo(getGuestId, []);
   const color = useMemo(() => colorForUser(guestId), [guestId]);
@@ -74,7 +77,7 @@ export const HybridLiveShareView = ({
     roomKey: canvasRoomKey,
     token: shareToken,
     profile: {
-      name: getStoredName() || "Convidado",
+      name: getStoredName() || guestFallbackName,
       userId: guestId,
       avatarUrl: null,
       githubLogin: null,
@@ -86,7 +89,7 @@ export const HybridLiveShareView = ({
     if (!hybrid || !entered) {
       return undefined;
     }
-    const displayName = (getStoredName() || "Convidado").trim();
+    const displayName = (getStoredName() || guestFallbackName).trim();
     const p = new KindrawYjsProvider({
       roomId: `hdoc:${hybrid.id}`,
       token: shareToken,
@@ -124,7 +127,7 @@ export const HybridLiveShareView = ({
       setProvider(null);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hybrid?.id, shareToken, entered, color, guestId]);
+  }, [hybrid?.id, shareToken, entered, color, guestId, guestFallbackName]);
 
   const presence = usePresence(provider);
 
@@ -146,7 +149,7 @@ export const HybridLiveShareView = ({
     return (
       <div className="kindraw-share-shell">
         <div className="kindraw-loading-shell">
-          <p>Este link não aponta para um documento híbrido editável.</p>
+          <p>{t("kindraw.hybrid.invalidLink")}</p>
         </div>
       </div>
     );
@@ -158,16 +161,18 @@ export const HybridLiveShareView = ({
       <div className="kindraw-share-shell">
         <div className="kindraw-login-shell">
           <div className="kindraw-login-card kindraw-guest-card">
-            <span className="kindraw-eyebrow">Edição ao vivo</span>
+            <span className="kindraw-eyebrow">
+              {t("kindraw.hybrid.liveEditEyebrow")}
+            </span>
             <h1>{itemResponse.item.title}</h1>
-            <p>Como você quer aparecer para os outros nesta sessão?</p>
+            <p>{t("kindraw.hybrid.namePrompt")}</p>
             <div className="kindraw-guest-entry">
               <span
                 className="kindraw-guest-entry__swatch"
                 style={{ background: color }}
               />
               <input
-                aria-label="Seu nome nesta sessão"
+                aria-label={t("kindraw.hybrid.nameInputAria")}
                 autoFocus
                 className="kindraw-guest-entry__input"
                 maxLength={40}
@@ -178,7 +183,7 @@ export const HybridLiveShareView = ({
                     setEntered(true);
                   }
                 }}
-                placeholder="Seu nome"
+                placeholder={t("kindraw.hybrid.nameInputPlaceholder")}
                 value={name}
               />
             </div>
@@ -191,7 +196,7 @@ export const HybridLiveShareView = ({
               }}
               type="button"
             >
-              Entrar na sessão
+              {t("kindraw.hybrid.enterSession")}
             </button>
           </div>
         </div>
@@ -203,7 +208,9 @@ export const HybridLiveShareView = ({
     <div className="kindraw-editor-shell kindraw-hybrid-shell kindraw-live-share">
       <header className="kindraw-editor-header">
         <div className="kindraw-editor-header__leading">
-          <span className="kindraw-eyebrow">Edição ao vivo</span>
+          <span className="kindraw-eyebrow">
+            {t("kindraw.hybrid.liveEditEyebrow")}
+          </span>
           <span className="kindraw-editor-crumb">{itemResponse.item.title}</span>
         </div>
         <div className="kindraw-editor-header__trailing">
@@ -224,7 +231,7 @@ export const HybridLiveShareView = ({
                     provider,
                     fieldName: "default",
                     user: {
-                      name: getStoredName() || "Convidado",
+                      name: getStoredName() || guestFallbackName,
                       color,
                       avatarUrl: null,
                       githubLogin: null,
@@ -232,12 +239,14 @@ export const HybridLiveShareView = ({
                     },
                   }}
                   onChange={() => undefined}
-                  placeholder="Escreva em conjunto…"
+                  placeholder={t("kindraw.hybrid.docPlaceholder")}
                   seedMarkdown={itemResponse.content}
                   value={itemResponse.content}
                 />
               ) : (
-                <p className="kindraw-loading-shell">Conectando à sessão…</p>
+                <p className="kindraw-loading-shell">
+                  {t("kindraw.hybrid.connecting")}
+                </p>
               )}
             </div>
           </div>

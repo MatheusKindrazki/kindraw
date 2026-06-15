@@ -1,4 +1,5 @@
 import { initialsForName } from "./identity";
+import { useKindrawI18n } from "./i18n";
 
 import type { PresenceUser } from "./identity";
 
@@ -9,7 +10,10 @@ import type { PresenceUser } from "./identity";
 const MAX_VISIBLE = 4;
 
 const Avatar = ({ user }: { user: PresenceUser }) => {
-  const title = user.isSelf ? `${user.name} (você)` : user.name;
+  const { t } = useKindrawI18n();
+  const title = user.isSelf
+    ? t("kindraw.presence.selfLabel", { name: user.name })
+    : user.name;
   return (
     <span
       className={`kindraw-facepile__avatar${
@@ -33,6 +37,7 @@ const Avatar = ({ user }: { user: PresenceUser }) => {
 };
 
 export const PresenceFacepile = ({ users }: { users: PresenceUser[] }) => {
+  const { t } = useKindrawI18n();
   // só mostra quando há mais de uma pessoa (sozinho não precisa de facepile)
   const others = users.filter((u) => !u.isSelf);
   if (others.length === 0) {
@@ -45,11 +50,16 @@ export const PresenceFacepile = ({ users }: { users: PresenceUser[] }) => {
 
   return (
     <div
-      aria-label={`${users.length} pessoas nesta sessão`}
+      aria-label={t("kindraw.presence.sessionPeopleAria", {
+        count: users.length,
+      })}
       className="kindraw-facepile"
       role="group"
     >
-      <span className="kindraw-facepile__live" title="Edição ao vivo">
+      <span
+        className="kindraw-facepile__live"
+        title={t("kindraw.presence.liveEditing")}
+      >
         <span className="kindraw-facepile__dot" />
         {activeCount}
       </span>
@@ -60,7 +70,7 @@ export const PresenceFacepile = ({ users }: { users: PresenceUser[] }) => {
         {overflow > 0 ? (
           <span
             className="kindraw-facepile__avatar kindraw-facepile__more"
-            title={`+${overflow} mais`}
+            title={t("kindraw.presence.overflowMore", { count: overflow })}
           >
             <span className="kindraw-facepile__initials kindraw-facepile__initials--more">
               +{overflow}

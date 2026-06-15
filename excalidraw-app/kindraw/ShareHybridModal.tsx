@@ -13,6 +13,7 @@ import { KindrawIcon } from "./icons";
 import { userHandle, userSubtitle } from "./identity";
 import { PublicShareLinkSection } from "./PublicShareLinkSection";
 import { CreatedInviteBox, SharePendingInvites } from "./SharePendingInvites";
+import { useKindrawI18n } from "./i18n";
 import { getErrorMessage } from "./utils";
 
 import type { ChangeEvent } from "react";
@@ -28,11 +29,6 @@ import type {
 } from "./types";
 
 const SEARCH_DEBOUNCE_MS = 250;
-
-const ROLE_LABEL: Record<KindrawShareRole, string> = {
-  viewer: "Visualizador",
-  editor: "Editor",
-};
 
 const KindrawPersonAvatar = ({ user }: { user: KindrawUser }) =>
   user.avatarUrl ? (
@@ -67,6 +63,7 @@ export const ShareHybridModal = ({
   buildShareUrl?: (token: string) => string;
   busy?: boolean;
 }) => {
+  const { t } = useKindrawI18n();
   const [shares, setShares] = useState<KindrawHybridShare[] | null>(null);
   const [invites, setInvites] = useState<KindrawPendingInvite[]>([]);
   const [createdInvite, setCreatedInvite] =
@@ -97,10 +94,12 @@ export const ShareHybridModal = ({
       setShares(sharesResponse.shares);
       setInvites(invitesResponse.invites);
     } catch (error) {
-      setListError(getErrorMessage(error, "Falha ao carregar acessos."));
+      setListError(
+        getErrorMessage(error, t("kindraw.hybrid.loadAccessFailed")),
+      );
       setShares([]);
     }
-  }, [hybrid.id]);
+  }, [hybrid.id, t]);
 
   useEffect(() => {
     void loadShares();
@@ -212,11 +211,11 @@ export const ShareHybridModal = ({
       await loadShares();
       onChange?.();
     } catch (error) {
-      setInviteError(getErrorMessage(error, "Não foi possível convidar."));
+      setInviteError(getErrorMessage(error, t("kindraw.hybrid.inviteFailed")));
     } finally {
       setInviting(false);
     }
-  }, [selectedUser, query, hybrid.id, role, loadShares, onChange]);
+  }, [selectedUser, query, hybrid.id, role, loadShares, onChange, t]);
 
   const handleRevokeInvite = useCallback(
     async (invite: KindrawPendingInvite) => {
@@ -230,12 +229,14 @@ export const ShareHybridModal = ({
         await loadShares();
         onChange?.();
       } catch (error) {
-        setListError(getErrorMessage(error, "Falha ao cancelar o convite."));
+        setListError(
+          getErrorMessage(error, t("kindraw.hybrid.cancelInviteFailed")),
+        );
       } finally {
         setBusyInviteId(null);
       }
     },
-    [hybrid.id, createdInvite, loadShares, onChange],
+    [hybrid.id, createdInvite, loadShares, onChange, t],
   );
 
   const handleRoleChange = useCallback(
@@ -250,12 +251,14 @@ export const ShareHybridModal = ({
         await loadShares();
         onChange?.();
       } catch (error) {
-        setListError(getErrorMessage(error, "Falha ao alterar o papel."));
+        setListError(
+          getErrorMessage(error, t("kindraw.hybrid.changeRoleFailed")),
+        );
       } finally {
         setBusyShareId(null);
       }
     },
-    [hybrid.id, loadShares, onChange],
+    [hybrid.id, loadShares, onChange, t],
   );
 
   const handleRevoke = useCallback(
@@ -267,12 +270,14 @@ export const ShareHybridModal = ({
         await loadShares();
         onChange?.();
       } catch (error) {
-        setListError(getErrorMessage(error, "Falha ao remover o acesso."));
+        setListError(
+          getErrorMessage(error, t("kindraw.hybrid.removeAccessFailed")),
+        );
       } finally {
         setBusyShareId(null);
       }
     },
-    [hybrid.id, loadShares, onChange],
+    [hybrid.id, loadShares, onChange, t],
   );
 
   const canInvite = !inviting && query.trim().replace(/^@/, "").length > 0;
@@ -293,9 +298,11 @@ export const ShareHybridModal = ({
         role="dialog"
       >
         <div className="kindraw-sharemodal__head">
-          <h2 id="kindraw-sharehybrid-title">Compartilhar “{hybrid.title}”</h2>
+          <h2 id="kindraw-sharehybrid-title">
+            {t("kindraw.hybrid.title", { title: hybrid.title })}
+          </h2>
           <button
-            aria-label="Fechar"
+            aria-label={t("kindraw.hybrid.close")}
             className="kindraw-sharemodal__close"
             onClick={onClose}
             type="button"
@@ -305,14 +312,13 @@ export const ShareHybridModal = ({
         </div>
 
         <p className="kindraw-sharemodal__hint">
-          Editores podem editar o documento e o canvas em tempo real junto com
-          você. Visualizadores só leem.
+          {t("kindraw.hybrid.hint")}
         </p>
 
         {/* Acesso geral: link público + permissão (read / editar ao vivo) */}
         <div className="kindraw-sharemodal__section">
           <span className="kindraw-sharemodal__section-label">
-            Acesso por link
+            {t("kindraw.hybrid.linkAccessLabel")}
           </span>
           <PublicShareLinkSection
             buildShareUrl={buildShareUrl}
@@ -328,7 +334,7 @@ export const ShareHybridModal = ({
           <div className="kindraw-sharemodal__invite-row">
             <div className="kindraw-sharemodal__field">
               <input
-                aria-label="Convidar por nome, usuário ou e-mail"
+                aria-label={t("kindraw.hybrid.inviteInputAria")}
                 autoComplete="off"
                 className="kindraw-sharemodal__input"
                 onChange={handleQueryChange}
@@ -337,22 +343,22 @@ export const ShareHybridModal = ({
                     setResultsOpen(true);
                   }
                 }}
-                placeholder="nome, @usuário ou e-mail"
+                placeholder={t("kindraw.hybrid.invitePlaceholder")}
                 ref={inputRef}
                 type="text"
                 value={query}
               />
             </div>
             <select
-              aria-label="Papel do convidado"
+              aria-label={t("kindraw.hybrid.inviteRoleAria")}
               className="kindraw-sharemodal__roleselect"
               onChange={(event) =>
                 setRole(event.target.value as KindrawShareRole)
               }
               value={role}
             >
-              <option value="editor">{ROLE_LABEL.editor}</option>
-              <option value="viewer">{ROLE_LABEL.viewer}</option>
+              <option value="editor">{t("kindraw.hybrid.roleEditor")}</option>
+              <option value="viewer">{t("kindraw.hybrid.roleViewer")}</option>
             </select>
             <button
               className="kindraw-btn kindraw-btn--primary kindraw-btn--sm"
@@ -360,19 +366,22 @@ export const ShareHybridModal = ({
               onClick={() => void handleInvite()}
               type="button"
             >
-              {inviting ? "Gerando…" : "Convidar"}
+              {inviting
+                ? t("kindraw.hybrid.inviting")
+                : t("kindraw.hybrid.invite")}
             </button>
           </div>
 
           <p className="kindraw-sharemodal__invite-help">
-            Gera um link de convite para você copiar e enviar. Quem abrir e
-            entrar ganha acesso (mesmo sem conta ainda).
+            {t("kindraw.hybrid.inviteHelp")}
           </p>
 
           {resultsOpen && (results.length > 0 || searching) ? (
             <ul className="kindraw-sharemodal__results" role="listbox">
               {searching && results.length === 0 ? (
-                <li className="kindraw-sharemodal__result-empty">Buscando…</li>
+                <li className="kindraw-sharemodal__result-empty">
+                  {t("kindraw.hybrid.searching")}
+                </li>
               ) : null}
               {results.map((user) => {
                 const already = existingLogins.has(
@@ -395,7 +404,7 @@ export const ShareHybridModal = ({
                       </span>
                       {already ? (
                         <span className="kindraw-sharemodal__result-tag">
-                          já tem acesso
+                          {t("kindraw.hybrid.alreadyHasAccess")}
                         </span>
                       ) : null}
                     </button>
@@ -414,13 +423,15 @@ export const ShareHybridModal = ({
 
         <div className="kindraw-sharemodal__people">
           <span className="kindraw-sharemodal__people-label">
-            Pessoas com acesso
+            {t("kindraw.hybrid.peopleLabel")}
           </span>
           {shares === null ? (
-            <p className="kindraw-sharemodal__hint">Carregando…</p>
+            <p className="kindraw-sharemodal__hint">
+              {t("kindraw.hybrid.loading")}
+            </p>
           ) : shares.length === 0 && invites.length === 0 ? (
             <p className="kindraw-sharemodal__hint">
-              Ninguém tem acesso ainda além de você.
+              {t("kindraw.hybrid.noPeople")}
             </p>
           ) : (
             <ul className="kindraw-sharemodal__list">
@@ -441,7 +452,9 @@ export const ShareHybridModal = ({
                       <span>{userSubtitle(share.user)}</span>
                     </span>
                     <select
-                      aria-label={`Papel de @${userHandle(share.user)}`}
+                      aria-label={t("kindraw.hybrid.roleForUser", {
+                        handle: userHandle(share.user),
+                      })}
                       className="kindraw-sharemodal__roleselect kindraw-sharemodal__roleselect--inline"
                       disabled={busy}
                       onChange={(event) =>
@@ -452,11 +465,17 @@ export const ShareHybridModal = ({
                       }
                       value={share.role}
                     >
-                      <option value="editor">{ROLE_LABEL.editor}</option>
-                      <option value="viewer">{ROLE_LABEL.viewer}</option>
+                      <option value="editor">
+                        {t("kindraw.hybrid.roleEditor")}
+                      </option>
+                      <option value="viewer">
+                        {t("kindraw.hybrid.roleViewer")}
+                      </option>
                     </select>
                     <button
-                      aria-label={`Remover @${userHandle(share.user)}`}
+                      aria-label={t("kindraw.hybrid.removeUser", {
+                        handle: userHandle(share.user),
+                      })}
                       className="kindraw-sharemodal__remove"
                       disabled={busy}
                       onClick={() => void handleRevoke(share)}

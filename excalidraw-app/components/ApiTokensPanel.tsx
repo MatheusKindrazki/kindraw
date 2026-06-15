@@ -5,16 +5,18 @@ import { KindrawIcon } from "../kindraw/icons";
 
 import { listApiTokens, createApiToken, revokeApiToken } from "../kindraw/api";
 
+import { useKindrawI18n } from "../kindraw/i18n";
+
 import "./ApiTokensDialog.scss";
 
 import type { KindrawApiToken } from "../kindraw/types";
 
-const formatDate = (value: string | null) => {
+const formatDate = (value: string | null, langCode: string) => {
   if (!value) {
     return null;
   }
   try {
-    return new Date(value).toLocaleDateString();
+    return new Date(value).toLocaleDateString(langCode);
   } catch {
     return value;
   }
@@ -26,6 +28,7 @@ const formatDate = (value: string | null) => {
  * Usa a linguagem visual Ateliê (kd-*), não os componentes do editor Excalidraw.
  */
 export const ApiTokensPanel = () => {
+  const { t, langCode } = useKindrawI18n();
   const [tokens, setTokens] = useState<KindrawApiToken[]>([]);
   const [name, setName] = useState("");
   const [loading, setLoading] = useState(true);
@@ -82,13 +85,12 @@ export const ApiTokensPanel = () => {
   return (
     <div className="kindraw-api-tokens">
       <p className="kindraw-api-tokens__description">
-        Uma key dá a um agente, CLI ou script acesso total à sua conta. Gere uma
-        por integração — assim você revoga uma sem derrubar as outras.
+        {t("kindraw.apiTokens.description")}
       </p>
 
       {newSecret && (
         <div className="kindraw-api-tokens__secret">
-          <strong>Copie sua key agora</strong>
+          <strong>{t("kindraw.apiTokens.secretTitle")}</strong>
           <div className="kindraw-api-tokens__secret-row">
             <code className="kindraw-api-tokens__secret-value">{newSecret}</code>
             <button
@@ -100,11 +102,11 @@ export const ApiTokensPanel = () => {
                 window.setTimeout(() => setCopied(false), 2000);
               }}
             >
-              {copied ? "Copiada!" : "Copiar"}
+              {copied ? t("kindraw.agents.copied") : t("kindraw.agents.copy")}
             </button>
           </div>
           <span className="kindraw-api-tokens__secret-helper">
-            É a única vez que ela aparece. Não fica guardada em lugar nenhum.
+            {t("kindraw.apiTokens.secretHelper")}
           </span>
         </div>
       )}
@@ -116,14 +118,14 @@ export const ApiTokensPanel = () => {
         <input
           className="kindraw-api-tokens__input"
           value={name}
-          placeholder="Para onde é? (ex.: Claude do trabalho)"
+          placeholder={t("kindraw.apiTokens.namePlaceholder")}
           onChange={(event) => setName(event.target.value)}
           onKeyDown={(event) => {
             if (event.key === "Enter" && !generating) {
               void handleGenerate();
             }
           }}
-          aria-label="Nome da key"
+          aria-label={t("kindraw.apiTokens.nameAria")}
         />
         <button
           type="button"
@@ -131,14 +133,16 @@ export const ApiTokensPanel = () => {
           disabled={generating}
           onClick={() => void handleGenerate()}
         >
-          {generating ? "Gerando…" : "Gerar key"}
+          {generating
+            ? t("kindraw.apiTokens.generating")
+            : t("kindraw.apiTokens.generate")}
         </button>
       </div>
 
       {error && <p className="kindraw-api-tokens__error">{error}</p>}
 
       <div className="kindraw-api-tokens__list">
-        <h4>Keys ativas</h4>
+        <h4>{t("kindraw.apiTokens.listTitle")}</h4>
         {loading ? (
           <ul aria-hidden="true" className="kindraw-api-tokens__skeleton">
             <li />
@@ -146,7 +150,7 @@ export const ApiTokensPanel = () => {
           </ul>
         ) : tokens.length === 0 ? (
           <p className="kindraw-api-tokens__empty">
-            Nenhuma key ainda. Gere a primeira acima para conectar um agente.
+            {t("kindraw.apiTokens.empty")}
           </p>
         ) : (
           <ul>
@@ -162,33 +166,37 @@ export const ApiTokensPanel = () => {
                 </div>
                 <div className="kindraw-api-tokens__item-meta">
                   {token.lastSeenAt
-                    ? `Usada em ${formatDate(token.lastSeenAt) || ""}`
-                    : "Nunca usada"}
+                    ? t("kindraw.apiTokens.lastUsed", {
+                        date: formatDate(token.lastSeenAt, langCode) || "",
+                      })
+                    : t("kindraw.apiTokens.neverUsed")}
                 </div>
                 {confirmRevoke === token.prefix ? (
                   <div className="kindraw-api-tokens__confirm">
-                    <span>Revogar?</span>
+                    <span>{t("kindraw.apiTokens.revokeConfirmShort")}</span>
                     <button
                       type="button"
                       className="kindraw-api-tokens__confirm-yes"
                       onClick={() => void handleRevoke(token.prefix)}
                     >
-                      Sim
+                      {t("kindraw.apiTokens.confirmYes")}
                     </button>
                     <button
                       type="button"
                       className="kindraw-api-tokens__confirm-no"
                       onClick={() => setConfirmRevoke(null)}
                     >
-                      Não
+                      {t("kindraw.apiTokens.confirmNo")}
                     </button>
                   </div>
                 ) : (
                   <button
                     className="kindraw-api-tokens__revoke"
                     type="button"
-                    aria-label={`Revogar a key ${token.name}`}
-                    title="Revogar"
+                    aria-label={t("kindraw.apiTokens.revokeAria", {
+                      name: token.name,
+                    })}
+                    title={t("kindraw.apiTokens.revoke")}
                     onClick={() => setConfirmRevoke(token.prefix)}
                   >
                     <KindrawIcon name="trash" size={15} />

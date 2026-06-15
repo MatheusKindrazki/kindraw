@@ -1,5 +1,9 @@
 import { useCallback, useEffect, useState, startTransition } from "react";
 
+import Trans from "@excalidraw/excalidraw/components/Trans";
+
+import type { TranslationKeys } from "@excalidraw/excalidraw/i18n";
+
 import {
   acceptInvite,
   getInvite,
@@ -8,6 +12,7 @@ import {
   openGoogleLogin,
 } from "./api";
 import { GoogleGlyph, KindrawIcon } from "./icons";
+import { useKindrawI18n } from "./i18n";
 import { createKindrawItemPageMeta, syncKindrawPageMeta } from "./pageMeta";
 import { buildFolderPath, buildHybridPath, navigateKindraw } from "./router";
 import { getErrorMessage } from "./utils";
@@ -19,14 +24,17 @@ import type {
   KindrawShareRole,
 } from "./types";
 
-const ROLE_LABEL: Record<KindrawShareRole, string> = {
-  viewer: "visualizador",
-  editor: "editor",
+const ROLE_LABEL_KEY: Record<KindrawShareRole, TranslationKeys> = {
+  viewer: "kindraw.invite.role.viewer",
+  editor: "kindraw.invite.role.editor",
 };
 
-const RESOURCE_LABEL: Record<KindrawInviteMetadata["resourceType"], string> = {
-  folder: "a pasta",
-  hybrid: "o documento",
+const RESOURCE_LABEL_KEY: Record<
+  KindrawInviteMetadata["resourceType"],
+  TranslationKeys
+> = {
+  folder: "kindraw.invite.resource.folder",
+  hybrid: "kindraw.invite.resource.hybrid",
 };
 
 // Para onde redirecionar após o aceite, conforme o tipo de recurso.
@@ -43,6 +51,7 @@ type InvitePageProps = {
 };
 
 export const InvitePage = ({ token }: InvitePageProps) => {
+  const { t } = useKindrawI18n();
   const [session, setSession] = useState<KindrawSession | null | undefined>(
     undefined,
   );
@@ -81,7 +90,7 @@ export const InvitePage = ({ token }: InvitePageProps) => {
       } catch (error) {
         if (!cancelled) {
           setLoadError(
-            getErrorMessage(error, "Este convite não é válido ou expirou."),
+            getErrorMessage(error, t("kindraw.invite.invalidOrExpired")),
           );
         }
       }
@@ -120,7 +129,7 @@ export const InvitePage = ({ token }: InvitePageProps) => {
       );
     } catch (error) {
       setAcceptError(
-        getErrorMessage(error, "Não foi possível aceitar o convite."),
+        getErrorMessage(error, t("kindraw.invite.acceptFailed")),
       );
       setAccepting(false);
     }
@@ -130,7 +139,7 @@ export const InvitePage = ({ token }: InvitePageProps) => {
   if (typeof session === "undefined" || (!invite && !loadError)) {
     return (
       <div className="kindraw-loading-shell">
-        <p>Carregando convite…</p>
+        <p>{t("kindraw.invite.loading")}</p>
       </div>
     );
   }
@@ -143,19 +152,21 @@ export const InvitePage = ({ token }: InvitePageProps) => {
           <span className="kindraw-logomark kindraw-logomark--lg">
             <KindrawIcon name="pen" size={22} strokeWidth={2.1} />
           </span>
-          <span className="kindraw-eyebrow">Kindraw</span>
-          <h1>Convite indisponível</h1>
-          <p>{loadError || "Este convite não é válido ou expirou."}</p>
+          <span className="kindraw-eyebrow">
+            {t("kindraw.invite.brandEyebrow")}
+          </span>
+          <h1>{t("kindraw.invite.unavailableTitle")}</h1>
+          <p>{loadError || t("kindraw.invite.invalidOrExpired")}</p>
           <a className="kindraw-link-button" href="/">
-            Ir para o Kindraw
+            {t("kindraw.invite.goToKindraw")}
           </a>
         </div>
       </div>
     );
   }
 
-  const resourceLabel = RESOURCE_LABEL[invite.resourceType];
-  const roleLabel = ROLE_LABEL[invite.role];
+  const resourceLabel = t(RESOURCE_LABEL_KEY[invite.resourceType]);
+  const roleLabel = t(ROLE_LABEL_KEY[invite.role]);
 
   // ── Convite já utilizado (uso único) ───────────────────────────────────────
   if (invite.accepted) {
@@ -165,15 +176,20 @@ export const InvitePage = ({ token }: InvitePageProps) => {
           <span className="kindraw-logomark kindraw-logomark--lg">
             <KindrawIcon name="pen" size={22} strokeWidth={2.1} />
           </span>
-          <span className="kindraw-eyebrow">Kindraw</span>
-          <h1>Convite já utilizado</h1>
+          <span className="kindraw-eyebrow">
+            {t("kindraw.invite.brandEyebrow")}
+          </span>
+          <h1>{t("kindraw.invite.alreadyUsedTitle")}</h1>
           <p>
-            Este convite para {resourceLabel}{" "}
-            <strong>{invite.resourceName}</strong> já foi aceito. Peça um novo
-            link a quem te convidou.
+            <Trans
+              i18nKey="kindraw.invite.alreadyUsedBody"
+              resource={resourceLabel}
+              name={invite.resourceName}
+              strong={(el) => <strong>{el}</strong>}
+            />
           </p>
           <a className="kindraw-link-button" href="/">
-            Ir para o Kindraw
+            {t("kindraw.invite.goToKindraw")}
           </a>
         </div>
       </div>
@@ -184,7 +200,7 @@ export const InvitePage = ({ token }: InvitePageProps) => {
   if (accepted) {
     return (
       <div className="kindraw-loading-shell">
-        <p>Acesso liberado! Abrindo {resourceLabel}…</p>
+        <p>{t("kindraw.invite.opening", { resource: resourceLabel })}</p>
       </div>
     );
   }
@@ -196,14 +212,18 @@ export const InvitePage = ({ token }: InvitePageProps) => {
         <span className="kindraw-logomark kindraw-logomark--lg">
           <KindrawIcon name="pen" size={22} strokeWidth={2.1} />
         </span>
-        <span className="kindraw-eyebrow">Convite Kindraw</span>
+        <span className="kindraw-eyebrow">{t("kindraw.invite.eyebrow")}</span>
         <h1>
-          {invite.invitedByName} convidou você para colaborar
+          {t("kindraw.invite.title", { name: invite.invitedByName })}
         </h1>
         <p>
-          Você foi convidado para {resourceLabel}{" "}
-          <strong>{invite.resourceName}</strong> como{" "}
-          <strong>{roleLabel}</strong>.
+          <Trans
+            i18nKey="kindraw.invite.validBody"
+            resource={resourceLabel}
+            name={invite.resourceName}
+            role={roleLabel}
+            strong={(el) => <strong>{el}</strong>}
+          />
         </p>
 
         {session ? (
@@ -214,16 +234,22 @@ export const InvitePage = ({ token }: InvitePageProps) => {
               onClick={() => void handleAccept()}
               type="button"
             >
-              {accepting ? "Aceitando…" : "Aceitar convite"}
+              {accepting
+                ? t("kindraw.invite.accepting")
+                : t("kindraw.invite.accept")}
             </button>
             <small>
-              Aceitando como <strong>{session.user.name}</strong>.
+              <Trans
+                i18nKey="kindraw.invite.acceptingAs"
+                name={session.user.name}
+                strong={(el) => <strong>{el}</strong>}
+              />
             </small>
           </>
         ) : (
           <>
             <p className="kindraw-login-card__hint">
-              Entre para aceitar o convite.
+              {t("kindraw.invite.signInToAccept")}
             </p>
             <div className="kindraw-login-providers">
               <button
@@ -234,7 +260,7 @@ export const InvitePage = ({ token }: InvitePageProps) => {
                 <span className="kindraw-provider-glyph kindraw-provider-glyph--github">
                   <KindrawIcon name="github" size={18} />
                 </span>
-                GitHub
+                {t("kindraw.commandPalette.github")}
               </button>
               <button
                 className="kindraw-btn kindraw-btn--primary kindraw-provider-btn"
@@ -244,12 +270,10 @@ export const InvitePage = ({ token }: InvitePageProps) => {
                 <span className="kindraw-provider-glyph kindraw-provider-glyph--google">
                   <GoogleGlyph size={16} />
                 </span>
-                Google
+                {t("kindraw.invite.providerGoogle")}
               </button>
             </div>
-            <small>
-              Voltamos a esta página após o login para você concluir o aceite.
-            </small>
+            <small>{t("kindraw.invite.returnAfterLogin")}</small>
           </>
         )}
 

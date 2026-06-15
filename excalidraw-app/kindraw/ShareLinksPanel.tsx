@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import { buildPublicShareUrl } from "./api";
+import { useKindrawI18n } from "./i18n";
 import { KindrawIcon } from "./icons";
 import { PublicShareLinkSection } from "./PublicShareLinkSection";
 
@@ -29,6 +30,7 @@ export const ShareLinksPanel = ({
   buildShareUrl = buildPublicShareUrl,
   supportsLiveEdit,
 }: ShareLinksPanelProps) => {
+  const { t } = useKindrawI18n();
   const [shareOpen, setShareOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
 
@@ -65,16 +67,16 @@ export const ShareLinksPanel = ({
         onClick={() => setShareOpen(!shareOpen)}
         type="button"
       >
-        <KindrawIcon name="share" size={16} /> Compartilhar
+        <KindrawIcon name="share" size={16} /> {t("kindraw.actions.share")}
       </button>
 
       {shareOpen ? (
         <div
-          aria-label="Compartilhar"
+          aria-label={t("kindraw.actions.share")}
           className="kindraw-popover kindraw-popover--share"
           role="dialog"
         >
-          <h3 className="kindraw-share__title">Compartilhar</h3>
+          <h3 className="kindraw-share__title">{t("kindraw.actions.share")}</h3>
           <PublicShareLinkSection
             buildShareUrl={buildShareUrl}
             busy={busy}

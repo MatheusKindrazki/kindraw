@@ -2,8 +2,11 @@ import { copyTextToSystemClipboard } from "@excalidraw/excalidraw/clipboard";
 import { useState } from "react";
 
 import { createApiToken } from "../kindraw/api";
+import { useKindrawI18n } from "../kindraw/i18n";
 
 import "./AgentsGuide.scss";
+
+import type { TranslationKeys } from "@excalidraw/excalidraw/i18n";
 
 const TOKEN_PLACEHOLDER = "kdr_...";
 
@@ -27,22 +30,23 @@ npx @kindraw/cli items list`;
 const buildCliGenerate = () =>
   `kindraw generate --mermaid flow.mmd --title "My flow"`;
 
-const MCP_TOOLS: { name: string; desc: string }[] = [
+const MCP_TOOLS: { name: string; descKey: TranslationKeys }[] = [
   {
     name: "kindraw_create_diagram",
-    desc: "Cria um desenho a partir de uma definição Mermaid (fluxograma, sequência, classe, ER…).",
+    descKey: "kindraw.agents.tools.createDiagram",
   },
   {
     name: "kindraw_create_drawing",
-    desc: "Cria um desenho a partir de JSON do Excalidraw já serializado.",
+    descKey: "kindraw.agents.tools.createDrawing",
   },
-  { name: "kindraw_list_items", desc: "Lista seus desenhos e docs." },
-  { name: "kindraw_get_item", desc: "Busca um item com o conteúdo." },
-  { name: "kindraw_delete_item", desc: "Exclui um item." },
+  { name: "kindraw_list_items", descKey: "kindraw.agents.tools.listItems" },
+  { name: "kindraw_get_item", descKey: "kindraw.agents.tools.getItem" },
+  { name: "kindraw_delete_item", descKey: "kindraw.agents.tools.deleteItem" },
 ];
 
 /** Bloco de código com botão "Copiar" e feedback inline. */
 const CodeBlock = ({ code, label }: { code: string; label?: string }) => {
+  const { t } = useKindrawI18n();
   const [copied, setCopied] = useState(false);
 
   const handleCopy = async () => {
@@ -67,7 +71,7 @@ const CodeBlock = ({ code, label }: { code: string; label?: string }) => {
           className="kindraw-codeblock__copy"
           onClick={() => void handleCopy()}
         >
-          {copied ? "Copiado!" : "Copiar"}
+          {copied ? t("kindraw.agents.copied") : t("kindraw.agents.copy")}
         </button>
       </div>
     </div>
@@ -79,6 +83,7 @@ const CodeBlock = ({ code, label }: { code: string; label?: string }) => {
  * uso via CLI. Permite gerar uma key inline que preenche os snippets uma vez.
  */
 export const AgentsGuide = () => {
+  const { t } = useKindrawI18n();
   const [token, setToken] = useState<string | null>(null);
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -100,10 +105,7 @@ export const AgentsGuide = () => {
 
   return (
     <div className="kindraw-agents-guide">
-      <p className="kindraw-agents-guide__intro">
-        Deixe um agente desenhar por você: gere diagramas a partir de Mermaid,
-        liste e edite seus drawings direto do Claude, Cursor ou do terminal.
-      </p>
+      <p className="kindraw-agents-guide__intro">{t("kindraw.agents.intro")}</p>
 
       {/* Passo 1 — a key é a protagonista */}
       <div
@@ -113,12 +115,14 @@ export const AgentsGuide = () => {
       >
         <div className="kindraw-agents-guide__keybar-text">
           <strong>
-            {token ? "Pronto — key gerada" : "Comece gerando uma key"}
+            {token
+              ? t("kindraw.agents.keybarIssuedTitle")
+              : t("kindraw.agents.keybarTitle")}
           </strong>
           <span>
             {token
-              ? "Já preenchemos os exemplos abaixo. Copie a key agora: ela não aparece de novo."
-              : "Ela autentica o agente na sua conta. Preenche os exemplos automaticamente."}
+              ? t("kindraw.agents.keybarIssuedHint")
+              : t("kindraw.agents.keyHint")}
           </span>
         </div>
         <button
@@ -127,7 +131,11 @@ export const AgentsGuide = () => {
           onClick={() => void handleGenerate()}
           disabled={generating}
         >
-          {generating ? "Gerando…" : token ? "Gerar outra" : "Gerar key"}
+          {generating
+            ? t("kindraw.agents.generating")
+            : token
+            ? t("kindraw.agents.generateAnother")
+            : t("kindraw.agents.generateKey")}
         </button>
       </div>
 
@@ -138,11 +146,8 @@ export const AgentsGuide = () => {
         <div className="kindraw-agents-guide__section-head">
           <span className="kindraw-agents-guide__step">1</span>
           <div>
-            <h4>Plugue no Claude ou Cursor</h4>
-            <p>
-              Cole em <code>~/.claude.json</code> ou no{" "}
-              <code>.mcp.json</code> do projeto e reinicie o cliente.
-            </p>
+            <h4>{t("kindraw.agents.mcpTitle")}</h4>
+            <p>{t("kindraw.agents.mcpDescription")}</p>
           </div>
         </div>
         <CodeBlock code={buildMcpConfig(tokenValue)} />
@@ -150,7 +155,7 @@ export const AgentsGuide = () => {
           {MCP_TOOLS.map((tool) => (
             <li key={tool.name}>
               <code>{tool.name}</code>
-              <span>{tool.desc}</span>
+              <span>{t(tool.descKey)}</span>
             </li>
           ))}
         </ul>
@@ -161,18 +166,21 @@ export const AgentsGuide = () => {
         <div className="kindraw-agents-guide__section-head">
           <span className="kindraw-agents-guide__step">2</span>
           <div>
-            <h4>Ou use pelo terminal</h4>
-            <p>
-              Entre uma vez, ou passe a key em <code>KINDRAW_TOKEN</code> para
-              scripts e CI.
-            </p>
+            <h4>{t("kindraw.agents.cliTitle")}</h4>
+            <p>{t("kindraw.agents.cliDescription")}</p>
           </div>
         </div>
-        <CodeBlock code={buildCliLogin()} label="Entrar (abre o navegador)" />
-        <CodeBlock code={buildCliEnv(tokenValue)} label="Ou usar a key direto" />
+        <CodeBlock
+          code={buildCliLogin()}
+          label={t("kindraw.agents.cliLoginLabel")}
+        />
+        <CodeBlock
+          code={buildCliEnv(tokenValue)}
+          label={t("kindraw.agents.cliEnvLabel")}
+        />
         <CodeBlock
           code={buildCliGenerate()}
-          label="Gerar um desenho de um arquivo Mermaid"
+          label={t("kindraw.agents.cliGenerateLabel")}
         />
       </section>
     </div>

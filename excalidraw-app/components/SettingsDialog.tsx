@@ -2,13 +2,17 @@ import { useEffect, useState } from "react";
 
 import { atom, useAtom } from "../app-jotai";
 import { KindrawIcon } from "../kindraw/icons";
+import { useKindrawI18n } from "../kindraw/i18n";
+import { KindrawLanguageList } from "../kindraw/KindrawLanguageList";
 
 import { AgentsGuide } from "./AgentsGuide";
 import { ApiTokensPanel } from "./ApiTokensPanel";
 
 import "./SettingsDialog.scss";
 
-export type SettingsDialogTab = "api-keys" | "agents";
+import type { TranslationKeys } from "@excalidraw/excalidraw/i18n";
+
+export type SettingsDialogTab = "general" | "api-keys" | "agents";
 
 export const settingsDialogStateAtom = atom<{
   isOpen: boolean;
@@ -17,9 +21,10 @@ export const settingsDialogStateAtom = atom<{
   isOpen: false,
 });
 
-const TABS: { id: SettingsDialogTab; label: string }[] = [
-  { id: "api-keys", label: "API keys" },
-  { id: "agents", label: "Usar em Agents/LLMs" },
+const TABS: { id: SettingsDialogTab; labelKey: TranslationKeys }[] = [
+  { id: "general", labelKey: "kindraw.settings.tabs.general" },
+  { id: "api-keys", labelKey: "kindraw.settings.tabs.apiKeys" },
+  { id: "agents", labelKey: "kindraw.settings.tabs.agents" },
 ];
 
 // NOTE: usa a casca de modal própria do shell Kindraw (.kindraw-modal-overlay /
@@ -28,6 +33,7 @@ const TABS: { id: SettingsDialogTab; label: string }[] = [
 // Como este modal abre no workspace (KindrawApp, sem editor montado), usar o
 // Dialog do Excalidraw crasha com "Missing Provider from createIsolation".
 export const SettingsDialog = () => {
+  const { t } = useKindrawI18n();
   const [state, setState] = useAtom(settingsDialogStateAtom);
   const [activeTab, setActiveTab] = useState<SettingsDialogTab>("api-keys");
 
@@ -72,9 +78,9 @@ export const SettingsDialog = () => {
         role="dialog"
       >
         <div className="kindraw-settings__head">
-          <h2 id="kindraw-settings-title">Configurações</h2>
+          <h2 id="kindraw-settings-title">{t("kindraw.settings.title")}</h2>
           <button
-            aria-label="Fechar"
+            aria-label={t("kindraw.settings.close")}
             className="kindraw-settings__close"
             onClick={close}
             type="button"
@@ -98,7 +104,7 @@ export const SettingsDialog = () => {
               }`}
               onClick={() => setActiveTab(tab.id)}
             >
-              {tab.label}
+              {t(tab.labelKey)}
             </button>
           ))}
         </div>
@@ -109,7 +115,26 @@ export const SettingsDialog = () => {
           aria-labelledby={`kindraw-settings-tab-${activeTab}`}
           className="kindraw-settings__panel"
         >
-          {activeTab === "api-keys" ? <ApiTokensPanel /> : <AgentsGuide />}
+          {activeTab === "general" ? (
+            <div className="kindraw-settings__general">
+              <label
+                className="kindraw-settings__field"
+                htmlFor="kindraw-settings-language"
+              >
+                <span className="kindraw-settings__field-label">
+                  {t("kindraw.settings.language")}
+                </span>
+                <KindrawLanguageList />
+                <span className="kindraw-settings__field-help">
+                  {t("kindraw.settings.languageHelper")}
+                </span>
+              </label>
+            </div>
+          ) : activeTab === "api-keys" ? (
+            <ApiTokensPanel />
+          ) : (
+            <AgentsGuide />
+          )}
         </div>
       </div>
     </div>

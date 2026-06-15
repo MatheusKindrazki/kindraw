@@ -12,6 +12,7 @@ import { DocEditorPage } from "./DocEditorPage";
 import { HybridEditorPage } from "./HybridEditorPage";
 import { HybridLiveShareView } from "./HybridLiveShareView";
 import { HybridPublicShareView } from "./HybridPublicShareView";
+import { useKindrawI18n } from "./i18n";
 import { createKindrawItemPageMeta, syncKindrawPageMeta } from "./pageMeta";
 import { isKindrawHybridItem } from "./types";
 import { getErrorMessage } from "./utils";
@@ -95,6 +96,7 @@ type KindrawDocScreenProps = {
 };
 
 export const KindrawDocScreen = ({ itemId }: KindrawDocScreenProps) => {
+  const { t } = useKindrawI18n();
   const { errorMessage, refreshTree, session, tree } =
     useStandaloneSessionTree();
   const currentItemTitle =
@@ -183,6 +185,7 @@ export const KindrawHybridScreen = ({
   view,
   sectionId,
 }: KindrawHybridScreenProps) => {
+  const { t } = useKindrawI18n();
   const { errorMessage, refreshTree, session, tree } =
     useStandaloneSessionTree();
   const currentHybridTitle =
@@ -214,7 +217,7 @@ export const KindrawHybridScreen = ({
       <div className="kindraw-login-shell">
         <div className="kindraw-login-card">
           <span className="kindraw-eyebrow">Kindraw</span>
-          <h1>Entre para editar este artefato híbrido</h1>
+          <h1>{t("kindraw.publicView.signInToEditHybridTitle")}</h1>
           <div className="kindraw-toolbar">
             <button
               className="kindraw-button"
@@ -273,6 +276,7 @@ export const KindrawPublicSharePage = ({
   view = "both",
   sectionId = null,
 }: KindrawPublicSharePageProps) => {
+  const { t } = useKindrawI18n();
   const [itemResponse, setItemResponse] =
     useState<KindrawPublicItemResponse | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);

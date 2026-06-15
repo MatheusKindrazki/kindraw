@@ -12,6 +12,7 @@ import {
 } from "./api";
 import { parseDrawingContent } from "./content";
 import { KindrawIcon } from "./icons";
+import { useKindrawI18n } from "./i18n";
 import { buildFolderPath, buildHybridPath, navigateKindraw } from "./router";
 import { ShareLinksPanel } from "./ShareLinksPanel";
 import { getKindrawDraft, setKindrawDraft } from "./storage";
@@ -30,12 +31,15 @@ export const DrawingEditorPage = ({
   onTreeRefresh,
   folders,
 }: DrawingEditorPageProps) => {
+  const { t } = useKindrawI18n();
   const [itemResponse, setItemResponse] = useState<KindrawItemResponse | null>(
     null,
   );
   const [title, setTitle] = useState("");
   const [initialContent, setInitialContent] = useState<string | null>(null);
-  const [statusMessage, setStatusMessage] = useState("Carregando drawing...");
+  const [statusMessage, setStatusMessage] = useState(() =>
+    t("kindraw.status.loadingDrawing"),
+  );
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [saveState, setSaveState] = useState<"idle" | "saving" | "error">(
     "idle",
@@ -45,7 +49,7 @@ export const DrawingEditorPage = ({
 
   const loadItem = useCallback(async () => {
     setErrorMessage(null);
-    setStatusMessage("Carregando drawing...");
+    setStatusMessage(t("kindraw.status.loadingDrawing"));
 
     try {
       const response = await getItem(itemId);
@@ -67,8 +71,8 @@ export const DrawingEditorPage = ({
         setLastSavedContent(response.content);
         setStatusMessage(
           draft && isDraftNewer(draft.updatedAt, response.item.updatedAt)
-            ? "Rascunho local restaurado."
-            : "Drawing sincronizado.",
+            ? t("kindraw.status.draftRestored")
+            : t("kindraw.status.drawingSynced"),
         );
       });
     } catch (error) {
@@ -93,7 +97,7 @@ export const DrawingEditorPage = ({
         await updateItemContent(itemId, content);
         setLastSavedContent(content);
         setSaveState("idle");
-        setStatusMessage("Drawing salvo.");
+        setStatusMessage(t("kindraw.status.drawingSaved"));
         setItemResponse((current) =>
           current
             ? {
@@ -109,7 +113,9 @@ export const DrawingEditorPage = ({
         await onTreeRefresh();
       } catch (error) {
         setSaveState("error");
-        setStatusMessage(getErrorMessage(error, "Falha ao salvar o drawing."));
+        setStatusMessage(
+          getErrorMessage(error, t("kindraw.status.drawingSaveFailed")),
+        );
       }
     },
     [itemId, onTreeRefresh],
@@ -161,10 +167,12 @@ export const DrawingEditorPage = ({
             }
           : current,
       );
-      setStatusMessage("Titulo atualizado.");
+      setStatusMessage(t("kindraw.status.titleUpdated"));
       await onTreeRefresh();
     } catch (error) {
-      setStatusMessage(getErrorMessage(error, "Falha ao atualizar o titulo."));
+      setStatusMessage(
+        getErrorMessage(error, t("kindraw.status.titleUpdateFailed")),
+      );
       setTitle(itemResponse.item.title);
     }
   }, [itemId, itemResponse, onTreeRefresh, title]);
@@ -183,10 +191,12 @@ export const DrawingEditorPage = ({
             }
           : current,
       );
-      setStatusMessage("Link publico criado.");
+      setStatusMessage(t("kindraw.status.publicLinkCreated"));
       await onTreeRefresh();
     } catch (error) {
-      setStatusMessage(getErrorMessage(error, "Falha ao criar link publico."));
+      setStatusMessage(
+        getErrorMessage(error, t("kindraw.status.publicLinkCreateFailed")),
+      );
     }
   }, [itemId, onTreeRefresh]);
 
@@ -208,7 +218,7 @@ export const DrawingEditorPage = ({
         await onTreeRefresh();
       } catch (error) {
         setStatusMessage(
-          getErrorMessage(error, "Falha ao revogar link publico."),
+          getErrorMessage(error, t("kindraw.status.publicLinkRevokeFailed")),
         );
       }
     },
@@ -236,7 +246,7 @@ export const DrawingEditorPage = ({
               }
             : current,
         );
-        setStatusMessage("Sessao ao vivo encerrada.");
+        setStatusMessage(t("kindraw.status.liveSessionEnded"));
       } else {
         const response = await enableCollaborationRoom(itemId);
         setItemResponse((current) =>
@@ -252,12 +262,12 @@ export const DrawingEditorPage = ({
               }
             : current,
         );
-        setStatusMessage("Sessao ao vivo ativa.");
+        setStatusMessage(t("kindraw.status.liveSessionActive"));
       }
       await onTreeRefresh();
     } catch (error) {
       setStatusMessage(
-        getErrorMessage(error, "Falha ao alternar a sessao ao vivo."),
+        getErrorMessage(error, t("kindraw.status.liveSessionToggleFailed")),
       );
     }
   }, [itemId, itemResponse, onTreeRefresh]);
@@ -265,7 +275,7 @@ export const DrawingEditorPage = ({
   if (errorMessage) {
     return (
       <div className="kindraw-empty-state">
-        <h2>Drawing indisponivel</h2>
+        <h2>{t("kindraw.editor.unavailableTitle")}</h2>
         <p>{errorMessage}</p>
       </div>
     );
@@ -283,14 +293,14 @@ export const DrawingEditorPage = ({
   const liveSessionActive = Boolean(itemResponse.collaborationRoom);
   const folderName =
     folders?.find((folder) => folder.id === itemResponse.item.folderId)?.name ||
-    "Biblioteca";
+    t("kindraw.sidebar.backToLibrary");
 
   return (
     <div className="kindraw-editor-shell">
       <header className="kindraw-editor-header">
         <div className="kindraw-editor-header__leading">
           <button
-            aria-label="Voltar para a pasta"
+            aria-label={t("kindraw.editor.backToFolderAria")}
             className="kindraw-iconbtn"
             onClick={() =>
               navigateKindraw(buildFolderPath(itemResponse.item.folderId))
@@ -302,7 +312,7 @@ export const DrawingEditorPage = ({
           <span className="kindraw-editor-crumb">{folderName} /</span>
           <div className="kindraw-editor-title">
             <input
-              aria-label="Titulo do drawing"
+              aria-label={t("kindraw.editor.titleInputAria")}
               className="kindraw-editor-title__input"
               onBlur={() => void commitTitle()}
               onChange={(event) => setTitle(event.target.value)}
@@ -340,7 +350,8 @@ export const DrawingEditorPage = ({
               }
               type="button"
             >
-              <KindrawIcon name="hybrid" size={15} /> Abrir híbrido
+              <KindrawIcon name="hybrid" size={15} />{" "}
+              {t("kindraw.editor.openHybrid")}
             </button>
           ) : null}
           <button
@@ -350,12 +361,13 @@ export const DrawingEditorPage = ({
             onClick={() => void handleToggleLiveSession()}
             title={
               liveSessionActive
-                ? "Encerrar a sessão ao vivo"
-                : "Iniciar uma sessão ao vivo"
+                ? t("kindraw.editor.endLiveSession")
+                : t("kindraw.editor.startLiveSession")
             }
             type="button"
           >
-            <KindrawIcon name="users" size={16} /> Sessão ao vivo
+            <KindrawIcon name="users" size={16} />{" "}
+            {t("kindraw.editor.liveSession")}
           </button>
           <ShareLinksPanel
             busy={saveState === "saving"}

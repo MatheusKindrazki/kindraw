@@ -11,6 +11,7 @@ import { Markdown } from "tiptap-markdown";
 
 import { KindrawIcon } from "./icons";
 import { SlashCommand } from "./SlashCommand";
+import { useKindrawI18n } from "./i18n";
 
 import type { Editor } from "@tiptap/react";
 import type { KindrawYjsProvider } from "./yjsProvider";
@@ -91,11 +92,14 @@ const MenuButton = ({
 export const RichTextEditor = ({
   value,
   onChange,
-  placeholder = "Escreva aqui…",
+  placeholder,
   editable = true,
   collab,
   seedMarkdown,
 }: RichTextEditorProps) => {
+  const { t } = useKindrawI18n();
+  const effectivePlaceholder =
+    placeholder ?? t("kindraw.hybrid.editorPlaceholder");
   // Distingue mudanças internas (digitação) de externas (troca de documento)
   // para só re-setar o conteúdo no segundo caso.
   const lastEmittedRef = useRef<string>(value);
@@ -165,7 +169,7 @@ export const RichTextEditor = ({
     editorProps: {
       attributes: {
         class: "kindraw-rte__content",
-        "aria-label": placeholder,
+        "aria-label": effectivePlaceholder,
       },
       // Colar texto puro = interpretar como Markdown e inserir já formatado.
       handlePaste: (view, event) => {
@@ -256,42 +260,42 @@ export const RichTextEditor = ({
           >
             <MenuButton
               active={editor.isActive("bold")}
-              label="Negrito"
+              label={t("kindraw.hybrid.format.bold")}
               onClick={() => editor.chain().focus().toggleBold().run()}
             >
               <strong>B</strong>
             </MenuButton>
             <MenuButton
               active={editor.isActive("italic")}
-              label="Itálico"
+              label={t("kindraw.hybrid.format.italic")}
               onClick={() => editor.chain().focus().toggleItalic().run()}
             >
               <em>I</em>
             </MenuButton>
             <MenuButton
               active={editor.isActive("underline")}
-              label="Sublinhado"
+              label={t("kindraw.hybrid.format.underline")}
               onClick={() => editor.chain().focus().toggleUnderline().run()}
             >
               <span style={{ textDecoration: "underline" }}>U</span>
             </MenuButton>
             <MenuButton
               active={editor.isActive("strike")}
-              label="Riscado"
+              label={t("kindraw.hybrid.format.strikethrough")}
               onClick={() => editor.chain().focus().toggleStrike().run()}
             >
               <s>S</s>
             </MenuButton>
             <MenuButton
               active={editor.isActive("highlight")}
-              label="Realce"
+              label={t("kindraw.hybrid.format.highlight")}
               onClick={() => editor.chain().focus().toggleHighlight().run()}
             >
               <mark className="kindraw-rte__menu-mark">H</mark>
             </MenuButton>
             <MenuButton
               active={editor.isActive("code")}
-              label="Código"
+              label={t("kindraw.hybrid.format.code")}
               onClick={() => editor.chain().focus().toggleCode().run()}
             >
               {"</>"}
@@ -299,12 +303,15 @@ export const RichTextEditor = ({
             <span className="kindraw-rte__menu-sep" />
             <MenuButton
               active={editor.isActive("link")}
-              label="Link"
+              label={t("kindraw.hybrid.format.link")}
               onClick={() => {
                 const previous = editor.getAttributes("link").href as
                   | string
                   | undefined;
-                const url = window.prompt("URL do link", previous || "https://");
+                const url = window.prompt(
+                  t("kindraw.hybrid.linkPrompt"),
+                  previous || "https://",
+                );
                 if (url === null) {
                   return;
                 }
