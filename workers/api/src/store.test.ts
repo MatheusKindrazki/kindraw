@@ -433,7 +433,7 @@ class FakeStatement implements D1PreparedStatement {
 
     if (
       query ===
-      "SELECT id, kind, title, updated_at, content_blob_key FROM items WHERE id = ?"
+      "SELECT id, kind, title, updated_at, content_blob_key, collaboration_room_key, collaboration_enabled_at FROM items WHERE id = ?"
     ) {
       const [itemId] = this.values as [string];
       const item = this.state.items.find((entry) => entry.id === itemId);
@@ -448,6 +448,8 @@ class FakeStatement implements D1PreparedStatement {
         title: item.title,
         updated_at: item.updated_at,
         content_blob_key: item.content_blob_key,
+        collaboration_room_key: item.collaboration_room_key,
+        collaboration_enabled_at: item.collaboration_enabled_at,
       } as T;
     }
 
@@ -2017,6 +2019,7 @@ describe("KindrawStore", () => {
             updatedAt: "2026-03-09T10:00:00.000Z",
           },
           content: '{"elements":[]}',
+          collaborationRoom: null,
         },
       },
       access: "read",

@@ -2203,6 +2203,13 @@ export class KindrawStore {
     access: KindrawShareLinkAccess = "read",
   ) {
     const hybrid = await this.requireHybridItem(ownerId, hybridId);
+    // Link de edição ao vivo: garante a collab room do DRAWING (chave de cifra
+    // do canal de canvas) para o convidado também ver/editar o canvas ao vivo.
+    if (access === "live-edit") {
+      await this.enableItemCollaboration(ownerId, hybrid.drawingItemId).catch(
+        () => undefined,
+      );
+    }
     return this.createShareLink(ownerId, hybrid.docItemId, access);
   }
 
@@ -2399,7 +2406,7 @@ export class KindrawStore {
     if (hybridRow) {
       const drawing = await this.db
         .prepare(
-          `SELECT id, kind, title, updated_at, content_blob_key
+          `SELECT id, kind, title, updated_at, content_blob_key, collaboration_room_key, collaboration_enabled_at
            FROM items
            WHERE id = ?`,
         )
@@ -2410,9 +2417,23 @@ export class KindrawStore {
           title: string;
           updated_at: string;
           content_blob_key: string;
+          collaboration_room_key: string | null;
+          collaboration_enabled_at: string | null;
         }>();
 
       if (drawing) {
+        // Para link live-edit: expõe a collab room do canvas (chave de cifra) p/
+        // o convidado entrar no canal de canvas ao vivo. Só em live-edit.
+        const canvasRoom =
+          row.access === "live-edit" &&
+          drawing.collaboration_enabled_at &&
+          drawing.collaboration_room_key
+            ? {
+                roomId: drawing.id,
+                roomKey: drawing.collaboration_room_key,
+                enabledAt: drawing.collaboration_enabled_at,
+              }
+            : null;
         hybrid = {
           id: hybridRow.id,
           defaultView: hybridRow.default_view,
@@ -2424,6 +2445,7 @@ export class KindrawStore {
               updatedAt: drawing.updated_at,
             },
             content: await this.getContent(drawing.content_blob_key),
+            collaborationRoom: canvasRoom,
           },
         };
       }

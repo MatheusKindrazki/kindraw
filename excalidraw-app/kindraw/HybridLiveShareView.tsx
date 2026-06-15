@@ -1,22 +1,30 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import { Excalidraw } from "@excalidraw/excalidraw";
+
+import type {
+  ExcalidrawImperativeAPI,
+  ExcalidrawProps,
+} from "@excalidraw/excalidraw/types";
+
+import { createPublicDrawingInitialData } from "./content";
 import { colorForUser } from "./identity";
 import { PresenceFacepile } from "./PresenceFacepile";
 import { RichTextEditor } from "./RichTextEditor";
+import { useCanvasCollab } from "./useCanvasCollab";
 import { usePresence } from "./usePresence";
 import { KindrawYjsProvider } from "./yjsProvider";
 
 import type { KindrawPublicItemResponse } from "./types";
 
-// View de edição AO VIVO via link público "live-edit". Diferente do
-// HybridPublicShareView (read-only), aqui o portador do link entra na sessão de
-// colaboração Yjs do documento — autorizado pelo token na URL do WebSocket
-// (?token=). O convidado escolhe um nome na entrada; a cor é estável por hash.
+// View de edição AO VIVO via link público "live-edit". Mostra o MESMO split
+// doc+canvas do editor autenticado: documento Yjs (canal hdoc:) + canvas
+// (canal hcanvas:), ambos autorizados pelo token na URL do WebSocket (?token=).
+// O convidado escolhe um nome na entrada; a cor é estável por hash.
 
 const GUEST_ID_KEY = "kindraw:guest-id";
 const GUEST_NAME_KEY = "kindraw:guest-name";
 
-// id estável por navegador (gera 1x) — base da cor de presença do convidado.
 const getGuestId = () => {
   try {
     const stored = window.localStorage.getItem(GUEST_ID_KEY);
@@ -50,12 +58,29 @@ export const HybridLiveShareView = ({
   const guestId = useMemo(getGuestId, []);
   const color = useMemo(() => colorForUser(guestId), [guestId]);
 
-  // Tela de entrada: convidado confirma o nome antes de entrar na sessão.
   const [name, setName] = useState(getStoredName);
   const [entered, setEntered] = useState(() => getStoredName().length > 0);
 
   const [provider, setProvider] = useState<KindrawYjsProvider | null>(null);
   const providerRef = useRef<KindrawYjsProvider | null>(null);
+  const excalidrawAPIRef = useRef<ExcalidrawImperativeAPI | null>(null);
+
+  // canvas ao vivo: o canal hcanvas usa a roomKey do drawing, entregue só em
+  // link live-edit (ver getPublicItem). O token autoriza o WS.
+  const canvasRoomKey = hybrid?.drawing.collaborationRoom?.roomKey ?? null;
+  const canvasCollab = useCanvasCollab({
+    enabled: entered && Boolean(hybrid) && Boolean(canvasRoomKey),
+    roomId: hybrid ? `hcanvas:${hybrid.id}` : "",
+    roomKey: canvasRoomKey,
+    token: shareToken,
+    profile: {
+      name: getStoredName() || "Convidado",
+      userId: guestId,
+      avatarUrl: null,
+      githubLogin: null,
+    },
+    excalidrawAPIRef,
+  });
 
   useEffect(() => {
     if (!hybrid || !entered) {
@@ -76,7 +101,6 @@ export const HybridLiveShareView = ({
     providerRef.current = p;
     setProvider(p);
 
-    // idle/grace simples p/ o convidado
     let idleTimer: number | null = null;
     const goActive = () => {
       p.setIdle(false);
@@ -103,6 +127,20 @@ export const HybridLiveShareView = ({
   }, [hybrid?.id, shareToken, entered, color, guestId]);
 
   const presence = usePresence(provider);
+
+  // repassa os colaboradores do canvas p/ o Excalidraw renderizar cursores.
+  useEffect(() => {
+    excalidrawAPIRef.current?.updateScene({
+      collaborators: canvasCollab.collaborators,
+    });
+  }, [canvasCollab.collaborators]);
+
+  const onCanvasChange = useMemo<NonNullable<ExcalidrawProps["onChange"]>>(
+    () => (elements) => {
+      canvasCollab.broadcastScene(elements);
+    },
+    [canvasCollab],
+  );
 
   if (!hybrid) {
     return (
@@ -162,32 +200,64 @@ export const HybridLiveShareView = ({
   }
 
   return (
-    <div className="kindraw-share-shell">
-      <header className="kindraw-public-view__header kindraw-public-view__header--live">
-        <div>
+    <div className="kindraw-editor-shell kindraw-hybrid-shell kindraw-live-share">
+      <header className="kindraw-editor-header">
+        <div className="kindraw-editor-header__leading">
           <span className="kindraw-eyebrow">Edição ao vivo</span>
-          <h1>{itemResponse.item.title}</h1>
+          <span className="kindraw-editor-crumb">{itemResponse.item.title}</span>
         </div>
-        <PresenceFacepile users={presence} />
+        <div className="kindraw-editor-header__trailing">
+          <PresenceFacepile users={presence} />
+        </div>
       </header>
 
-      <section className="kindraw-share-shell__content">
-        <div className="kindraw-hybrid-doc kindraw-hybrid-doc--live">
-          <div className="kindraw-hybrid-doc__editor kindraw-hybrid-doc__editor--live">
-            {provider ? (
-              <RichTextEditor
-                collab={{ provider, fieldName: "default" }}
-                onChange={() => undefined}
-                placeholder="Escreva em conjunto…"
-                seedMarkdown={itemResponse.content}
-                value={itemResponse.content}
-              />
-            ) : (
-              <p className="kindraw-loading-shell">Conectando à sessão…</p>
-            )}
+      <div className="kindraw-hybrid-shell__body kindraw-hybrid-shell__body--both">
+        <section className="kindraw-hybrid-shell__document">
+          <div className="kindraw-hybrid-doc kindraw-hybrid-doc--live">
+            <div className="kindraw-hybrid-doc__editor kindraw-hybrid-doc__editor--live">
+              {provider ? (
+                <RichTextEditor
+                  collab={{ provider, fieldName: "default" }}
+                  onChange={() => undefined}
+                  placeholder="Escreva em conjunto…"
+                  seedMarkdown={itemResponse.content}
+                  value={itemResponse.content}
+                />
+              ) : (
+                <p className="kindraw-loading-shell">Conectando à sessão…</p>
+              )}
+            </div>
           </div>
+        </section>
+        <div className="kindraw-hybrid-shell__divider" aria-hidden="true">
+          <i />
+          <i />
+          <i />
         </div>
-      </section>
+        <section className="kindraw-hybrid-shell__canvas">
+          <Excalidraw
+            onExcalidrawAPI={(api: ExcalidrawImperativeAPI) => {
+              excalidrawAPIRef.current = api;
+            }}
+            initialData={createPublicDrawingInitialData(
+              hybrid.drawing.content,
+            )}
+            isCollaborating={canvasCollab.isConnected}
+            onChange={onCanvasChange}
+            onPointerUpdate={canvasCollab.onPointerUpdate}
+            UIOptions={{
+              canvasActions: {
+                clearCanvas: false,
+                export: false,
+                loadScene: false,
+                saveAsImage: false,
+                saveToActiveFile: false,
+                toggleTheme: false,
+              },
+            }}
+          />
+        </section>
+      </div>
     </div>
   );
 };

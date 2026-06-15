@@ -129,10 +129,18 @@ const base64ToUint8Array = (value: string) => {
 
 const base64ToArrayBuffer = (value: string) => base64ToUint8Array(value).buffer;
 
-const buildWebSocketUrl = (baseUrl: string, roomId: string) => {
+const buildWebSocketUrl = (
+  baseUrl: string,
+  roomId: string,
+  token?: string | null,
+) => {
   const resolvedBaseUrl = baseUrl || window.location.origin;
   const url = new URL(`/api/collab/rooms/${roomId}/ws`, resolvedBaseUrl);
   url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
+  // token de link live-edit: autoriza o convidado (sem cookie de sessão) no WS.
+  if (token) {
+    url.searchParams.set("token", token);
+  }
   return url.toString();
 };
 
@@ -167,6 +175,7 @@ export class KindrawCollabSocket implements KindrawCollabTransport {
   private readonly roomId: string;
   private readonly baseUrl: string;
   private readonly profile: KindrawCollabProfile;
+  private readonly token: string | null;
   private socket: WebSocket;
   private readonly listeners = new Map<
     string,
@@ -187,16 +196,20 @@ export class KindrawCollabSocket implements KindrawCollabTransport {
     roomId: string;
     profile: KindrawCollabProfile;
     baseUrl: string;
+    token?: string | null;
   }) {
     this.roomId = opts.roomId;
     this.baseUrl = opts.baseUrl;
     this.profile = opts.profile;
+    this.token = opts.token ?? null;
     this.socket = this.connect();
     this.setupVisibilityHandler();
   }
 
   private connect(): WebSocket {
-    const ws = new WebSocket(buildWebSocketUrl(this.baseUrl, this.roomId));
+    const ws = new WebSocket(
+      buildWebSocketUrl(this.baseUrl, this.roomId, this.token),
+    );
 
     ws.addEventListener("open", () => {
       this.connected = true;

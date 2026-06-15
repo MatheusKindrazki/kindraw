@@ -142,6 +142,8 @@ export type KindrawPublicItemResponse = {
     drawing: {
       item: Pick<KindrawItem, "id" | "kind" | "title" | "updatedAt">;
       content: string;
+      // Presente só em link live-edit: chave do canal de canvas ao vivo.
+      collaborationRoom?: KindrawCollaborationRoom | null;
     };
   };
   // Modo do link: "read" (leitura) ou "live-edit" (entra na colaboração ao vivo).

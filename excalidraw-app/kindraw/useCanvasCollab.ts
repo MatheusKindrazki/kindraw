@@ -76,8 +76,9 @@ export const useCanvasCollab = (opts: {
   roomKey: string | null; // chave AES (base64/JWK.k) do drawing item
   profile: CanvasCollabProfile;
   excalidrawAPIRef: React.MutableRefObject<ExcalidrawImperativeAPI | null>;
+  token?: string | null; // token de link live-edit (convidado sem sessão)
 }): CanvasCollab => {
-  const { enabled, roomId, roomKey, profile, excalidrawAPIRef } = opts;
+  const { enabled, roomId, roomKey, profile, excalidrawAPIRef, token } = opts;
   const socketRef = useRef<KindrawCollabSocket | null>(null);
   const [collaborators, setCollaborators] = useState<
     Map<SocketId, Collaborator>
@@ -99,6 +100,7 @@ export const useCanvasCollab = (opts: {
     const socket = new KindrawCollabSocket({
       roomId,
       baseUrl: getApiBaseUrl(),
+      token,
       profile: {
         username: profile.name,
         avatarUrl: profile.avatarUrl,
@@ -259,7 +261,7 @@ export const useCanvasCollab = (opts: {
       setIsConnected(false);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [enabled, roomId, roomKey]);
+  }, [enabled, roomId, roomKey, token]);
 
   // cursor local → broadcast volátil throttled (~33ms)
   const onPointerUpdate = useMemo<
