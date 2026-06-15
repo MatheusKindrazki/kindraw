@@ -847,9 +847,21 @@ export const routeRequest = async (request: Request, env: Env) => {
     }
 
     if (pathname.endsWith("/share-links") && request.method === "POST") {
+      // body é opcional: { access?: "read" | "live-edit" }. Sem body → "read".
+      const body = await request
+        .json()
+        .catch(() => ({}) as { access?: string });
+      const access =
+        (body as { access?: string }).access === "live-edit"
+          ? "live-edit"
+          : "read";
       return json(
         {
-          shareLink: await store.createHybridShareLink(auth.user.id, hybridId),
+          shareLink: await store.createHybridShareLink(
+            auth.user.id,
+            hybridId,
+            access,
+          ),
         },
         { status: 201 },
       );

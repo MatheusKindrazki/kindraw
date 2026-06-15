@@ -3,14 +3,16 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { buildPublicShareUrl } from "./api";
 import { KindrawIcon } from "./icons";
 
-import type { KindrawShareLink } from "./types";
+import type { KindrawShareLink, KindrawShareLinkAccess } from "./types";
 
 type ShareLinksPanelProps = {
   shareLinks: KindrawShareLink[];
-  onCreateShareLink: () => Promise<void> | void;
+  onCreateShareLink: (access?: KindrawShareLinkAccess) => Promise<void> | void;
   onRevokeShareLink: (shareLinkId: string) => Promise<void> | void;
   busy?: boolean;
   buildShareUrl?: (token: string) => string;
+  /** Quando true, exibe o seletor de modo do link (leitura / edição ao vivo). */
+  supportsLiveEdit?: boolean;
   /** Quando definido, exibe a linha "Sessão ao vivo" no popover. */
   liveSessionActive?: boolean;
   onToggleLiveSession?: () => Promise<void> | void;
@@ -27,6 +29,7 @@ export const ShareLinksPanel = ({
   onRevokeShareLink,
   busy,
   buildShareUrl = buildPublicShareUrl,
+  supportsLiveEdit,
   liveSessionActive,
   onToggleLiveSession,
 }: ShareLinksPanelProps) => {
@@ -137,26 +140,49 @@ export const ShareLinksPanel = ({
           </div>
 
           {activeShareLink && publicUrl ? (
-            <div className="kindraw-linkbox">
-              <a href={publicUrl} rel="noreferrer" target="_blank">
-                {publicUrl.replace(/^https?:\/\//, "")}
-              </a>
-              <button
-                className="kindraw-btn kindraw-btn--soft kindraw-btn--sm"
-                onClick={() => void handleCopy()}
-                type="button"
-              >
-                {copied ? (
-                  <>
-                    Copiado <KindrawIcon name="check" size={13} />
-                  </>
-                ) : (
-                  <>
-                    <KindrawIcon name="copy" size={14} /> Copiar
-                  </>
-                )}
-              </button>
-            </div>
+            <>
+              {supportsLiveEdit ? (
+                <div className="kindraw-share__access">
+                  <label className="kindraw-share__access-label">
+                    Permissão do link
+                  </label>
+                  <select
+                    aria-label="Permissão do link"
+                    className="kindraw-sharemodal__roleselect"
+                    disabled={busy}
+                    onChange={(event) =>
+                      void onCreateShareLink(
+                        event.target.value as KindrawShareLinkAccess,
+                      )
+                    }
+                    value={activeShareLink.access || "read"}
+                  >
+                    <option value="read">Somente leitura</option>
+                    <option value="live-edit">Pode editar ao vivo</option>
+                  </select>
+                </div>
+              ) : null}
+              <div className="kindraw-linkbox">
+                <a href={publicUrl} rel="noreferrer" target="_blank">
+                  {publicUrl.replace(/^https?:\/\//, "")}
+                </a>
+                <button
+                  className="kindraw-btn kindraw-btn--soft kindraw-btn--sm"
+                  onClick={() => void handleCopy()}
+                  type="button"
+                >
+                  {copied ? (
+                    <>
+                      Copiado <KindrawIcon name="check" size={13} />
+                    </>
+                  ) : (
+                    <>
+                      <KindrawIcon name="copy" size={14} /> Copiar
+                    </>
+                  )}
+                </button>
+              </div>
+            </>
           ) : null}
 
           {onToggleLiveSession ? (

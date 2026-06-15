@@ -445,27 +445,36 @@ export const HybridEditorPage = ({
     }
   }, [hybridId, onTreeRefresh, response, title]);
 
-  const handleCreateShareLink = useCallback(async () => {
-    try {
-      const shareResponse = await createHybridShareLink(hybridId);
+  const handleCreateShareLink = useCallback(
+    async (access: "read" | "live-edit" = "read") => {
+      try {
+        const shareResponse = await createHybridShareLink(hybridId, access);
 
-      setResponse((current) =>
-        current
-          ? {
-              ...current,
-              hybrid: {
-                ...current.hybrid,
-                shareLinks: [shareResponse.shareLink],
-              },
-            }
-          : current,
-      );
-      setStatusMessage("Link publico criado.");
-      await onTreeRefresh();
-    } catch (error) {
-      setStatusMessage(getErrorMessage(error, "Falha ao criar link publico."));
-    }
-  }, [hybridId, onTreeRefresh]);
+        setResponse((current) =>
+          current
+            ? {
+                ...current,
+                hybrid: {
+                  ...current.hybrid,
+                  shareLinks: [shareResponse.shareLink],
+                },
+              }
+            : current,
+        );
+        setStatusMessage(
+          access === "live-edit"
+            ? "Link de edição ao vivo criado."
+            : "Link publico criado.",
+        );
+        await onTreeRefresh();
+      } catch (error) {
+        setStatusMessage(
+          getErrorMessage(error, "Falha ao criar link publico."),
+        );
+      }
+    },
+    [hybridId, onTreeRefresh],
+  );
 
   const handleRevokeShareLink = useCallback(
     async (shareLinkId: string) => {
@@ -1015,6 +1024,7 @@ export const HybridEditorPage = ({
             onCreateShareLink={handleCreateShareLink}
             onRevokeShareLink={handleRevokeShareLink}
             shareLinks={response.hybrid.shareLinks}
+            supportsLiveEdit
           />
         </div>
       </header>

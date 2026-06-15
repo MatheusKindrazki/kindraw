@@ -1624,6 +1624,21 @@
 }
 
 /* Linkbox com URL truncada + Copiar */
+/* Seletor de permissão do link (leitura / edição ao vivo) no popover */
+.kindraw-share__access {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 6px 0 2px;
+}
+
+.kindraw-share__access-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--kd-muted);
+}
+
 .kindraw-linkbox {
   display: flex;
   align-items: center;

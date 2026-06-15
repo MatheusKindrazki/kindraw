@@ -21,6 +21,7 @@ import type {
   KindrawPublicItemResponse,
   KindrawSession,
   KindrawShareLink,
+  KindrawShareLinkAccess,
   KindrawShareRole,
   KindrawFolderShare,
   KindrawHybridShare,
@@ -93,6 +94,8 @@ type ShareLinkRow = {
   created_by_user_id: string;
   created_at: string;
   revoked_at: string | null;
+  // coluna adicionada em 0009 (DEFAULT 'read'); null em rows legados em memória.
+  access?: KindrawShareLinkAccess | null;
 };
 
 type HybridItemRow = {
@@ -151,6 +154,7 @@ const toShareLink = (row: ShareLinkRow): ShareLinkRecord => ({
   createdByUserId: row.created_by_user_id,
   createdAt: row.created_at,
   revokedAt: row.revoked_at,
+  access: row.access === "live-edit" ? "live-edit" : "read",
 });
 
 const toKindrawShareLink = (row: ShareLinkRow): KindrawShareLink => ({
@@ -158,6 +162,7 @@ const toKindrawShareLink = (row: ShareLinkRow): KindrawShareLink => ({
   token: row.token,
   createdAt: row.created_at,
   revokedAt: row.revoked_at,
+  access: row.access === "live-edit" ? "live-edit" : "read",
 });
 
 const toHybridLink = (
@@ -330,6 +335,7 @@ const groupShareLinks = (shareLinks: ShareLinkRecord[]) => {
         token: shareLink.token,
         createdAt: shareLink.createdAt,
         revokedAt: shareLink.revokedAt,
+        access: shareLink.access ?? "read",
       },
     ]);
   }
@@ -2132,9 +2138,13 @@ export class KindrawStore {
       .run();
   }
 
-  async createHybridShareLink(ownerId: string, hybridId: string) {
+  async createHybridShareLink(
+    ownerId: string,
+    hybridId: string,
+    access: KindrawShareLinkAccess = "read",
+  ) {
     const hybrid = await this.requireHybridItem(ownerId, hybridId);
-    return this.createShareLink(ownerId, hybrid.docItemId);
+    return this.createShareLink(ownerId, hybrid.docItemId, access);
   }
 
   async enableItemCollaboration(
@@ -2188,8 +2198,15 @@ export class KindrawStore {
       .run();
   }
 
-  async createShareLink(ownerId: string, itemId: string) {
+  async createShareLink(
+    ownerId: string,
+    itemId: string,
+    access: KindrawShareLinkAccess = "read",
+  ) {
     await this.requireItem(ownerId, itemId);
+    if (access !== "read" && access !== "live-edit") {
+      throw new HttpError(400, "Invalid share link access.");
+    }
     const activeLinks = await this.listActiveShareLinksForItem(itemId);
 
     if (activeLinks.length) {
@@ -2204,7 +2221,14 @@ export class KindrawStore {
         .bind(isoNow(), itemId, currentLink.id)
         .run();
 
-      return toKindrawShareLink(currentLink);
+      // Reusa o link ativo, mas alterna o modo de acesso para o pedido (permite
+      // promover um link de leitura a edição-ao-vivo e vice-versa).
+      await this.db
+        .prepare("UPDATE share_links SET access = ? WHERE id = ?")
+        .bind(access, currentLink.id)
+        .run();
+
+      return { ...toKindrawShareLink(currentLink), access };
     }
 
     const shareLinkId = crypto.randomUUID();
@@ -2213,10 +2237,10 @@ export class KindrawStore {
 
     await this.db
       .prepare(
-        `INSERT INTO share_links (id, item_id, token, created_by_user_id, created_at, revoked_at)
-         VALUES (?, ?, ?, ?, ?, NULL)`,
+        `INSERT INTO share_links (id, item_id, token, created_by_user_id, created_at, revoked_at, access)
+         VALUES (?, ?, ?, ?, ?, NULL, ?)`,
       )
-      .bind(shareLinkId, itemId, token, ownerId, createdAt)
+      .bind(shareLinkId, itemId, token, ownerId, createdAt, access)
       .run();
 
     return {
@@ -2224,6 +2248,37 @@ export class KindrawStore {
       token,
       createdAt,
       revokedAt: null,
+      access,
+    };
+  }
+
+  // Resolve um token de link público para { hybridId, access } — usado pela
+  // autorização do WebSocket de colaboração. Retorna null se o token é inválido,
+  // revogado, ou não aponta para um híbrido.
+  async resolveHybridShareLink(
+    token: string,
+  ): Promise<{ hybridId: string; access: KindrawShareLinkAccess } | null> {
+    const row = await this.db
+      .prepare(
+        `SELECT share_links.item_id AS item_id, share_links.access AS access
+         FROM share_links
+         WHERE share_links.token = ? AND share_links.revoked_at IS NULL`,
+      )
+      .bind(token)
+      .first<{ item_id: string; access: KindrawShareLinkAccess | null }>();
+
+    if (!row) {
+      return null;
+    }
+
+    const hybridRow = await this.findHybridRowByItemId(undefined, row.item_id);
+    if (!hybridRow) {
+      return null;
+    }
+
+    return {
+      hybridId: hybridRow.id,
+      access: row.access === "live-edit" ? "live-edit" : "read",
     };
   }
 

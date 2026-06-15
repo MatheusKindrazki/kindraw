@@ -42,11 +42,15 @@ export type KindrawFolder = {
   shared?: KindrawFolderSharedMeta;
 };
 
+export type KindrawShareLinkAccess = "read" | "live-edit";
+
 export type KindrawShareLink = {
   id: string;
   token: string;
   createdAt: string;
   revokedAt: string | null;
+  // Default "read" para links antigos.
+  access?: KindrawShareLinkAccess;
 };
 
 // API token shown when listing (no secret). Revocation is keyed by `prefix`.

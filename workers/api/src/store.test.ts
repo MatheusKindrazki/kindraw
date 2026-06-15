@@ -42,6 +42,7 @@ type ShareLinkRow = {
   created_by_user_id: string;
   created_at: string;
   revoked_at: string | null;
+  access?: "read" | "live-edit" | null;
 };
 
 type HybridItemRow = {
@@ -385,6 +386,19 @@ class FakeStatement implements D1PreparedStatement {
         );
       });
       return (shareLink ? { item_id: shareLink.item_id } : null) as T | null;
+    }
+
+    if (
+      query ===
+      "SELECT share_links.item_id AS item_id, share_links.access AS access FROM share_links WHERE share_links.token = ? AND share_links.revoked_at IS NULL"
+    ) {
+      const [token] = this.values as [string];
+      const shareLink = this.state.shareLinks.find(
+        (entry) => entry.token === token && entry.revoked_at === null,
+      );
+      return (shareLink
+        ? { item_id: shareLink.item_id, access: shareLink.access ?? "read" }
+        : null) as T | null;
     }
 
     if (
@@ -1233,14 +1247,15 @@ class FakeStatement implements D1PreparedStatement {
 
     if (
       query ===
-      "INSERT INTO share_links (id, item_id, token, created_by_user_id, created_at, revoked_at) VALUES (?, ?, ?, ?, ?, NULL)"
+      "INSERT INTO share_links (id, item_id, token, created_by_user_id, created_at, revoked_at, access) VALUES (?, ?, ?, ?, ?, NULL, ?)"
     ) {
-      const [id, itemId, token, userId, createdAt] = this.values as [
+      const [id, itemId, token, userId, createdAt, access] = this.values as [
         string,
         string,
         string,
         string,
         string,
+        "read" | "live-edit",
       ];
       this.state.shareLinks.push({
         id,
@@ -1249,7 +1264,22 @@ class FakeStatement implements D1PreparedStatement {
         created_by_user_id: userId,
         created_at: createdAt,
         revoked_at: null,
+        access,
       });
+      return {};
+    }
+
+    if (query === "UPDATE share_links SET access = ? WHERE id = ?") {
+      const [access, shareLinkId] = this.values as [
+        "read" | "live-edit",
+        string,
+      ];
+      const shareLink = this.state.shareLinks.find(
+        (entry) => entry.id === shareLinkId,
+      );
+      if (shareLink) {
+        shareLink.access = access;
+      }
       return {};
     }
 
@@ -1876,6 +1906,7 @@ describe("KindrawStore", () => {
       token: "00000000000000000000000000000202",
       createdAt: "2026-03-09T12:00:00.000Z",
       revokedAt: null,
+      access: "read",
     });
 
     const publicItem = await store.getPublicItem(
@@ -2152,6 +2183,7 @@ describe("KindrawStore", () => {
       token: "token-new",
       createdAt: "2026-03-09T11:00:00.000Z",
       revokedAt: null,
+      access: "read",
     });
 
     const tree = await store.getTree("user-1");
@@ -2168,6 +2200,54 @@ describe("KindrawStore", () => {
       (entry) => entry.item_id === "item-1" && entry.revoked_at === null,
     );
     expect(activeLinks).toEqual([]);
+  });
+
+  it("cria link de edição ao vivo e resolve o token para o híbrido + access", async () => {
+    const { store } = createStore({
+      items: [
+        {
+          id: "doc-1",
+          owner_id: "user-1",
+          folder_id: null,
+          kind: "doc",
+          title: "Nota viva",
+          content_blob_key: "users/user-1/items/doc-1/current.md",
+          archived_at: null,
+          collaboration_room_key: null,
+          collaboration_enabled_at: null,
+          created_at: "2026-03-09T10:00:00.000Z",
+          updated_at: "2026-03-09T10:00:00.000Z",
+        },
+      ],
+      hybridItems: [
+        {
+          id: "hyb-1",
+          owner_id: "user-1",
+          doc_item_id: "doc-1",
+          drawing_item_id: "draw-1",
+          default_view: "both",
+          created_at: "2026-03-09T10:00:00.000Z",
+          updated_at: "2026-03-09T10:00:00.000Z",
+        },
+      ],
+      shareLinks: [
+        {
+          id: "link-live",
+          item_id: "doc-1",
+          token: "tok-live",
+          created_by_user_id: "user-1",
+          created_at: "2026-03-09T10:00:00.000Z",
+          revoked_at: null,
+          access: "live-edit",
+        },
+      ],
+    });
+
+    const resolved = await store.resolveHybridShareLink("tok-live");
+    expect(resolved).toEqual({ hybridId: "hyb-1", access: "live-edit" });
+
+    // token inexistente → null
+    expect(await store.resolveHybridShareLink("nope")).toBeNull();
   });
 });
 

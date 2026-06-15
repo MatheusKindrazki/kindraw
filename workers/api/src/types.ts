@@ -46,11 +46,16 @@ export type KindrawFolder = {
   shared?: KindrawFolderSharedMeta;
 };
 
+// Modo de acesso de um link público: leitura, ou edição-ao-vivo (colaboração).
+export type KindrawShareLinkAccess = "read" | "live-edit";
+
 export type KindrawShareLink = {
   id: string;
   token: string;
   createdAt: string;
   revokedAt: string | null;
+  // Default "read" para links antigos (coluna com DEFAULT 'read').
+  access?: KindrawShareLinkAccess;
 };
 
 export type KindrawCollaborationRoom = {

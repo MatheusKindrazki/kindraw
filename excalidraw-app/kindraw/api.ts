@@ -13,6 +13,7 @@ import type {
   KindrawItemResponse,
   KindrawPublicItemResponse,
   KindrawSession,
+  KindrawShareLinkAccess,
   KindrawShareRole,
   KindrawTreeResponse,
   KindrawUser,
@@ -310,16 +311,21 @@ export const createShareLink = (itemId: string) =>
     method: "POST",
   });
 
-export const createHybridShareLink = (hybridId: string) =>
+export const createHybridShareLink = (
+  hybridId: string,
+  access: KindrawShareLinkAccess = "read",
+) =>
   requestJson<{
     shareLink: {
       id: string;
       token: string;
       createdAt: string;
       revokedAt: string | null;
+      access: KindrawShareLinkAccess;
     };
   }>(`/api/hybrid-items/${hybridId}/share-links`, {
     method: "POST",
+    body: { access },
   });
 
 export const enableCollaborationRoom = (itemId: string) =>
