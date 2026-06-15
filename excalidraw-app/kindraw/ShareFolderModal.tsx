@@ -8,7 +8,7 @@ import {
   updateFolderShareRole,
 } from "./api";
 import { KindrawIcon } from "./icons";
-import { userHandle } from "./identity";
+import { userHandle, userSubtitle } from "./identity";
 import { getErrorMessage } from "./utils";
 
 import type { ChangeEvent } from "react";
@@ -153,7 +153,7 @@ export const ShareFolderModal = ({
 
   const handleSelectUser = useCallback((user: KindrawUser) => {
     setSelectedUser(user);
-    setQuery(`@${userHandle(user)}`);
+    setQuery(userHandle(user));
     setResultsOpen(false);
     setInviteError(null);
   }, []);
@@ -261,11 +261,8 @@ export const ShareFolderModal = ({
         <div className="kindraw-sharemodal__invite" ref={inviteRef}>
           <div className="kindraw-sharemodal__invite-row">
             <div className="kindraw-sharemodal__field">
-              <span aria-hidden="true" className="kindraw-sharemodal__at">
-                @
-              </span>
               <input
-                aria-label="Convidar por login do GitHub"
+                aria-label="Convidar por nome, usuário ou e-mail"
                 autoComplete="off"
                 className="kindraw-sharemodal__input"
                 onChange={handleQueryChange}
@@ -274,10 +271,10 @@ export const ShareFolderModal = ({
                     setResultsOpen(true);
                   }
                 }}
-                placeholder="login do GitHub"
+                placeholder="nome, @usuário ou e-mail"
                 ref={inputRef}
                 type="text"
-                value={query.replace(/^@/, "")}
+                value={query}
               />
             </div>
             <select
@@ -323,7 +320,7 @@ export const ShareFolderModal = ({
                       <KindrawPersonAvatar user={user} />
                       <span className="kindraw-sharemodal__result-text">
                         <strong>{user.name || userHandle(user)}</strong>
-                        <span>@{userHandle(user)}</span>
+                        <span>{userSubtitle(user)}</span>
                       </span>
                       {already ? (
                         <span className="kindraw-sharemodal__result-tag">
@@ -363,7 +360,7 @@ export const ShareFolderModal = ({
                       <strong>
                         {share.user.name || userHandle(share.user)}
                       </strong>
-                      <span>@{userHandle(share.user)}</span>
+                      <span>{userSubtitle(share.user)}</span>
                     </span>
                     <select
                       aria-label={`Papel de @${userHandle(share.user)}`}

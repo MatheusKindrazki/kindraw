@@ -58,6 +58,19 @@ export const userHandle = (user: {
 }): string =>
   user.githubLogin || user.email?.split("@")[0] || user.name || "user";
 
+// Subtítulo de exibição (linha secundária na lista de pessoas): "@login" para
+// contas GitHub, o e-mail completo para contas só-Google. Evita mostrar
+// "@parte-local-do-email", que confunde com um handle GitHub real.
+export const userSubtitle = (user: {
+  githubLogin: string | null;
+  email?: string | null;
+}): string => {
+  if (user.githubLogin) {
+    return `@${user.githubLogin}`;
+  }
+  return user.email || "";
+};
+
 // Identidade de um participante normalizada para a UI de presença.
 export type PresenceUser = {
   // chave estável p/ dedupe (userId quando logado, senão o socket/cliente id)
