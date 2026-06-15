@@ -134,6 +134,27 @@ export const RichTextEditor = ({
             CollaborationCaret.configure({
               provider: collab.provider,
               user: collab.user,
+              // render customizado: esconde carets sem nome válido (fantasmas /
+              // peers de versão antiga que mostrariam "User: <clientID>") e
+              // desenha um caret nomeado limpo p/ os válidos.
+              render: (u: { name?: string | null; color?: string | null }) => {
+                const caret = document.createElement("span");
+                const name = (u.name || "").trim();
+                if (!name || /^User:\s/i.test(name)) {
+                  // peer sem identidade real → caret invisível
+                  caret.style.display = "none";
+                  return caret;
+                }
+                caret.classList.add("collaboration-carets__caret");
+                const color = u.color || "#888";
+                caret.setAttribute("style", `border-color: ${color}`);
+                const label = document.createElement("div");
+                label.classList.add("collaboration-carets__label");
+                label.setAttribute("style", `background-color: ${color}`);
+                label.textContent = name;
+                caret.appendChild(label);
+                return caret;
+              },
             }),
           ]
         : []),
