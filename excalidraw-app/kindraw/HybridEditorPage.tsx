@@ -31,6 +31,8 @@ import {
   updateItemContent,
   buildPublicShareUrl,
 } from "./api";
+import { AppSidebar } from "../components/AppSidebar";
+
 import { parseDrawingContent } from "./content";
 import { colorForUser } from "./identity";
 import { HybridMarkdownPane } from "./HybridMarkdownPane";
@@ -168,6 +170,10 @@ export const HybridEditorPage = ({
   // Chave de cifra do canal de canvas (vem da collab room do drawing item).
   const [canvasRoomKey, setCanvasRoomKey] = useState<string | null>(null);
   const excalidrawAPIRef = useRef<ExcalidrawImperativeAPI | null>(null);
+  // state (além da ref) p/ o AppSidebar (menu de ícones/templates) reagir quando
+  // a API do Excalidraw fica pronta.
+  const [excalidrawAPI, setExcalidrawAPI] =
+    useState<ExcalidrawImperativeAPI | null>(null);
   const splitBodyRef = useRef<HTMLDivElement | null>(null);
   const headerMenuRef = useRef<HTMLDivElement | null>(null);
   const isNarrow = useNarrowLayout();
@@ -993,7 +999,6 @@ export const HybridEditorPage = ({
 
   const documentPane = (
     <section className="kindraw-hybrid-shell__document">
-      <h2 className="kindraw-hybrid-doc__title">{response.hybrid.title}</h2>
       <HybridMarkdownPane
         activeSectionId={activeSectionId}
         canLinkSelection={showCanvas}
@@ -1037,6 +1042,7 @@ export const HybridEditorPage = ({
         key={response.drawing.item.id}
         onExcalidrawAPI={(api) => {
           excalidrawAPIRef.current = api;
+          setExcalidrawAPI(api);
         }}
         initialData={drawingInitialData}
         isCollaborating={canvasCollab.isConnected}
@@ -1053,7 +1059,19 @@ export const HybridEditorPage = ({
         }}
         onPointerUpdate={canvasCollab.onPointerUpdate}
         onLinkOpen={handleCanvasLinkOpen}
-      />
+      >
+        {/* Menu "Inserir" (ícones + templates/fluxogramas) — mesmo do editor de
+            canvas. Desacoplado: só usa excalidrawAPI + route. */}
+        <AppSidebar
+          excalidrawAPI={excalidrawAPI}
+          route={{
+            kind: "hybrid",
+            hybridId,
+            view: initialView,
+            sectionId: activeSectionId,
+          }}
+        />
+      </Excalidraw>
     </section>
   );
 

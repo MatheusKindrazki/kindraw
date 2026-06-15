@@ -2728,10 +2728,13 @@
 
 /* Modo colaborativo full-doc: o editor preenche TODA a altura do painel do
    documento (sem box recortado, sem height fixo nem alça de resize). A cadeia
-   de flex vai do painel → doc → editor → surface, todos esticando. */
+   de flex vai do painel → doc → editor → surface, todos esticando.
+   Full-bleed (sem card): zera o padding do painel e a borda do editor, deixando
+   o conteúdo ocupar tudo (estilo Notion/Eraser). O respiro fica no __content. */
 .kindraw-hybrid-shell__document:has(.kindraw-hybrid-doc--live) {
   display: flex;
   flex-direction: column;
+  padding: 0;
 }
 
 .kindraw-hybrid-doc--live {
@@ -2748,7 +2751,8 @@
   flex-direction: column;
 }
 
-/* sobrescreve o surface de seção (height fixo + resize) p/ esticar full-height */
+/* sobrescreve o surface de seção (height fixo + resize) p/ esticar full-height.
+   Full-bleed: sem borda/radius de "card", encosta nas laterais do painel. */
 .kindraw-hybrid-doc__editor--live .kindraw-rte {
   flex: 1;
   min-height: 0;
@@ -2756,6 +2760,9 @@
   flex-direction: column;
   height: auto;
   overflow: hidden;
+  border: none;
+  border-radius: 0;
+  background: var(--kd-surface-warm);
 }
 
 .kindraw-hybrid-doc__editor--live .kindraw-rte__surface {
@@ -2765,6 +2772,14 @@
   max-height: none;
   resize: none;
   overflow: auto;
+}
+
+/* respiro do conteúdo (já que o painel perdeu o padding no modo live) */
+.kindraw-hybrid-doc__editor--live .kindraw-rte__content {
+  max-width: 820px;
+  margin: 0 auto;
+  width: 100%;
+  padding: 32px 28px 80px;
 }
 
 /* Cursores/seleção de colaboração (Tiptap CollaborationCaret) */
