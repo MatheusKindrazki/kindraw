@@ -403,7 +403,7 @@ class FakeStatement implements D1PreparedStatement {
 
     if (
       query ===
-      "SELECT items.id, items.kind, items.title, items.updated_at, items.content_blob_key FROM share_links JOIN items ON items.id = share_links.item_id WHERE share_links.token = ? AND share_links.revoked_at IS NULL"
+      "SELECT items.id, items.kind, items.title, items.updated_at, items.content_blob_key, share_links.access AS access FROM share_links JOIN items ON items.id = share_links.item_id WHERE share_links.token = ? AND share_links.revoked_at IS NULL"
     ) {
       const [token] = this.values as [string];
       const shareLink = this.state.shareLinks.find(
@@ -427,6 +427,7 @@ class FakeStatement implements D1PreparedStatement {
         title: item.title,
         updated_at: item.updated_at,
         content_blob_key: item.content_blob_key,
+        access: shareLink.access ?? "read",
       } as T;
     }
 
@@ -1921,6 +1922,7 @@ describe("KindrawStore", () => {
       },
       content: "# Kindraw",
       hybrid: null,
+      access: "read",
     });
 
     await store.revokeShareLink(
@@ -2017,6 +2019,7 @@ describe("KindrawStore", () => {
           content: '{"elements":[]}',
         },
       },
+      access: "read",
     });
   });
 

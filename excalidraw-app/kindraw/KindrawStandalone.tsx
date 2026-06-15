@@ -9,6 +9,7 @@ import {
 } from "./api";
 import { DocEditorPage } from "./DocEditorPage";
 import { HybridEditorPage } from "./HybridEditorPage";
+import { HybridLiveShareView } from "./HybridLiveShareView";
 import { HybridPublicShareView } from "./HybridPublicShareView";
 import { createKindrawItemPageMeta, syncKindrawPageMeta } from "./pageMeta";
 import { isKindrawHybridItem } from "./types";
@@ -312,6 +313,14 @@ export const KindrawPublicSharePage = ({
 
   const effectiveSectionId =
     sectionId || new URLSearchParams(window.location.search).get("section");
+
+  // Link "pode editar ao vivo": entra na sessão de colaboração (editor Yjs),
+  // em vez da visualização read-only.
+  if (itemResponse.access === "live-edit") {
+    return (
+      <HybridLiveShareView itemResponse={itemResponse} shareToken={token} />
+    );
+  }
 
   return (
     <HybridPublicShareView

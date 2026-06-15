@@ -2369,7 +2369,7 @@ export class KindrawStore {
   async getPublicItem(token: string): Promise<KindrawPublicItemResponse> {
     const row = await this.db
       .prepare(
-        `SELECT items.id, items.kind, items.title, items.updated_at, items.content_blob_key
+        `SELECT items.id, items.kind, items.title, items.updated_at, items.content_blob_key, share_links.access AS access
          FROM share_links
          JOIN items ON items.id = share_links.item_id
          WHERE share_links.token = ? AND share_links.revoked_at IS NULL`,
@@ -2381,6 +2381,7 @@ export class KindrawStore {
         title: string;
         updated_at: string;
         content_blob_key: string;
+        access: KindrawShareLinkAccess | null;
       }>();
 
     if (!row) {
@@ -2437,6 +2438,7 @@ export class KindrawStore {
       },
       content,
       hybrid,
+      access: row.access === "live-edit" ? "live-edit" : "read",
     };
   }
 

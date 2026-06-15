@@ -144,6 +144,8 @@ export type KindrawPublicItemResponse = {
       content: string;
     };
   };
+  // Modo do link: "read" (leitura) ou "live-edit" (entra na colaboração ao vivo).
+  access: KindrawShareLinkAccess;
 };
 
 export type SessionRecord = {
