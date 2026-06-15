@@ -8,6 +8,7 @@ import {
 } from "react";
 
 import {
+  convertDrawingToHybrid,
   createHybridItem,
   createFolder,
   createItem,
@@ -709,6 +710,7 @@ const WorkspaceItemCard = ({
   onCloseMenu,
   onRename,
   onDelete,
+  onConvertToHybrid,
   selectionMode,
   selected,
   onToggleSelect,
@@ -720,6 +722,7 @@ const WorkspaceItemCard = ({
   onCloseMenu: () => void;
   onRename: () => void;
   onDelete: () => void;
+  onConvertToHybrid: () => void;
   selectionMode: boolean;
   selected: boolean;
   onToggleSelect: () => void;
@@ -799,6 +802,19 @@ const WorkspaceItemCard = ({
                 >
                   Renomear
                 </button>
+                {!isKindrawHybridItem(item) && item.kind === "drawing" ? (
+                  <button
+                    className="kindraw-menu__item"
+                    onClick={() => {
+                      onCloseMenu();
+                      onConvertToHybrid();
+                    }}
+                    role="menuitem"
+                    type="button"
+                  >
+                    Converter em documento híbrido
+                  </button>
+                ) : null}
                 <button
                   className="kindraw-menu__item kindraw-menu__item--danger"
                   onClick={() => {
@@ -855,6 +871,7 @@ const WorkspacePage = ({
   onRenameHybridItem,
   onRenameFolder,
   onRenameItem,
+  onConvertItemToHybrid,
   onShareFolder,
   onBulkDelete,
   onBulkMove,
@@ -875,6 +892,7 @@ const WorkspacePage = ({
   onRenameFolder: (folder: KindrawFolder) => void;
   onRenameItem: (item: KindrawItem) => void;
   onRenameHybridItem: (item: KindrawHybridItem) => void;
+  onConvertItemToHybrid: (item: KindrawItem) => void;
   onShareFolder: (folder: KindrawFolder) => void;
   onBulkDelete: (items: KindrawTreeItem[]) => Promise<void>;
   onBulkMove: (
@@ -1374,6 +1392,11 @@ const WorkspacePage = ({
                   ? onRenameHybridItem(item)
                   : onRenameItem(item)
               }
+              onConvertToHybrid={() => {
+                if (!isKindrawHybridItem(item) && item.kind === "drawing") {
+                  onConvertItemToHybrid(item);
+                }
+              }}
               onToggleMenu={() =>
                 setOpenMenuId(
                   openMenuId === `item:${item.id}` ? null : `item:${item.id}`,
@@ -1906,6 +1929,32 @@ export const KindrawApp = () => {
     [refreshTree, route, runMutation],
   );
 
+  const handleConvertItemToHybrid = useCallback(
+    (item: KindrawItem) => {
+      if (item.kind !== "drawing") {
+        return;
+      }
+      setDialog({
+        type: "confirm",
+        title: "Converter em documento híbrido",
+        message: `Transformar "${item.title}" em um documento híbrido? O canvas é mantido e um documento de texto é criado ao lado dele.`,
+        confirmLabel: "Converter",
+        onConfirm: () => {
+          void runMutation(async () => {
+            const response = await convertDrawingToHybrid(item.id);
+            await refreshTree();
+            navigateKindraw(
+              buildHybridPath(response.hybridId, {
+                view: "both",
+              }),
+            );
+          });
+        },
+      });
+    },
+    [refreshTree, runMutation],
+  );
+
   const handleRenameHybridItem = useCallback(
     (item: KindrawHybridItem) => {
       setDialog({
@@ -2271,6 +2320,7 @@ export const KindrawApp = () => {
               onRenameHybridItem={handleRenameHybridItem}
               onRenameFolder={handleRenameFolder}
               onRenameItem={handleRenameItem}
+              onConvertItemToHybrid={handleConvertItemToHybrid}
               onShareFolder={handleShareFolder}
               searchQuery={searchQuery}
               sharedView={sharedView}

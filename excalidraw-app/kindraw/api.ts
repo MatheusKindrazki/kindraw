@@ -188,6 +188,21 @@ export const createHybridItem = (input: {
     body: input,
   });
 
+// Converte um drawing existente em documento híbrido (cria um doc novo ligado
+// ao canvas atual). Devolve os ids do híbrido criado.
+export const convertDrawingToHybrid = (
+  drawingItemId: string,
+  input?: { title?: string },
+) =>
+  requestJson<{
+    hybridId: string;
+    docItemId: string;
+    drawingItemId: string;
+  }>(`/api/items/${drawingItemId}/convert-to-hybrid`, {
+    method: "POST",
+    body: input ?? {},
+  });
+
 export const getItem = (itemId: string) =>
   requestJson<KindrawItemResponse>(`/api/items/${itemId}`);
 

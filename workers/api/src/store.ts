@@ -1405,6 +1405,73 @@ export class KindrawStore {
     };
   }
 
+  /**
+   * Converte um drawing já existente em documento híbrido: cria um item `doc`
+   * vazio na mesma pasta e liga doc+drawing numa nova linha de hybrid_items,
+   * preservando o canvas como está. Devolve os ids do híbrido criado.
+   *
+   * Rejeita: item que não é drawing, e drawing que já faz parte de um híbrido
+   * (um drawing só pode pertencer a um híbrido por vez).
+   */
+  async convertDrawingToHybrid(
+    ownerId: string,
+    drawingItemId: string,
+    input?: { title?: string },
+  ) {
+    // Precisa ser escrita: dono ou editor da pasta do drawing.
+    const drawing = await this.requireItemWrite(ownerId, drawingItemId);
+
+    if (drawing.kind !== "drawing") {
+      throw new HttpError(400, "Only drawings can be converted to a hybrid.");
+    }
+
+    const existingHybrid = await this.findHybridRowByItemId(
+      undefined,
+      drawingItemId,
+    );
+    if (existingHybrid) {
+      throw new HttpError(
+        409,
+        "This drawing is already part of a hybrid document.",
+      );
+    }
+
+    const title = (input?.title || drawing.title).trim() || drawing.title;
+
+    // O doc novo herda a pasta do drawing e pertence a quem converte.
+    const docItemId = await this.createItem(ownerId, {
+      kind: "doc",
+      title,
+      folderId: drawing.folderId ?? null,
+      content: createInitialItemContent("doc", title),
+    });
+
+    const hybridId = crypto.randomUUID();
+    const now = isoNow();
+
+    await this.db
+      .prepare(
+        `INSERT INTO hybrid_items (
+           id,
+           owner_id,
+           doc_item_id,
+           drawing_item_id,
+           default_view,
+           created_at,
+           updated_at
+         )
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .bind(hybridId, ownerId, docItemId, drawingItemId, "both", now, now)
+      .run();
+
+    return {
+      hybridId,
+      docItemId,
+      drawingItemId,
+    };
+  }
+
   async getItem(ownerId: string, itemId: string): Promise<KindrawItemResponse> {
     // Leitura aberta a dono OU a quem tem qualquer share (viewer/editor) na
     // pasta do item. requireItemRead retorna 404 para recursos sem relação.

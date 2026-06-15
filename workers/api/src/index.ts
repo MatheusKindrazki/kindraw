@@ -940,6 +940,22 @@ export const routeRequest = async (request: Request, env: Env) => {
     });
   }
 
+  if (
+    pathname.startsWith("/api/items/") &&
+    pathname.endsWith("/convert-to-hybrid") &&
+    request.method === "POST"
+  ) {
+    const itemId = pathname
+      .replace("/api/items/", "")
+      .replace("/convert-to-hybrid", "");
+    const { auth, store } = await requireAuth(request, env);
+    const input = await readJson<{ title?: string }>(request);
+    return json(
+      await store.convertDrawingToHybrid(auth.user.id, itemId, input),
+      { status: 201 },
+    );
+  }
+
   if (pathname.startsWith("/api/items/") && pathname.endsWith("/meta")) {
     const itemId = pathname.replace("/api/items/", "").replace("/meta", "");
     const { auth, store } = await requireAuth(request, env);

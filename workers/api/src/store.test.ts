@@ -1265,6 +1265,117 @@ describe("KindrawStore", () => {
     uuidSpy.mockRestore();
   });
 
+  it("converte um drawing existente em hybrid criando um doc ao lado", async () => {
+    const uuidSpy = vi
+      .spyOn(crypto, "randomUUID")
+      .mockReturnValueOnce("00000000-0000-0000-0000-0000000000d1") // doc novo
+      .mockReturnValueOnce("00000000-0000-0000-0000-0000000000h1"); // hybrid
+    const { store, state, blobs } = createStore({
+      items: [
+        {
+          id: "draw-1",
+          owner_id: "user-1",
+          folder_id: null,
+          kind: "drawing",
+          title: "Fluxo do checkout",
+          content_blob_key: "users/user-1/items/draw-1/current.excalidraw",
+          archived_at: null,
+          collaboration_room_key: null,
+          collaboration_enabled_at: null,
+          created_at: "2026-03-09T10:00:00.000Z",
+          updated_at: "2026-03-09T10:00:00.000Z",
+        },
+      ],
+    });
+
+    const created = await store.convertDrawingToHybrid("user-1", "draw-1");
+
+    expect(created).toEqual({
+      hybridId: "00000000-0000-0000-0000-0000000000h1",
+      docItemId: "00000000-0000-0000-0000-0000000000d1",
+      drawingItemId: "draw-1",
+    });
+    // liga o doc novo ao DRAWING EXISTENTE (drawing preservado).
+    expect(state.hybridItems).toEqual([
+      {
+        id: "00000000-0000-0000-0000-0000000000h1",
+        owner_id: "user-1",
+        doc_item_id: "00000000-0000-0000-0000-0000000000d1",
+        drawing_item_id: "draw-1",
+        default_view: "both",
+        created_at: "2026-03-09T12:00:00.000Z",
+        updated_at: "2026-03-09T12:00:00.000Z",
+      },
+    ]);
+    // doc novo herda a pasta e o título do drawing.
+    expect(
+      blobs.objects.get(
+        "users/user-1/items/00000000-0000-0000-0000-0000000000d1/current.md",
+      ),
+    ).toBe("# Fluxo do checkout\n\n");
+
+    uuidSpy.mockRestore();
+  });
+
+  it("rejeita converter um item que não é drawing", async () => {
+    const { store } = createStore({
+      items: [
+        {
+          id: "doc-x",
+          owner_id: "user-1",
+          folder_id: null,
+          kind: "doc",
+          title: "Só um doc",
+          content_blob_key: "users/user-1/items/doc-x/current.md",
+          archived_at: null,
+          collaboration_room_key: null,
+          collaboration_enabled_at: null,
+          created_at: "2026-03-09T10:00:00.000Z",
+          updated_at: "2026-03-09T10:00:00.000Z",
+        },
+      ],
+    });
+
+    await expect(
+      store.convertDrawingToHybrid("user-1", "doc-x"),
+    ).rejects.toThrow(/Only drawings/);
+  });
+
+  it("rejeita converter um drawing que já faz parte de um hybrid", async () => {
+    const { store } = createStore({
+      items: [
+        {
+          id: "draw-2",
+          owner_id: "user-1",
+          folder_id: null,
+          kind: "drawing",
+          title: "Já híbrido",
+          content_blob_key: "users/user-1/items/draw-2/current.excalidraw",
+          archived_at: null,
+          collaboration_room_key: null,
+          collaboration_enabled_at: null,
+          created_at: "2026-03-09T10:00:00.000Z",
+          updated_at: "2026-03-09T10:00:00.000Z",
+        },
+      ],
+      hybridItems: [
+        {
+          id: "hyb-existing",
+          owner_id: "user-1",
+          doc_item_id: "doc-existing",
+          drawing_item_id: "draw-2",
+          default_view: "both",
+          created_at: "2026-03-09T10:00:00.000Z",
+          updated_at: "2026-03-09T10:00:00.000Z",
+        },
+      ],
+    });
+
+    await expect(
+      store.convertDrawingToHybrid("user-1", "draw-2"),
+    ).rejects.toThrow(/already part of a hybrid/);
+  });
+
   it("propaga metadados do hybrid e desfaz o vinculo sem apagar os itens", async () => {
     const { store, state } = createStore({
       items: [
