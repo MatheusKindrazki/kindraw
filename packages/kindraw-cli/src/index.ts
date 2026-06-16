@@ -4,6 +4,8 @@ import { login, logout } from "./commands/login.js";
 import { generate } from "./commands/generate.js";
 import { docCreate } from "./commands/doc.js";
 import { hybridCreate } from "./commands/hybrid.js";
+import { templatesList, templatesApply } from "./commands/templates.js";
+import { iconsSearch, iconsSvg } from "./commands/icons.js";
 import { itemsList, itemsGet, itemsDelete, whoami } from "./commands/items.js";
 
 const HELP = `kindraw — create drawings in your Kindraw workspace from the terminal
@@ -20,6 +22,11 @@ Usage:
                    [--folder <id>]
   kindraw hybrid create --title <T>     Create a doc + canvas hybrid
                        [--md <file|->] [--spec <file|->] [--folder <id>]
+  kindraw templates list [--category C] [--json]   List built-in templates
+  kindraw templates apply <id> [--title T]         Instantiate a template
+        [--spec extra.json] [--hybrid-drawing <id>] [--json]
+  kindraw icons search <query> [--limit N] [--json]  Search icons
+  kindraw icons svg <id> [--color #hex] [--out file] Fetch one icon SVG
   kindraw items list [--json]           List your drawings/docs
   kindraw items get <id> [--json]       Show one item
   kindraw items delete <id>             Delete an item
@@ -98,6 +105,41 @@ const main = async () => {
         });
       }
       throw new Error(`Unknown hybrid command: ${sub ?? "(none)"}`);
+    }
+    case "templates": {
+      if (sub === "list") {
+        return templatesList({
+          category: str(flags.category),
+          json: flags.json === true,
+        });
+      }
+      if (sub === "apply") {
+        return templatesApply({
+          id: arg,
+          title: str(flags.title),
+          spec: str(flags.spec),
+          hybridDrawing: str(flags["hybrid-drawing"]),
+          json: flags.json === true,
+        });
+      }
+      throw new Error(`Unknown templates command: ${sub ?? "(none)"}`);
+    }
+    case "icons": {
+      if (sub === "search") {
+        return iconsSearch({
+          query: arg,
+          limit: str(flags.limit),
+          json: flags.json === true,
+        });
+      }
+      if (sub === "svg") {
+        return iconsSvg({
+          id: arg,
+          color: str(flags.color),
+          out: str(flags.out),
+        });
+      }
+      throw new Error(`Unknown icons command: ${sub ?? "(none)"}`);
     }
     case "items": {
       if (sub === "list") {
