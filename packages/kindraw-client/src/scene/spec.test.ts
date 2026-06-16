@@ -134,6 +134,77 @@ describe("validateDiagramSpec", () => {
     });
   });
 
+  // FIX A (Code H1+H2) — reserved generated-element id prefixes
+  describe("reserved id prefixes", () => {
+    it('rejects a node id starting with "text-" (collides with bound-text ids)', () => {
+      expect(() =>
+        validateDiagramSpec({
+          nodes: [
+            { id: "text-b", label: "X" },
+            { id: "b", label: "Y" },
+          ],
+          edges: [],
+        }),
+      ).toThrow(/reserved/i);
+    });
+
+    it('rejects a node id starting with "arrow-" (collides with generated arrow ids)', () => {
+      expect(() =>
+        validateDiagramSpec({
+          nodes: [
+            { id: "arrow-0", label: "X" },
+            { id: "b", label: "Y" },
+          ],
+          edges: [{ from: "arrow-0", to: "b" }],
+        }),
+      ).toThrow(/reserved/i);
+    });
+
+    it('rejects a group id starting with a reserved prefix', () => {
+      expect(() =>
+        validateDiagramSpec({
+          nodes: [{ id: "a", label: "A" }],
+          edges: [],
+          groups: [{ id: "text-g" }],
+        }),
+      ).toThrow(/reserved/i);
+    });
+  });
+
+  // FIX C (Security H2) — id length cap (defense in depth)
+  describe("id length cap", () => {
+    it("rejects a node id longer than the max length (201 chars)", () => {
+      const id = "n".repeat(201);
+      expect(() =>
+        validateDiagramSpec({
+          nodes: [{ id, label: "A" }],
+          edges: [],
+        }),
+      ).toThrow(/too long|id/i);
+    });
+
+    it("rejects a group id longer than the max length", () => {
+      const id = "g".repeat(201);
+      expect(() =>
+        validateDiagramSpec({
+          nodes: [{ id: "a", label: "A" }],
+          edges: [],
+          groups: [{ id }],
+        }),
+      ).toThrow(/too long|id/i);
+    });
+
+    it("rejects an edge endpoint longer than the max length", () => {
+      const id = "z".repeat(201);
+      expect(() =>
+        validateDiagramSpec({
+          nodes: [{ id: "a", label: "A" }],
+          edges: [{ from: "a", to: id }],
+        }),
+      ).toThrow(/too long|id|unknown/i);
+    });
+  });
+
   // FIX 3 (BizLogic HIGH-1) — trim/whitespace ids
   describe("whitespace ids", () => {
     it("rejects a node id that is whitespace-only", () => {

@@ -156,6 +156,37 @@ describe("buildScene", () => {
     );
   });
 
+  // FIX A (Code H1+H2) — reserved generated-element id prefixes can no longer
+  // collide with user node ids. A spec shaped to collide (a node id equal to a
+  // would-be generated bound-text id) must be rejected at validation.
+  it("rejects a spec whose node id collides with a generated bound-text id", async () => {
+    await expect(
+      buildScene({
+        nodes: [
+          { id: "text-b", label: "X" },
+          { id: "b", label: "Y" },
+        ],
+        edges: [],
+      }),
+    ).rejects.toThrow(/reserved/i);
+  });
+
+  it("emits unique element ids for a normal multi-node spec", async () => {
+    const { content } = await buildScene({
+      nodes: [
+        { id: "a", label: "Client", shape: "rectangle" },
+        { id: "b", label: "API", shape: "rectangle" },
+        { id: "c", label: "Database", shape: "ellipse" },
+      ],
+      edges: [
+        { from: "a", to: "b", label: "HTTP" },
+        { from: "b", to: "c" },
+      ],
+    });
+    const elements: Array<{ id: string }> = JSON.parse(content).elements;
+    expect(new Set(elements.map((e) => e.id)).size).toBe(elements.length);
+  });
+
   // DOM-FREE PROOF: with global.document AND global.window deleted, buildScene
   // must still work, because (a) the registered NodeTextMetricsProvider replaces
   // the document.createElement("canvas") path inside convertToExcalidrawElements,

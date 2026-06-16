@@ -75,6 +75,18 @@ const MAX_NODES = 500;
 const MAX_EDGES = 2000;
 const MAX_GROUPS = 200;
 const MAX_LABEL_LEN = 2000;
+// Ids (nodes, groups, edge endpoints) are unbounded user input that ends up in
+// element ids and lookup keys. Cap them so a single huge id can't bloat the
+// scene or the serialized output. The MCP/CLI boundaries also cap, but this is
+// the defense-in-depth backstop the builder always enforces. (Security H2.)
+const MAX_ID_LEN = 200;
+
+// Generated elements (bound text, arrows) live in the SAME id namespace as user
+// node ids. We derive their ids as `text-<containerId>` and `arrow-<i>`, so a
+// user id like "text-b" or "arrow-0" would collide → a duplicate element id or
+// a silently dropped arrow. Reject any user id that starts with a reserved
+// generated-element prefix. (Code H1+H2 — silent data loss.)
+const RESERVED_ID_PREFIX_RE = /^(text|arrow)-/;
 
 // Ids that collide with Object.prototype keys. Allowing these as ids (which end
 // up as keys in lookup objects/Sets elsewhere) invites prototype-pollution and
@@ -142,8 +154,19 @@ export const validateDiagramSpec = (raw: unknown): NormalizedSpec => {
         `Group id "${group.id}" must not have leading or trailing whitespace.`,
       );
     }
+    if (group.id.length > MAX_ID_LEN) {
+      throw new Error(
+        `Group id is too long: ${group.id.length}. Max is ${MAX_ID_LEN}.`,
+      );
+    }
     if (RESERVED_IDS.has(group.id)) {
       throw new Error(`Group id "${group.id}" is reserved and not allowed.`);
+    }
+    if (RESERVED_ID_PREFIX_RE.test(group.id)) {
+      throw new Error(
+        `Group id "${group.id}" must not start with "text-" or "arrow-" ` +
+          `(reserved for generated elements).`,
+      );
     }
     if (groupIds.has(group.id)) {
       throw new Error(`Duplicate group id: "${group.id}".`);
@@ -166,8 +189,19 @@ export const validateDiagramSpec = (raw: unknown): NormalizedSpec => {
         `Node id "${node.id}" must not have leading or trailing whitespace.`,
       );
     }
+    if (node.id.length > MAX_ID_LEN) {
+      throw new Error(
+        `Node id is too long: ${node.id.length}. Max is ${MAX_ID_LEN}.`,
+      );
+    }
     if (RESERVED_IDS.has(node.id)) {
       throw new Error(`Node id "${node.id}" is reserved and not allowed.`);
+    }
+    if (RESERVED_ID_PREFIX_RE.test(node.id)) {
+      throw new Error(
+        `Node id "${node.id}" must not start with "text-" or "arrow-" ` +
+          `(reserved for generated elements).`,
+      );
     }
     if (ids.has(node.id)) {
       throw new Error(`Duplicate node id: "${node.id}".`);
@@ -227,6 +261,11 @@ export const validateDiagramSpec = (raw: unknown): NormalizedSpec => {
       throw new Error(
         `Edge endpoints "${edge.from}" -> "${edge.to}" must not have ` +
           `leading or trailing whitespace.`,
+      );
+    }
+    if (edge.from.length > MAX_ID_LEN || edge.to.length > MAX_ID_LEN) {
+      throw new Error(
+        `Edge endpoint id is too long. Max is ${MAX_ID_LEN}.`,
       );
     }
     if (!ids.has(edge.from)) {
