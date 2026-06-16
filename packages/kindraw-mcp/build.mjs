@@ -14,6 +14,7 @@ await build({
   external: [
     "@kindraw/client",
     "@kindraw/client/generate",
+    "@kindraw/client/scene",
     "@modelcontextprotocol/sdk",
     "zod",
   ],
