@@ -1821,6 +1821,20 @@ const KindrawLandingValueProp = ({
 const KindrawLanding = ({ errorMessage }: { errorMessage: string | null }) => {
   const { t } = useKindrawI18n();
 
+  // Respect reduced-motion: if the visitor prefers less motion, don't autoplay
+  // the looping demo — the poster frame stands in for it.
+  const [reduceMotion, setReduceMotion] = useState(false);
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.matchMedia) {
+      return;
+    }
+    const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
+    setReduceMotion(mq.matches);
+    const onChange = (e: MediaQueryListEvent) => setReduceMotion(e.matches);
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  }, []);
+
   return (
     <div className="kindraw-landing">
       {/* soft paper/grid atmosphere behind the whole page */}
@@ -1895,8 +1909,7 @@ const KindrawLanding = ({ errorMessage }: { errorMessage: string | null }) => {
             ) : null}
           </div>
 
-          {/* DEMO slot — styled placeholder, sized 16:10 for the future clip */}
-          {/* TODO: demo GIF — prompt in Claude Code → diagram → share link → collaborate */}
+          {/* DEMO — looping product clip: prompt → diagram → share link */}
           <div className="kindraw-landing__demo">
             <div className="kindraw-landing__demo-frame">
               <div className="kindraw-landing__demo-bar" aria-hidden>
@@ -1908,13 +1921,20 @@ const KindrawLanding = ({ errorMessage }: { errorMessage: string | null }) => {
                 </span>
               </div>
               <div className="kindraw-landing__demo-stage">
-                <span className="kindraw-landing__demo-badge">
-                  {t("kindraw.landing.demo.badge")}
-                </span>
-                <span className="kindraw-landing__demo-play" aria-hidden>
-                  <KindrawIcon name="hybrid" size={26} strokeWidth={1.9} />
-                </span>
-                <p>{t("kindraw.landing.demo.caption")}</p>
+                <video
+                  className="kindraw-landing__demo-video"
+                  autoPlay={!reduceMotion}
+                  loop
+                  muted
+                  playsInline
+                  controls={reduceMotion}
+                  preload="metadata"
+                  poster="/kindraw-demo-poster.jpg"
+                  aria-label={t("kindraw.landing.demo.caption")}
+                >
+                  <source src="/kindraw-demo.webm" type="video/webm" />
+                  <source src="/kindraw-demo.mp4" type="video/mp4" />
+                </video>
               </div>
             </div>
           </div>

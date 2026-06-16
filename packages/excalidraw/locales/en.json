@@ -1096,8 +1096,7 @@
         "proof": "Free while in beta · works in any MCP-aware editor"
       },
       "demo": {
-        "caption": "Prompt in Claude Code, get a laid-out diagram, share the link, edit it together. A short walkthrough lands here soon.",
-        "badge": "Demo soon"
+        "caption": "A 25-second walkthrough: prompt in Claude Code, get a laid-out architecture diagram, then share the live link."
       },
       "waitlist": {
         "label": "Your work email",

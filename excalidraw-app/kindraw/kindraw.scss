@@ -3946,20 +3946,26 @@
 
 .kindraw-landing__demo-stage {
   position: relative;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 16px;
   aspect-ratio: 16 / 10;
-  padding: 28px;
-  text-align: center;
+  overflow: hidden;
   background: var(--kd-canvas);
   background-image: radial-gradient(
     var(--kd-canvas-dot) 1.2px,
     transparent 1.2px
   );
   background-size: 22px 22px;
+}
+
+/* the looping demo fills the 16:10 stage; the clip is 1.83:1 so `cover`
+   trims a sliver of side margin rather than letterboxing or distorting.
+   reduced-motion is handled in the component (autoPlay is dropped and the
+   poster frame shows) — see KindrawLanding. */
+.kindraw-landing__demo-video {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center top;
 }
 
 .kindraw-landing__demo-stage p {

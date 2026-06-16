@@ -1080,8 +1080,7 @@
         "proof": "Grátis durante o beta · funciona em qualquer editor com MCP"
       },
       "demo": {
-        "caption": "Pede no Claude Code, sai um diagrama já organizado, partilha o link, editam em conjunto. Um tour rápido aparece aqui em breve.",
-        "badge": "Demo em breve"
+        "caption": "Um tour de 25 segundos: pede no Claude Code, sai um diagrama de arquitetura organizado e partilha a ligação em direto."
       },
       "waitlist": {
         "label": "O seu e-mail de trabalho",
