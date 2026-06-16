@@ -3,7 +3,7 @@
 // "@kindraw/client/scene". It does NOT import jsdom or mermaid — that's the
 // whole point: structured specs lay out DOM-free with real spacing.
 
-export { buildScene } from "./build.js";
+export { buildScene, sceneMaxY } from "./build.js";
 export type { BuildResult, BuildSceneExtras, ExEl } from "./build.js";
 
 export { buildFromSkeletons } from "./buildFromSkeletons.js";

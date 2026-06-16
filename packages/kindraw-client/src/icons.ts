@@ -39,14 +39,41 @@ const DEFAULT_ICON_SIZE = 28;
 const GRID_STEP = 48;
 const GRID_COLS = 8;
 
+// Hard cap on icons composed in a single call. Each placement triggers ONE
+// serial remote fetch via the injected getIconSvg, so an unbounded list lets a
+// direct/library caller amplify into N back-end requests. The MCP boundary
+// already caps icons[] at 100; this is the defense-in-depth backstop at the
+// library layer so EVERY caller (CLI, direct importers) is bounded too.
+// (Security MEDIUM.)
+const MAX_ICONS = 100;
+
 export const composeIconImages = async (
   placements: IconPlacement[],
   getIconSvg: (id: string, color?: string) => Promise<string>,
-  opts?: { positions?: Record<string, { x: number; y: number }> },
+  opts?: {
+    positions?: Record<string, { x: number; y: number }>;
+    /**
+     * Y coordinate where the auto-placed icon GRID starts. Node-less icons are
+     * grid-placed at (col*step, originY + row*step). Callers pass the laid-out
+     * scene's maxY (+ a gap) so the grid clears the diagram instead of rendering
+     * on top of it — the scene normalizes its top-left node to (20,20), so a grid
+     * starting at y=0 would overlap. (BizLogic MEDIUM-1.) Default 0 (back-compat).
+     */
+    originY?: number;
+  },
 ): Promise<ComposeIconImagesResult> => {
+  // Cap first, before any fetch, so an over-cap list amplifies into ZERO remote
+  // requests. (Security MEDIUM.)
+  if (placements.length > MAX_ICONS) {
+    throw new Error(
+      `Too many icons (${placements.length}); max ${MAX_ICONS}.`,
+    );
+  }
+
   const imageSkeletons: Array<Record<string, unknown>> = [];
   const files: Record<string, unknown> = {};
   const warnings: string[] = [];
+  const originY = opts?.originY ?? 0;
 
   let gridIndex = 0;
   for (let i = 0; i < placements.length; i++) {
@@ -63,6 +90,12 @@ export const composeIconImages = async (
     const fileId = `icon-${stableHash(`${p.iconId}|${p.color ?? ""}`)}`;
     const b64 = Buffer.from(svg, "utf8").toString("base64");
     // Atomic: add the files entry whenever (and only when) we emit an image.
+    // SECURITY INVARIANT: this dataURL embeds the icon's SVG and is consumed
+    // ONLY as an <img src=...> dataURL (Excalidraw renders image elements that
+    // way), a NON-executing context — an <img>-sourced SVG cannot run its
+    // <script>. It must NEVER be injected as raw markup (innerHTML, <object>,
+    // <iframe>, or an inline <svg>) by any consumer, where SVG <script> WOULD
+    // execute. Keep this an image fileId; do not surface the raw SVG to the DOM.
     files[fileId] = {
       id: fileId,
       mimeType: "image/svg+xml",
@@ -73,7 +106,7 @@ export const composeIconImages = async (
     const placed = p.nodeId ? opts?.positions?.[p.nodeId] : undefined;
     const pos = placed ?? {
       x: (gridIndex % GRID_COLS) * GRID_STEP,
-      y: Math.floor(gridIndex / GRID_COLS) * GRID_STEP,
+      y: originY + Math.floor(gridIndex / GRID_COLS) * GRID_STEP,
     };
     if (!placed) {
       gridIndex += 1;

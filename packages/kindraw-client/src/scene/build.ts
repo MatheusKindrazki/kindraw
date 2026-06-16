@@ -184,6 +184,27 @@ export const stabilize = (elements: ExEl[]): ExEl[] => {
   return elements;
 };
 
+// Largest (y + height) across a set of serialized Excalidraw elements, i.e. the
+// content's bottom edge. Used to place an icon grid BELOW existing content so
+// node-less icons never render on top of the diagram (BizLogic MEDIUM-1).
+// Pure + deterministic + HTTP-free: callers JSON.parse a built scene's
+// `elements` (or pass already-parsed elements) and feed them here. Returns 0 for
+// an empty set, so an icon-only canvas still starts its grid at the origin.
+export const sceneMaxY = (
+  elements: Array<{ y?: unknown; height?: unknown }>,
+): number => {
+  let maxY = 0;
+  for (const el of elements) {
+    const y = typeof el.y === "number" ? el.y : 0;
+    const h = typeof el.height === "number" ? el.height : 0;
+    const bottom = y + h;
+    if (bottom > maxY) {
+      maxY = bottom;
+    }
+  }
+  return maxY;
+};
+
 /**
  * Build a complete Excalidraw scene from a structured DiagramSpec.
  *
@@ -218,8 +239,9 @@ export const buildScene = async (
 
   // Convert icon image skeletons SEPARATELY (no layout, no reanchor) and
   // stabilize them too, so the whole scene stays deterministic. Their ids use a
-  // collision-free "icon-" prefix (RESERVED_ID_PREFIX_RE forbids text-/arrow-
-  // but not icon-, verified C8).
+  // collision-free "icon-" prefix; the reciprocal guarantee that USER spec ids
+  // can't start with "icon-" is enforced by RESERVED_ID_PREFIX_RE in spec.ts
+  // (which reserves text-/arrow-/tpl-/icon-, BizLogic LOW-1).
   let iconEls: ExEl[] = [];
   if (extras?.iconImages?.length) {
     const converted = convertToExcalidrawElements(extras.iconImages as never, {

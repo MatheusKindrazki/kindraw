@@ -17,7 +17,7 @@
 // cleanup (there is no verified delete-hybrid contract).
 
 import { composeIconImages, type IconPlacement } from "./icons.js";
-import { buildScene } from "./scene/build.js";
+import { buildScene, sceneMaxY } from "./scene/build.js";
 import { validateDiagramSpec } from "./scene/spec.js";
 
 import {
@@ -27,6 +27,10 @@ import {
 
 import type { DiagramEdge, DiagramGroup, DiagramNode } from "./scene/spec.js";
 import type { KindrawClient } from "./client.js";
+
+// Vertical gap between the diagram's bottom edge and the start of the auto-placed
+// icon grid, so grid-placed icons clear the diagram. (BizLogic MEDIUM-1.)
+const ICON_GRID_GAP = 40;
 
 export type HybridDiagramNode = DiagramNode & {
   /**
@@ -57,9 +61,10 @@ export type ComposeHybridInput = {
   folderId?: string | null;
   diagram: HybridDiagram;
   /**
-   * Optional Iconify icons to embed as images on the canvas (grid-placed at the
-   * canvas origin). The SVG is fetched via the injected client.getIconSvg and
-   * embedded; a failed fetch is skipped-with-warning (see iconWarnings).
+   * Optional Iconify icons to embed as images on the canvas (grid-placed in a
+   * band BELOW the diagram so they don't overlap it). The SVG is fetched via the
+   * injected client.getIconSvg and embedded; a failed fetch is
+   * skipped-with-warning (see iconWarnings).
    */
   icons?: IconPlacement[];
 };
@@ -177,30 +182,46 @@ export const composeHybrid = async (
     );
   }
 
+  // Step 3: build + populate the canvas. buildScene already validates node.link.
+  const sceneSpec = {
+    nodes,
+    edges: input.diagram.edges,
+    groups: input.diagram.groups,
+    direction: input.diagram.direction,
+    engine: input.diagram.engine,
+  };
+
   // Compose any requested icons into image skeletons + a files map. FETCH-FREE
   // composer: we INJECT client.getIconSvg so scene/icons stays HTTP-free. A
   // failed icon fetch is skipped-with-warning, never fatal to the hybrid.
-  const {
-    imageSkeletons,
-    files,
-    warnings: iconWarnings,
-  } = input.icons?.length
-    ? await composeIconImages(input.icons, (id, color) =>
-        client.getIconSvg(id, color),
-      )
-    : { imageSkeletons: [], files: {}, warnings: [] as string[] };
+  //
+  // Node-less icons are GRID-placed; we must start that grid BELOW the diagram or
+  // it renders on top of the laid-out nodes (the scene normalizes its top-left
+  // node to (20,20), so a grid at y=0 overlaps). To get the diagram's bottom
+  // edge deterministically, build the scene ONCE without icons and measure its
+  // maxY — icons are additive (converted/appended separately, no layout effect),
+  // so the node positions are identical in the final build. (BizLogic MEDIUM-1.)
+  let imageSkeletons: Array<Record<string, unknown>> = [];
+  let files: Record<string, unknown> = {};
+  let iconWarnings: string[] = [];
+  if (input.icons?.length) {
+    const probe = await buildScene(sceneSpec);
+    const originY = sceneMaxY(JSON.parse(probe.content).elements) + ICON_GRID_GAP;
+    ({
+      imageSkeletons,
+      files,
+      warnings: iconWarnings,
+    } = await composeIconImages(
+      input.icons,
+      (id, color) => client.getIconSvg(id, color),
+      { originY },
+    ));
+  }
 
-  // Step 3: build + populate the canvas. buildScene already validates node.link.
-  const { content, elementCount } = await buildScene(
-    {
-      nodes,
-      edges: input.diagram.edges,
-      groups: input.diagram.groups,
-      direction: input.diagram.direction,
-      engine: input.diagram.engine,
-    },
-    { iconImages: imageSkeletons, files },
-  );
+  const { content, elementCount } = await buildScene(sceneSpec, {
+    iconImages: imageSkeletons,
+    files,
+  });
   // Defensive: the server does NOT validate the JSON it stores, so we guarantee
   // ours parses before the PUT. buildScene already JSON.stringifies, so this can
   // only fail on a builder regression — but if it ever emits non-JSON, surface

@@ -84,4 +84,58 @@ describe("composeIconImages", () => {
     const p1 = `${imageSkeletons[1].x},${imageSkeletons[1].y}`;
     expect(p0).not.toBe(p1);
   });
+
+  // FIX 1 (BizLogic MEDIUM-1) — grid-placed icons must clear the diagram. When
+  // the caller passes originY = the scene's bottom edge, EVERY grid-placed icon
+  // sits at y >= originY (no overlap with content occupying y up to originY).
+  it("starts the grid at originY so grid icons clear the scene content", async () => {
+    const N = 240; // a scene whose elements occupy y up to N
+    // 10 node-less icons -> spread over >1 grid row, so we exercise the row math.
+    const placements = Array.from({ length: 10 }, (_, i) => ({
+      iconId: `mdi:i${i}`,
+    }));
+    const { imageSkeletons } = await composeIconImages(placements, fakeFetch, {
+      originY: N,
+    });
+    expect(imageSkeletons).toHaveLength(10);
+    for (const img of imageSkeletons) {
+      expect(img.y as number).toBeGreaterThanOrEqual(N);
+    }
+  });
+
+  it("node-placed icons ignore originY (they use the node position)", async () => {
+    const { imageSkeletons } = await composeIconImages(
+      [{ iconId: "mdi:home", nodeId: "a" }],
+      fakeFetch,
+      { positions: { a: { x: 5, y: 7 } }, originY: 999 },
+    );
+    expect(imageSkeletons[0].x).toBe(5);
+    expect(imageSkeletons[0].y).toBe(7);
+  });
+
+  // FIX 3 (Security MEDIUM) — cap icon count at the library layer so an
+  // unbounded list can't amplify into N serial remote fetches.
+  it("throws when given more than the max number of placements (101)", async () => {
+    const placements = Array.from({ length: 101 }, (_, i) => ({
+      iconId: `mdi:i${i}`,
+    }));
+    let fetchCalls = 0;
+    const countingFetch = async (id: string, color?: string) => {
+      fetchCalls += 1;
+      return fakeFetch(id, color);
+    };
+    await expect(
+      composeIconImages(placements, countingFetch),
+    ).rejects.toThrow(/too many icons/i);
+    // Cap fires BEFORE any fetch — zero amplification.
+    expect(fetchCalls).toBe(0);
+  });
+
+  it("accepts exactly the max number of placements (100)", async () => {
+    const placements = Array.from({ length: 100 }, (_, i) => ({
+      iconId: `mdi:i${i}`,
+    }));
+    const { imageSkeletons } = await composeIconImages(placements, fakeFetch);
+    expect(imageSkeletons).toHaveLength(100);
+  });
 });

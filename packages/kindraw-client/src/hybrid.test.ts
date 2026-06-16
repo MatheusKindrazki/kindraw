@@ -320,6 +320,20 @@ describe("composeHybrid", () => {
     expect(img).toBeDefined();
     expect(img.status).toBe("saved");
     expect(drawing.files[img.fileId]).toBeDefined();
+
+    // FIX 1 (BizLogic MEDIUM-1) — the grid-placed icon must sit BELOW the
+    // diagram, not on top of it. Its y must clear every non-image element's
+    // bottom edge (y + height).
+    const contentBottom = Math.max(
+      0,
+      ...drawing.elements
+        .filter((e: { type: string }) => e.type !== "image")
+        .map(
+          (e: { y?: number; height?: number }) =>
+            (e.y ?? 0) + (e.height ?? 0),
+        ),
+    );
+    expect(img.y).toBeGreaterThanOrEqual(contentBottom);
   });
 
   it("rejects an invalid icon id BEFORE seeding (no orphan hybrid)", async () => {

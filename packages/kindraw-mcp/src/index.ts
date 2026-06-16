@@ -347,7 +347,7 @@ const main = async () => {
           .optional()
           .describe(
             "Icons to embed as images on the canvas (SVG fetched + embedded " +
-              "for you). Grid-placed at the canvas origin.",
+              "for you). Grid-placed in a band below the diagram.",
           ),
       },
     },
@@ -494,7 +494,7 @@ const main = async () => {
           .optional()
           .describe(
             "Icons to embed as images (SVG fetched + embedded for you). " +
-              "Placed on a grid at the canvas origin.",
+              "Grid-placed in a band below the canvas content.",
           ),
       },
     },
@@ -508,21 +508,19 @@ const main = async () => {
     }) => {
       try {
         const tpl = await client.getTemplate(templateId);
-        const { buildScene, buildFromSkeletons } = await import(
+        const { buildScene, buildFromSkeletons, sceneMaxY } = await import(
           "@kindraw/client/scene"
         );
         const { composeIconImages } = await import("@kindraw/client");
 
-        // Compose any requested icons up-front (fetch-free composer; we inject
-        // the client's getIconSvg). Skipped icons return as warnings.
-        const { imageSkeletons, files, warnings } = icons?.length
-          ? await composeIconImages(icons, (id, color) =>
-              client.getIconSvg(id, color),
-            )
-          : { imageSkeletons: [], files: {}, warnings: [] as string[] };
+        // Gap between the canvas content's bottom edge and the icon grid, so
+        // grid-placed icons clear the template/extra nodes instead of landing on
+        // top of them. (BizLogic MEDIUM-1.)
+        const ICON_GRID_GAP = 40;
 
         let content: string;
         let elementCount: number;
+        let warnings: string[] = [];
         if (extraNodes?.length) {
           // Extra nodes need real layout, so serialize the template
           // (reanchor-free) into elements and merge them + any icons via
@@ -530,6 +528,25 @@ const main = async () => {
           const { elements: templateElements } = await buildFromSkeletons(
             tpl.elements,
           );
+          // Measure the content's bottom edge (template + laid-out extra nodes)
+          // BEFORE composing icons, so the icon grid starts below it. Build the
+          // node scene once without icons to get deterministic extra-node
+          // positions; icons are additive and don't shift them.
+          let imageSkeletons: Array<Record<string, unknown>> = [];
+          let files: Record<string, unknown> = {};
+          if (icons?.length) {
+            const probe = await buildScene(
+              { nodes: extraNodes, edges: extraEdges ?? [] },
+              { templateElements },
+            );
+            const originY =
+              sceneMaxY(JSON.parse(probe.content).elements) + ICON_GRID_GAP;
+            ({ imageSkeletons, files, warnings } = await composeIconImages(
+              icons,
+              (id, color) => client.getIconSvg(id, color),
+              { originY },
+            ));
+          }
           ({ content, elementCount } = await buildScene(
             { nodes: extraNodes, edges: extraEdges ?? [] },
             { templateElements, iconImages: imageSkeletons, files },
@@ -537,7 +554,19 @@ const main = async () => {
         } else {
           // No extra nodes: serialize the template (plus any icon image
           // skeletons, grid-placed) directly — no layout needed. Icon skeletons
-          // are valid convertToExcalidrawElements input, so they ride along.
+          // are valid convertToExcalidrawElements input, so they ride along. The
+          // template elements carry absolute positions, so grid icons must start
+          // below the template's bottom edge to avoid overlapping it.
+          let imageSkeletons: Array<Record<string, unknown>> = [];
+          let files: Record<string, unknown> = {};
+          if (icons?.length) {
+            const originY = sceneMaxY(tpl.elements) + ICON_GRID_GAP;
+            ({ imageSkeletons, files, warnings } = await composeIconImages(
+              icons,
+              (id, color) => client.getIconSvg(id, color),
+              { originY },
+            ));
+          }
           const built = await buildFromSkeletons(
             [...tpl.elements, ...imageSkeletons],
             { files },
