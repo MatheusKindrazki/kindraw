@@ -29,6 +29,9 @@
       "@excalidraw/math/*": ["./packages/math/src/*"],
       "@excalidraw/utils": ["./packages/utils/src/index.ts"],
       "@excalidraw/utils/*": ["./packages/utils/src/*"],
+      "@kindraw/client/sections": [
+        "./packages/kindraw-client/src/sections/index.ts"
+      ],
       "@tiptap/react/menus": [
         "./node_modules/@tiptap/react/dist/menus/index.d.ts"
       ]

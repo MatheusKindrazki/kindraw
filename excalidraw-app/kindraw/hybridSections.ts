@@ -13,7 +13,7 @@ import {
   parseKindrawSectionLink,
   slugify,
   type KindrawHybridSection,
-} from "../../packages/kindraw-client/src/sections/index";
+} from "@kindraw/client/sections";
 
 export type { KindrawHybridSection };
 export {
