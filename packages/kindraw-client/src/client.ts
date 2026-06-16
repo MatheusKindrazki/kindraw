@@ -22,11 +22,14 @@ export type CreateDrawingResult = { itemId: string; url: string };
 
 export type CreateDocResult = { itemId: string; url: string };
 
+export type CreateHybridResult = {
+  hybridId: string;
+  docItemId: string;
+  drawingItemId: string;
+};
+
 export class KindrawApiError extends Error {
-  constructor(
-    public status: number,
-    message: string,
-  ) {
+  constructor(public status: number, message: string) {
     super(message);
     this.name = "KindrawApiError";
   }
@@ -58,7 +61,10 @@ export class KindrawClient {
       throw new Error("KindrawClient requires an API token.");
     }
     this.token = options.token;
-    this.baseUrl = (options.baseUrl || DEFAULT_API_BASE_URL).replace(/\/+$/, "");
+    this.baseUrl = (options.baseUrl || DEFAULT_API_BASE_URL).replace(
+      /\/+$/,
+      "",
+    );
     this.appOrigin = KindrawClient.resolveAppOrigin(
       this.baseUrl,
       options.appOrigin,
@@ -161,7 +167,10 @@ export class KindrawClient {
   }
 
   listItems(): Promise<{ items: KindrawItemSummary[] }> {
-    return this.request<{ items: KindrawItemSummary[] }>("GET", "/v1/api/items");
+    return this.request<{ items: KindrawItemSummary[] }>(
+      "GET",
+      "/v1/api/items",
+    );
   }
 
   getItem(
@@ -211,6 +220,47 @@ export class KindrawClient {
       },
     );
     return { itemId, url: this.docUrl(itemId) };
+  }
+
+  // Seed a hybrid item (a live markdown doc BESIDE an Excalidraw canvas).
+  // Bearer-only REST, no WS room → headless-safe. The server auto-seeds the doc
+  // ("# {title}\n\n") and an empty drawing, returning the three item refs.
+  // NOTE the BARE /api/ prefix (NOT /v1/api/) — verified hybrid contract.
+  createHybrid(input: {
+    title: string;
+    folderId?: string | null;
+  }): Promise<CreateHybridResult> {
+    return this.request<CreateHybridResult>("POST", "/api/hybrid-items", {
+      title: input.title,
+      folderId: input.folderId ?? null,
+    });
+  }
+
+  getHybrid(hybridId: string): Promise<unknown> {
+    return this.request(
+      "GET",
+      `/api/hybrid-items/${encodeURIComponent(hybridId)}`,
+    );
+  }
+
+  // Populate the doc side of a hybrid. BARE /api/ prefix (verified contract) —
+  // deliberately distinct from updateContent (/v1/api/) to avoid that footgun.
+  updateHybridDoc(docItemId: string, markdown: string): Promise<void> {
+    return this.request<void>(
+      "PUT",
+      `/api/items/${encodeURIComponent(docItemId)}/content`,
+      { content: markdown },
+    );
+  }
+
+  // Populate the canvas side of a hybrid. The server does NOT validate the JSON
+  // it stores, so callers MUST JSON.parse-validate `json` BEFORE calling.
+  updateHybridDrawing(drawingItemId: string, json: string): Promise<void> {
+    return this.request<void>(
+      "PUT",
+      `/api/items/${encodeURIComponent(drawingItemId)}/content`,
+      { content: json },
+    );
   }
 
   updateContent(itemId: string, content: string): Promise<void> {

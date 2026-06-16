@@ -23,7 +23,9 @@ const mockFetch = (
       calls.push({ url, init });
       if (i >= responses.length) {
         throw new Error(
-          `mockFetch: unexpected fetch #${i + 1} to ${url} (only ${responses.length} response(s) queued)`,
+          `mockFetch: unexpected fetch #${i + 1} to ${url} (only ${
+            responses.length
+          } response(s) queued)`,
         );
       }
       const r = responses[i];
@@ -218,7 +220,10 @@ describe("createDrawing", () => {
 
   it("passes folderId through when provided", async () => {
     mockFetch([
-      { status: 201, json: { itemId: "d3", url: "https://api.kindraw.dev/draw/d3" } },
+      {
+        status: 201,
+        json: { itemId: "d3", url: "https://api.kindraw.dev/draw/d3" },
+      },
     ]);
     const c = new KindrawClient({
       token: "kdr_test",
@@ -232,5 +237,74 @@ describe("createDrawing", () => {
     });
     expect(res.url).toBe("https://kindraw.dev/draw/d3");
     expect(JSON.parse(calls[0].init.body as string).folderId).toBe("f2");
+  });
+});
+
+describe("hybrid methods", () => {
+  it("createHybrid POSTs bare /api/hybrid-items and returns refs", async () => {
+    mockFetch([
+      {
+        status: 201,
+        json: { hybridId: "h1", docItemId: "d1", drawingItemId: "g1" },
+      },
+    ]);
+    const c = new KindrawClient({
+      token: "kdr_test",
+      baseUrl: "https://api.kindraw.dev",
+    });
+    const res = await c.createHybrid({ title: "Spec", folderId: "f1" });
+    expect(res).toEqual({
+      hybridId: "h1",
+      docItemId: "d1",
+      drawingItemId: "g1",
+    });
+    expect(calls[0].url).toBe("https://api.kindraw.dev/api/hybrid-items");
+    expect(calls[0].init.method).toBe("POST");
+    expect(JSON.parse(calls[0].init.body as string)).toEqual({
+      title: "Spec",
+      folderId: "f1",
+    });
+  });
+
+  it("createHybrid defaults folderId to null when omitted", async () => {
+    mockFetch([
+      {
+        status: 201,
+        json: { hybridId: "h1", docItemId: "d1", drawingItemId: "g1" },
+      },
+    ]);
+    const c = new KindrawClient({ token: "kdr_test" });
+    await c.createHybrid({ title: "Spec" });
+    expect(JSON.parse(calls[0].init.body as string).folderId).toBeNull();
+  });
+
+  it("getHybrid GETs bare /api/hybrid-items/:id", async () => {
+    mockFetch([{ status: 200, json: { hybridId: "h1" } }]);
+    const c = new KindrawClient({ token: "kdr_test" });
+    await c.getHybrid("h1");
+    expect(calls[0].url).toBe("https://api.kindraw.dev/api/hybrid-items/h1");
+    expect(calls[0].init.method).toBe("GET");
+  });
+
+  it("updateHybridDoc PUTs bare /api/items/:id/content (NOT /v1/api)", async () => {
+    mockFetch([{ status: 204 }]);
+    const c = new KindrawClient({ token: "kdr_test" });
+    await c.updateHybridDoc("d1", "# Title\n");
+    expect(calls[0].url).toBe("https://api.kindraw.dev/api/items/d1/content");
+    expect(calls[0].init.method).toBe("PUT");
+    expect(JSON.parse(calls[0].init.body as string)).toEqual({
+      content: "# Title\n",
+    });
+  });
+
+  it("updateHybridDrawing PUTs bare /api/items/:id/content", async () => {
+    mockFetch([{ status: 204 }]);
+    const c = new KindrawClient({ token: "kdr_test" });
+    await c.updateHybridDrawing("g1", '{"type":"excalidraw"}');
+    expect(calls[0].url).toBe("https://api.kindraw.dev/api/items/g1/content");
+    expect(calls[0].init.method).toBe("PUT");
+    expect(JSON.parse(calls[0].init.body as string)).toEqual({
+      content: '{"type":"excalidraw"}',
+    });
   });
 });

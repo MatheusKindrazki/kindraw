@@ -12,6 +12,18 @@ export type {
   KindrawMe,
   CreateDrawingResult,
   CreateDocResult,
+  CreateHybridResult,
 } from "./client.js";
 export { startLoopbackLogin } from "./auth.js";
 export type { LoopbackLoginOptions, LoopbackLoginResult } from "./auth.js";
+
+// Shared hybrid section parser (slug parity source of truth). Light: only pulls
+// in `marked`, no @excalidraw transform — safe for the light index entry.
+export {
+  slugify,
+  buildSectionId,
+  parseHybridMarkdownSections,
+  buildKindrawSectionLink,
+  parseKindrawSectionLink,
+} from "./sections/index.js";
+export type { KindrawHybridSection } from "./sections/index.js";
