@@ -2078,3 +2078,10 @@ git commit -m "docs(kindraw): document structured scene builder (Phase 1)"
 - [ ] `kindraw_create_scene` MCP tool registered and typechecks.
 - [ ] No Critical/High/Medium review findings open; Low → `TODO(review):`, Cosmetic → `FIXME(nitpick):`.
 - [ ] Mermaid path (`kindraw generate --mermaid`, `kindraw_create_diagram`) still works (regression check).
+
+---
+
+## Follow-ups (deferred from Batch 1 review — tracked, not blocking)
+
+- **[BizLogic MEDIUM-3] Disconnected nodes form a single horizontal ribbon.** Under `rankdir:TB`, N edge-less nodes all land on one row (e.g. 8 nodes → 1380px-wide strip). Non-overlapping but cluttered, undercutting the "uncluttered" product goal. Fix: detect fully-disconnected components and arrange them in a balanced grid (`ceil(sqrt(n))` columns), or post-process disconnected components into rows. Own task; does not block the core pipeline.
+- **[Code-review H1] DOM-free guarantee is only completed by `build.ts`** registering `setCustomTextMetricsProvider(sharedProvider)` before the first `convertToExcalidrawElements`. Tracked into Task 11 (the next batch). Until then, the scene/ modules are layout-only and must not be wired to conversion.
