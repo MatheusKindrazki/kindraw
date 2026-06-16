@@ -309,6 +309,132 @@ describe("hybrid methods", () => {
   });
 });
 
+describe("deleteHybrid", () => {
+  // The GET /api/hybrid-items/:id response nests the backing item ids under
+  // `hybrid` (verified against the worker's getHybridItem -> toHybridItem shape).
+  const getHybridResponse = {
+    hybrid: {
+      id: "h1",
+      kind: "hybrid",
+      title: "Spec",
+      docItemId: "d1",
+      drawingItemId: "g1",
+      defaultView: "both",
+    },
+    document: { item: {}, content: "# Spec\n" },
+    drawing: { item: {}, content: "{}" },
+  };
+
+  it("GETs the hybrid, DELETEs /api/hybrid-items/:id, then DELETEs both backing items", async () => {
+    mockFetch([
+      { status: 200, json: getHybridResponse }, // GET hybrid (capture refs first)
+      { status: 204 }, // DELETE /api/hybrid-items/h1
+      { status: 204 }, // DELETE /v1/api/items/d1 (doc)
+      { status: 204 }, // DELETE /v1/api/items/g1 (drawing)
+    ]);
+    const c = client();
+    await c.deleteHybrid("h1");
+
+    expect(calls).toHaveLength(4);
+    // 1) GET the hybrid to learn its backing ids (BEFORE deleting the row).
+    expect(calls[0].url).toBe("https://api.kindraw.dev/api/hybrid-items/h1");
+    expect(calls[0].init.method).toBe("GET");
+    // 2) DELETE the hybrid row (bare /api/).
+    expect(calls[1].url).toBe("https://api.kindraw.dev/api/hybrid-items/h1");
+    expect(calls[1].init.method).toBe("DELETE");
+    // 3+4) DELETE the now-orphaned backing items (/v1/api/).
+    expect(calls[2].url).toBe("https://api.kindraw.dev/v1/api/items/d1");
+    expect(calls[2].init.method).toBe("DELETE");
+    expect(calls[3].url).toBe("https://api.kindraw.dev/v1/api/items/g1");
+    expect(calls[3].init.method).toBe("DELETE");
+  });
+
+  it("swallows a 404 on a backing-item delete (already gone) without throwing", async () => {
+    mockFetch([
+      { status: 200, json: getHybridResponse },
+      { status: 204 }, // hybrid row deleted
+      { status: 404, json: { error: "Item not found" } }, // doc already gone
+      { status: 204 }, // drawing deleted fine
+    ]);
+    const c = client();
+    // Must resolve despite the 404 on the doc delete.
+    await expect(c.deleteHybrid("h1")).resolves.toBeUndefined();
+    // It still attempted ALL four calls (a partial state cleans up as much as
+    // possible — the 404 doesn't abort the drawing delete).
+    expect(calls).toHaveLength(4);
+    expect(calls[3].url).toBe("https://api.kindraw.dev/v1/api/items/g1");
+  });
+
+  it("propagates a non-404 error on a backing-item delete", async () => {
+    mockFetch([
+      { status: 200, json: getHybridResponse },
+      { status: 204 },
+      { status: 500, json: { error: "boom" } }, // doc delete 500 → must throw
+    ]);
+    const c = client();
+    await expect(c.deleteHybrid("h1")).rejects.toMatchObject({ status: 500 });
+  });
+});
+
+describe("deleteAny (routes hybrid vs normal item)", () => {
+  const listResponse = {
+    items: [
+      { id: "draw1", kind: "drawing", title: "D", folderId: null },
+      { id: "h1", kind: "hybrid", title: "Spec", folderId: null },
+    ],
+  };
+
+  it("routes a hybrid id to deleteHybrid (full cleanup)", async () => {
+    mockFetch([
+      { status: 200, json: listResponse }, // listItems to detect kind
+      {
+        status: 200,
+        json: { hybrid: { docItemId: "d1", drawingItemId: "g1" } },
+      }, // getHybrid
+      { status: 204 }, // DELETE /api/hybrid-items/h1
+      { status: 204 }, // DELETE /v1/api/items/d1
+      { status: 204 }, // DELETE /v1/api/items/g1
+    ]);
+    const c = client();
+    const kind = await c.deleteAny("h1");
+    expect(kind).toBe("hybrid");
+    // 1 list + getHybrid + hybrid DELETE + 2 backing DELETEs.
+    expect(calls.map((x) => `${x.init.method} ${x.url}`)).toEqual([
+      "GET https://api.kindraw.dev/v1/api/items",
+      "GET https://api.kindraw.dev/api/hybrid-items/h1",
+      "DELETE https://api.kindraw.dev/api/hybrid-items/h1",
+      "DELETE https://api.kindraw.dev/v1/api/items/d1",
+      "DELETE https://api.kindraw.dev/v1/api/items/g1",
+    ]);
+  });
+
+  it("routes a normal item id to deleteItem (single DELETE)", async () => {
+    mockFetch([
+      { status: 200, json: listResponse },
+      { status: 204 }, // DELETE /v1/api/items/draw1
+    ]);
+    const c = client();
+    const kind = await c.deleteAny("draw1");
+    expect(kind).toBe("drawing");
+    expect(calls.map((x) => `${x.init.method} ${x.url}`)).toEqual([
+      "GET https://api.kindraw.dev/v1/api/items",
+      "DELETE https://api.kindraw.dev/v1/api/items/draw1",
+    ]);
+  });
+
+  it("falls back to deleteItem for an id not present in the list", async () => {
+    // An id the list doesn't contain (e.g. already-archived) → default to the
+    // plain item delete and let the API return the authoritative result.
+    mockFetch([
+      { status: 200, json: listResponse },
+      { status: 404, json: { error: "Item not found" } },
+    ]);
+    const c = client();
+    await expect(c.deleteAny("missing")).rejects.toMatchObject({ status: 404 });
+    expect(calls[1].url).toBe("https://api.kindraw.dev/v1/api/items/missing");
+  });
+});
+
 describe("templates + icons", () => {
   it("listTemplates GETs /api/templates", async () => {
     mockFetch([

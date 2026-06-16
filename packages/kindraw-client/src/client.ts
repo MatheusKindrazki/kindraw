@@ -5,11 +5,25 @@ export const DEFAULT_API_BASE_URL = "https://api.kindraw.dev";
 
 export type KindrawItemSummary = {
   id: string;
-  kind: "drawing" | "doc";
+  // The tree/list endpoints also return hybrids (kind:"hybrid", id = hybridId).
+  kind: "drawing" | "doc" | "hybrid";
   title: string;
   folderId: string | null;
   createdAt: string;
   updatedAt: string;
+};
+
+// GET /api/hybrid-items/:id response (verified against the worker's
+// getHybridItem -> toHybridItem shape). The backing item ids are nested under
+// `hybrid` (NOT at the top level). We only type the fields we consume.
+export type KindrawHybridItemResponse = {
+  hybrid: {
+    id: string;
+    kind: "hybrid";
+    title: string;
+    docItemId: string;
+    drawingItemId: string;
+  };
 };
 
 export type KindrawMe = {
@@ -260,8 +274,8 @@ export class KindrawClient {
     });
   }
 
-  getHybrid(hybridId: string): Promise<unknown> {
-    return this.request(
+  getHybrid(hybridId: string): Promise<KindrawHybridItemResponse> {
+    return this.request<KindrawHybridItemResponse>(
       "GET",
       `/api/hybrid-items/${encodeURIComponent(hybridId)}`,
     );
@@ -345,5 +359,63 @@ export class KindrawClient {
       "DELETE",
       `/v1/api/items/${encodeURIComponent(itemId)}`,
     );
+  }
+
+  // Completely delete a hybrid item. A hybrid lives in a SEPARATE hybrid_items
+  // table, so deleteItem(hybridId) -> DELETE /v1/api/items/:id 404s; the correct
+  // route is DELETE /api/hybrid-items/:id (bare /api/, requireAuth). But deleting
+  // only the hybrid row ORPHANS its backing doc + drawing items (they reappear as
+  // loose items), so a COMPLETE delete must also remove docItemId + drawingItemId.
+  //
+  // Order matters: GET the hybrid FIRST to capture the backing ids (the row may
+  // become unfetchable once deleted), THEN delete the hybrid row, THEN delete the
+  // now-standalone backing items via /v1/api/items/:id (which works once they're
+  // loose). Each backing delete tolerates a 404 (already gone) so a partial state
+  // still cleans up as much as possible; any other error propagates.
+  async deleteHybrid(hybridId: string): Promise<void> {
+    // 1) Capture refs BEFORE deleting the row.
+    const { hybrid } = await this.getHybrid(hybridId);
+    const { docItemId, drawingItemId } = hybrid;
+
+    // 2) Delete the hybrid row (bare /api/).
+    await this.request<void>(
+      "DELETE",
+      `/api/hybrid-items/${encodeURIComponent(hybridId)}`,
+    );
+
+    // 3) Delete the now-orphaned backing items, swallowing a 404 on each.
+    await this.deleteBackingItemIgnoring404(docItemId);
+    await this.deleteBackingItemIgnoring404(drawingItemId);
+  }
+
+  // Delete an item by id, ROUTING by kind: a hybrid id (which lives in the
+  // separate hybrid_items table and 404s on /v1/api/items/:id) goes through
+  // deleteHybrid (full cleanup incl. backing doc/drawing); everything else goes
+  // through deleteItem. Detection is one listItems() call — hybrids appear in the
+  // tree with kind:"hybrid" and id = the hybridId. An id not in the list falls
+  // back to deleteItem so the API returns the authoritative result (e.g. 404).
+  // Returns the kind it routed as (for the caller's confirmation message).
+  async deleteAny(id: string): Promise<KindrawItemSummary["kind"]> {
+    const { items } = await this.listItems();
+    const match = items.find((item) => item.id === id);
+    if (match?.kind === "hybrid") {
+      await this.deleteHybrid(id);
+      return "hybrid";
+    }
+    await this.deleteItem(id);
+    return match?.kind ?? "drawing";
+  }
+
+  // Delete one backing item, swallowing a 404 (already deleted) so a complete
+  // hybrid delete cleans up as much as possible. Any other API error propagates.
+  private async deleteBackingItemIgnoring404(itemId: string): Promise<void> {
+    try {
+      await this.deleteItem(itemId);
+    } catch (err) {
+      if (err instanceof KindrawApiError && err.status === 404) {
+        return;
+      }
+      throw err;
+    }
   }
 }
