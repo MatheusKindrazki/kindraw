@@ -373,4 +373,27 @@ describe("templates + icons", () => {
     );
     expect(calls.length).toBe(0);
   });
+
+  // FIX 5 (Security MEDIUM/LOW) — validate the color client-side too, so an
+  // invalid color rejects BEFORE the request instead of wasting a round-trip
+  // (the worker silently drops an unsafe color).
+  it("getIconSvg rejects a malformed color WITHOUT calling fetch", async () => {
+    mockFetch([{ status: 200, text: "<svg/>" }]);
+    const c = new KindrawClient({ token: "kdr_test" });
+    await expect(c.getIconSvg("mdi:home", "red);x")).rejects.toThrow(
+      /invalid icon color/i,
+    );
+    expect(calls.length).toBe(0);
+  });
+
+  it("getIconSvg accepts a valid hex color (with and without #)", async () => {
+    mockFetch([
+      { status: 200, text: "<svg/>", contentType: "image/svg+xml" },
+      { status: 200, text: "<svg/>", contentType: "image/svg+xml" },
+    ]);
+    const c = new KindrawClient({ token: "kdr_test" });
+    await expect(c.getIconSvg("mdi:home", "#ff0000")).resolves.toBe("<svg/>");
+    await expect(c.getIconSvg("mdi:home", "red")).resolves.toBe("<svg/>");
+    expect(calls.length).toBe(2);
+  });
 });

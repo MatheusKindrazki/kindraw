@@ -317,6 +317,14 @@ export class KindrawClient {
     if (!/^[a-z0-9-]+:[a-z0-9-]+$/i.test(id)) {
       throw new Error(`Invalid icon id "${id}" (expected "prefix:name").`);
     }
+    // Validate the color BEFORE the request too: the worker enforces its own
+    // SAFE_COLOR_PATTERN (an optional "#" plus alphanumerics) and SILENTLY DROPS
+    // anything else, so an invalid color would otherwise waste a round-trip and
+    // return an uncolored icon with no error. Mirror that pattern here so a bad
+    // color rejects without ever reaching the network. (Security MEDIUM/LOW.)
+    if (color && !/^#?[a-z0-9]+$/i.test(color)) {
+      throw new Error(`Invalid icon color "${color}".`);
+    }
     const params = new URLSearchParams({ id });
     if (color) {
       params.set("color", color);
