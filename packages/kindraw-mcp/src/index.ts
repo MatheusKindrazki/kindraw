@@ -73,7 +73,11 @@ const main = async () => {
           .describe(
             "A valid Mermaid diagram definition, e.g. 'graph TD; A-->B'",
           ),
-        title: z.string().optional().describe("Title for the new drawing"),
+        title: z
+          .string()
+          .max(500)
+          .optional()
+          .describe("Title for the new drawing"),
       },
     },
     async ({ mermaid, title }) => {
@@ -109,26 +113,39 @@ const main = async () => {
         "(rectangle/diamond/ellipse), optional hex colors, direction (TB/LR/...), " +
         "and engine (dagre, or elk for orthogonal routing). Returns the drawing URL.",
       inputSchema: {
-        title: z.string().optional().describe("Title for the new drawing"),
+        title: z
+          .string()
+          .max(500)
+          .optional()
+          .describe("Title for the new drawing"),
         nodes: z
           .array(
             z.object({
-              id: z.string().describe("Unique node id, referenced by edges"),
-              label: z.string().describe("Text shown inside the node"),
+              id: z
+                .string()
+                .max(200)
+                .describe("Unique node id, referenced by edges"),
+              label: z
+                .string()
+                .max(2000)
+                .describe("Text shown inside the node"),
               shape: z
                 .enum(["rectangle", "diamond", "ellipse"])
                 .optional()
                 .describe("Node shape (default rectangle)"),
               group: z
                 .string()
+                .max(200)
                 .optional()
                 .describe("Optional group id (reserved for grouping)"),
               strokeColor: z
                 .string()
+                .max(64)
                 .optional()
                 .describe("Stroke color hex, e.g. #1971c2"),
               backgroundColor: z
                 .string()
+                .max(64)
                 .optional()
                 .describe("Fill color hex, e.g. #a5d8ff"),
             }),
@@ -139,9 +156,13 @@ const main = async () => {
         edges: z
           .array(
             z.object({
-              from: z.string().describe("Source node id"),
-              to: z.string().describe("Target node id"),
-              label: z.string().optional().describe("Optional edge label"),
+              from: z.string().max(200).describe("Source node id"),
+              to: z.string().max(200).describe("Target node id"),
+              label: z
+                .string()
+                .max(2000)
+                .optional()
+                .describe("Optional edge label"),
               style: z
                 .enum(["solid", "dashed", "dotted"])
                 .optional()
@@ -153,8 +174,12 @@ const main = async () => {
         groups: z
           .array(
             z.object({
-              id: z.string().describe("Unique group id"),
-              label: z.string().optional().describe("Optional group label"),
+              id: z.string().max(200).describe("Unique group id"),
+              label: z
+                .string()
+                .max(2000)
+                .optional()
+                .describe("Optional group label"),
             }),
           )
           .max(200)
