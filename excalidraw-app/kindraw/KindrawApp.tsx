@@ -1796,20 +1796,25 @@ const KindrawWaitlistForm = ({ source }: { source: string }) => {
 };
 
 const KindrawLandingValueProp = ({
-  icon,
+  index,
   title,
+  lead,
   body,
 }: {
-  icon: KindrawIconName;
+  index: number;
   title: string;
+  lead: string;
   body: string;
 }) => (
   <article className="kindraw-landing__value">
-    <span className="kindraw-landing__value-icon">
-      <KindrawIcon name={icon} size={19} strokeWidth={2.1} />
+    <span aria-hidden className="kindraw-landing__value-index">
+      {String(index).padStart(2, "0")}
     </span>
-    <h3>{title}</h3>
-    <p>{body}</p>
+    <div className="kindraw-landing__value-text">
+      <h3 className="kindraw-landing__value-title">{title}</h3>
+      <p className="kindraw-landing__value-lead">{lead}</p>
+      <p className="kindraw-landing__value-body">{body}</p>
+    </div>
   </article>
 );
 
@@ -1874,6 +1879,10 @@ const KindrawLanding = ({ errorMessage }: { errorMessage: string | null }) => {
               </button>
             </div>
 
+            <p className="kindraw-landing__proof">
+              {t("kindraw.landing.hero.proof")}
+            </p>
+
             <div className="kindraw-landing__waitlist-block">
               <span className="kindraw-landing__or">
                 {t("kindraw.landing.hero.or")}
@@ -1899,6 +1908,9 @@ const KindrawLanding = ({ errorMessage }: { errorMessage: string | null }) => {
                 </span>
               </div>
               <div className="kindraw-landing__demo-stage">
+                <span className="kindraw-landing__demo-badge">
+                  {t("kindraw.landing.demo.badge")}
+                </span>
                 <span className="kindraw-landing__demo-play" aria-hidden>
                   <KindrawIcon name="hybrid" size={26} strokeWidth={1.9} />
                 </span>
@@ -1908,55 +1920,81 @@ const KindrawLanding = ({ errorMessage }: { errorMessage: string | null }) => {
           </div>
         </section>
 
-        {/* ─── VALUE PROPS ─── */}
+        {/* ─── VALUE PROPS — editorial numbered rows (not an icon-card grid) ─── */}
         <section
           aria-label={t("kindraw.landing.values.aria")}
           className="kindraw-landing__values"
         >
-          <KindrawLandingValueProp
-            body={t("kindraw.landing.values.layoutBody")}
-            icon="hybrid"
-            title={t("kindraw.landing.values.layoutTitle")}
-          />
-          <KindrawLandingValueProp
-            body={t("kindraw.landing.values.workspaceBody")}
-            icon="folder"
-            title={t("kindraw.landing.values.workspaceTitle")}
-          />
-          <KindrawLandingValueProp
-            body={t("kindraw.landing.values.collabBody")}
-            icon="users"
-            title={t("kindraw.landing.values.collabTitle")}
-          />
+          <span className="kindraw-eyebrow kindraw-landing__values-label">
+            {t("kindraw.landing.values.label")}
+          </span>
+          <div className="kindraw-landing__value-list">
+            <KindrawLandingValueProp
+              body={t("kindraw.landing.values.layoutBody")}
+              index={1}
+              lead={t("kindraw.landing.values.layoutLead")}
+              title={t("kindraw.landing.values.layoutTitle")}
+            />
+            <KindrawLandingValueProp
+              body={t("kindraw.landing.values.workspaceBody")}
+              index={2}
+              lead={t("kindraw.landing.values.workspaceLead")}
+              title={t("kindraw.landing.values.workspaceTitle")}
+            />
+            <KindrawLandingValueProp
+              body={t("kindraw.landing.values.collabBody")}
+              index={3}
+              lead={t("kindraw.landing.values.collabLead")}
+              title={t("kindraw.landing.values.collabTitle")}
+            />
+          </div>
         </section>
 
-        {/* ─── HOW IT WORKS ─── */}
+        {/* ─── HOW IT WORKS — sticky header + threaded steps (asymmetric) ─── */}
         <section className="kindraw-landing__how">
           <div className="kindraw-landing__how-head">
             <span className="kindraw-eyebrow">
               {t("kindraw.landing.how.eyebrow")}
             </span>
             <h2>{t("kindraw.landing.how.title")}</h2>
+            <p className="kindraw-landing__how-sub">
+              {t("kindraw.landing.how.subtitle")}
+            </p>
           </div>
           <ol className="kindraw-landing__steps">
             <li className="kindraw-landing__step">
-              <span className="kindraw-landing__step-n">1</span>
-              <div>
+              <span aria-hidden className="kindraw-landing__step-n">
+                1
+              </span>
+              <div className="kindraw-landing__step-body">
+                <span className="kindraw-landing__step-tag">
+                  {t("kindraw.landing.how.step1Tag")}
+                </span>
                 <h3>{t("kindraw.landing.how.step1Title")}</h3>
                 <p>{t("kindraw.landing.how.step1Body")}</p>
                 <code className="kindraw-landing__code">npx @kindraw/mcp</code>
               </div>
             </li>
             <li className="kindraw-landing__step">
-              <span className="kindraw-landing__step-n">2</span>
-              <div>
+              <span aria-hidden className="kindraw-landing__step-n">
+                2
+              </span>
+              <div className="kindraw-landing__step-body">
+                <span className="kindraw-landing__step-tag">
+                  {t("kindraw.landing.how.step2Tag")}
+                </span>
                 <h3>{t("kindraw.landing.how.step2Title")}</h3>
                 <p>{t("kindraw.landing.how.step2Body")}</p>
               </div>
             </li>
             <li className="kindraw-landing__step">
-              <span className="kindraw-landing__step-n">3</span>
-              <div>
+              <span aria-hidden className="kindraw-landing__step-n">
+                3
+              </span>
+              <div className="kindraw-landing__step-body">
+                <span className="kindraw-landing__step-tag">
+                  {t("kindraw.landing.how.step3Tag")}
+                </span>
                 <h3>{t("kindraw.landing.how.step3Title")}</h3>
                 <p>{t("kindraw.landing.how.step3Body")}</p>
               </div>
@@ -1966,6 +2004,9 @@ const KindrawLanding = ({ errorMessage }: { errorMessage: string | null }) => {
 
         {/* ─── CLOSING CTA ─── */}
         <section className="kindraw-landing__closer">
+          <span className="kindraw-eyebrow kindraw-landing__closer-label">
+            {t("kindraw.landing.closer.label")}
+          </span>
           <h2>{t("kindraw.landing.closer.title")}</h2>
           <p>{t("kindraw.landing.closer.subtitle")}</p>
           <div className="kindraw-landing__cta kindraw-landing__cta--center">
