@@ -169,6 +169,43 @@ describe("validateDiagramSpec", () => {
         }),
       ).toThrow(/reserved/i);
     });
+
+    // FIX 2 (BizLogic LOW-1) — tpl-/icon- prefixes are ALSO reserved: template
+    // skeletons are namespaced with `tpl-` and icons get `icon-<hash>` ids, so a
+    // user node id like "tpl-x" or "icon-0" would collide with a generated id.
+    it('rejects a node id starting with "tpl-" (collides with namespaced template ids)', () => {
+      expect(() =>
+        validateDiagramSpec({
+          nodes: [
+            { id: "tpl-foo", label: "X" },
+            { id: "b", label: "Y" },
+          ],
+          edges: [],
+        }),
+      ).toThrow(/reserved/i);
+    });
+
+    it('rejects a node id starting with "icon-" (collides with generated icon ids)', () => {
+      expect(() =>
+        validateDiagramSpec({
+          nodes: [
+            { id: "icon-0", label: "X" },
+            { id: "b", label: "Y" },
+          ],
+          edges: [],
+        }),
+      ).toThrow(/reserved/i);
+    });
+
+    it('rejects a group id starting with "tpl-" / "icon-"', () => {
+      expect(() =>
+        validateDiagramSpec({
+          nodes: [{ id: "a", label: "A" }],
+          edges: [],
+          groups: [{ id: "icon-g" }],
+        }),
+      ).toThrow(/reserved/i);
+    });
   });
 
   // FIX C (Security H2) — id length cap (defense in depth)

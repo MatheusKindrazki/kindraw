@@ -4,10 +4,13 @@
 // and NO start/end bindings (verified against workers/api/src/templates.ts).
 // reanchorArrows assumes BOUND arrows and would displace them, so we skip it.
 //
-// We namespace ingested ids with a "tpl-" prefix (collision-free:
-// RESERVED_ID_PREFIX_RE forbids text-/arrow- but NOT tpl-, verified C8) so
-// template ids never clash with user nodes or generated icon ids. Arrow
-// skeletons have no id, so they are left untouched by the namespacer.
+// We namespace ingested ids with a "tpl-" prefix so template ids never clash
+// with user nodes or generated icon ids. This namespacing happens HERE, on
+// already-trusted template skeletons (never run through validateDiagramSpec);
+// the reciprocal guarantee — that USER spec ids can't start with "tpl-" — is
+// enforced by RESERVED_ID_PREFIX_RE in spec.ts (which now also reserves tpl-/
+// icon-, BizLogic LOW-1). Arrow skeletons have no id, so they are left
+// untouched by the namespacer.
 //
 // Output is deterministic (same skeletons -> identical content) via stabilize.
 

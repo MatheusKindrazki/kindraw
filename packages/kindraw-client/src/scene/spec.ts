@@ -88,12 +88,17 @@ const MAX_LINK_LEN = 2048;
 // the defense-in-depth backstop the builder always enforces. (Security H2.)
 const MAX_ID_LEN = 200;
 
-// Generated elements (bound text, arrows) live in the SAME id namespace as user
-// node ids. We derive their ids as `text-<containerId>` and `arrow-<i>`, so a
-// user id like "text-b" or "arrow-0" would collide → a duplicate element id or
-// a silently dropped arrow. Reject any user id that starts with a reserved
-// generated-element prefix. (Code H1+H2 — silent data loss.)
-const RESERVED_ID_PREFIX_RE = /^(text|arrow)-/;
+// Generated elements live in the SAME id namespace as user node ids:
+//   - bound text   → `text-<containerId>`
+//   - arrows       → `arrow-<i>`
+//   - template     → `tpl-<...>` (buildFromSkeletons namespaces template ids)
+//   - icon images  → `icon-<hash>` (composeIconImages)
+// A user id like "text-b", "arrow-0", "tpl-x" or "icon-0" would collide → a
+// duplicate element id (convertToExcalidrawElements only console.errors on a dup
+// id; it does NOT dedupe) or a silently dropped arrow. Reject any user id that
+// starts with a reserved generated-element prefix. (Code H1+H2 / BizLogic LOW-1
+// — silent data loss.)
+const RESERVED_ID_PREFIX_RE = /^(text|arrow|tpl|icon)-/;
 
 // Ids that collide with Object.prototype keys. Allowing these as ids (which end
 // up as keys in lookup objects/Sets elsewhere) invites prototype-pollution and
@@ -206,8 +211,8 @@ export const validateDiagramSpec = (raw: unknown): NormalizedSpec => {
     }
     if (RESERVED_ID_PREFIX_RE.test(group.id)) {
       throw new Error(
-        `Group id "${group.id}" must not start with "text-" or "arrow-" ` +
-          `(reserved for generated elements).`,
+        `Group id "${group.id}" must not start with "text-", "arrow-", ` +
+          `"tpl-" or "icon-" (reserved for generated elements).`,
       );
     }
     if (groupIds.has(group.id)) {
@@ -241,8 +246,8 @@ export const validateDiagramSpec = (raw: unknown): NormalizedSpec => {
     }
     if (RESERVED_ID_PREFIX_RE.test(node.id)) {
       throw new Error(
-        `Node id "${node.id}" must not start with "text-" or "arrow-" ` +
-          `(reserved for generated elements).`,
+        `Node id "${node.id}" must not start with "text-", "arrow-", ` +
+          `"tpl-" or "icon-" (reserved for generated elements).`,
       );
     }
     if (ids.has(node.id)) {
