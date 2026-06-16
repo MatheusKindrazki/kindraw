@@ -19,6 +19,14 @@
     "./scene": {
       "types": "./dist/scene/index.d.ts",
       "default": "./dist/scene/index.js"
+    },
+    "./hybrid": {
+      "types": "./dist/hybrid.d.ts",
+      "default": "./dist/hybrid.js"
+    },
+    "./sections": {
+      "types": "./dist/sections/index.d.ts",
+      "default": "./dist/sections/index.js"
     }
   },
   "files": [
@@ -33,7 +41,8 @@
     "canvas": "^3.0.0",
     "dagre": "^0.8.5",
     "elkjs": "^0.9.3",
-    "jsdom": "^24.0.0"
+    "jsdom": "^24.0.0",
+    "marked": "15.0.12"
   },
   "devDependencies": {
     "@types/dagre": "^0.7.52",
