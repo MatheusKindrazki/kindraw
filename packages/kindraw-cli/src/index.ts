@@ -3,12 +3,8 @@ import { KindrawApiError } from "@kindraw/client";
 import { login, logout } from "./commands/login.js";
 import { generate } from "./commands/generate.js";
 import { docCreate } from "./commands/doc.js";
-import {
-  itemsList,
-  itemsGet,
-  itemsDelete,
-  whoami,
-} from "./commands/items.js";
+import { hybridCreate } from "./commands/hybrid.js";
+import { itemsList, itemsGet, itemsDelete, whoami } from "./commands/items.js";
 
 const HELP = `kindraw — create drawings in your Kindraw workspace from the terminal
 
@@ -22,6 +18,8 @@ Usage:
   kindraw doc create --md <file|->      Create a markdown doc
                     --title <title>
                    [--folder <id>]
+  kindraw hybrid create --title <T>     Create a doc + canvas hybrid
+                       [--md <file|->] [--spec <file|->] [--folder <id>]
   kindraw items list [--json]           List your drawings/docs
   kindraw items get <id> [--json]       Show one item
   kindraw items delete <id>             Delete an item
@@ -89,6 +87,17 @@ const main = async () => {
         });
       }
       throw new Error(`Unknown doc command: ${sub ?? "(none)"}`);
+    }
+    case "hybrid": {
+      if (sub === "create") {
+        return hybridCreate({
+          title: str(flags.title),
+          md: str(flags.md),
+          spec: str(flags.spec),
+          folder: str(flags.folder),
+        });
+      }
+      throw new Error(`Unknown hybrid command: ${sub ?? "(none)"}`);
     }
     case "items": {
       if (sub === "list") {

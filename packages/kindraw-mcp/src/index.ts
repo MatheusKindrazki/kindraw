@@ -92,14 +92,17 @@ const main = async () => {
         const { generateExcalidrawFromMermaid } = await import(
           "@kindraw/client/generate"
         );
-        const { content, elementCount } =
-          await generateExcalidrawFromMermaid(mermaid);
+        const { content, elementCount } = await generateExcalidrawFromMermaid(
+          mermaid,
+        );
         const result = await client.createDrawing({
           title: title || "Untitled drawing",
           content,
         });
         return text(
-          `Created drawing "${title || "Untitled drawing"}" (${elementCount} elements).\n${result.url}`,
+          `Created drawing "${
+            title || "Untitled drawing"
+          }" (${elementCount} elements).\n${result.url}`,
         );
       } catch (error) {
         return { ...text(formatError(error)), isError: true };
@@ -219,7 +222,9 @@ const main = async () => {
           content,
         });
         return text(
-          `Created diagram "${title || "Untitled diagram"}" (${elementCount} elements).\n${result.url}`,
+          `Created diagram "${
+            title || "Untitled diagram"
+          }" (${elementCount} elements).\n${result.url}`,
         );
       } catch (error) {
         return { ...text(formatError(error)), isError: true };
@@ -234,7 +239,7 @@ const main = async () => {
         "Create a markdown document in the user's Kindraw workspace. Provide " +
         "the FULL markdown (GFM: headings, lists, tables, code). Returns the " +
         "doc URL (/doc/<id>). Use this for prose/notes; use kindraw_create_scene " +
-        "for canvas diagrams.",
+        "for canvas diagrams, or kindraw_create_hybrid for a doc beside a canvas.",
       inputSchema: {
         title: z.string().max(500).describe("Title for the new doc"),
         markdown: z
@@ -256,6 +261,111 @@ const main = async () => {
           folderId,
         });
         return text(`Created doc "${title}".\n${result.url}`);
+      } catch (error) {
+        return { ...text(formatError(error)), isError: true };
+      }
+    },
+  );
+
+  server.registerTool(
+    "kindraw_create_hybrid",
+    {
+      description:
+        "Create a hybrid item: a live markdown doc BESIDE an Excalidraw canvas, " +
+        "wired together with clickable section links. Provide the full markdown " +
+        "AND a diagram in ONE call. Each diagram node may carry linkToHeading " +
+        "(exact heading text) to deep-link that node to its doc section. Returns " +
+        "the /hybrid/<id> URL plus a report of how many links were wired and any " +
+        "linkToHeading that matched NO heading (fix the heading text and retry).",
+      inputSchema: {
+        title: z.string().max(500).describe("Title for the hybrid item"),
+        markdown: z
+          .string()
+          .max(500_000)
+          .describe("Full doc body (GFM). Headings become linkable sections."),
+        folderId: z.string().max(200).nullish().describe("Optional folder id"),
+        diagram: z
+          .object({
+            nodes: z
+              .array(
+                z.object({
+                  id: z.string().max(200),
+                  label: z.string().max(2000),
+                  shape: z.enum(["rectangle", "diamond", "ellipse"]).optional(),
+                  group: z.string().max(200).optional(),
+                  strokeColor: z.string().max(64).optional(),
+                  backgroundColor: z.string().max(64).optional(),
+                  linkToHeading: z
+                    .string()
+                    .max(500)
+                    .optional()
+                    .describe(
+                      "Exact heading text to deep-link this node to its section",
+                    ),
+                }),
+              )
+              .min(1)
+              .max(500),
+            edges: z
+              .array(
+                z.object({
+                  from: z.string().max(200),
+                  to: z.string().max(200),
+                  label: z.string().max(2000).optional(),
+                  style: z.enum(["solid", "dashed", "dotted"]).optional(),
+                }),
+              )
+              .max(2000),
+            groups: z
+              .array(
+                z.object({
+                  id: z.string().max(200),
+                  label: z.string().max(2000).optional(),
+                }),
+              )
+              .max(200)
+              .optional(),
+            direction: z.enum(["TB", "BT", "LR", "RL"]).optional(),
+            engine: z.enum(["dagre", "elk"]).optional(),
+          })
+          .describe("The canvas graph beside the doc"),
+      },
+    },
+    async ({ title, markdown, folderId, diagram }) => {
+      try {
+        const { composeHybrid, HybridPartialError } = await import(
+          "@kindraw/client/hybrid"
+        );
+        try {
+          const res = await composeHybrid(client, {
+            title,
+            markdown,
+            folderId,
+            diagram: diagram as Parameters<typeof composeHybrid>[1]["diagram"],
+          });
+          const warn = res.unmatchedHeadings.length
+            ? `\nWARNING: ${res.unmatchedHeadings.length} linkToHeading value(s) ` +
+              `matched no heading: ${res.unmatchedHeadings.join(", ")}. ` +
+              `Fix the heading text and retry.`
+            : "";
+          return text(
+            `Created hybrid "${title}" (${res.elementCount} canvas elements, ` +
+              `${res.linksWired} section link(s) wired).\n${res.url}${warn}`,
+          );
+        } catch (err) {
+          if (err instanceof HybridPartialError) {
+            return {
+              ...text(
+                `Hybrid partially created (step "${err.failedStep}" failed): ${err.message}\n` +
+                  `hybridId=${err.hybridId} docItemId=${err.docItemId} ` +
+                  `drawingItemId=${err.drawingItemId}. PUTs are idempotent — retry the ` +
+                  `failed content write rather than re-creating.`,
+              ),
+              isError: true,
+            };
+          }
+          throw err;
+        }
       } catch (error) {
         return { ...text(formatError(error)), isError: true };
       }
@@ -287,7 +397,8 @@ const main = async () => {
   server.registerTool(
     "kindraw_list_items",
     {
-      description: "List the drawings and docs in the user's Kindraw workspace.",
+      description:
+        "List the drawings and docs in the user's Kindraw workspace.",
       inputSchema: {},
     },
     async () => {
@@ -349,7 +460,9 @@ const main = async () => {
 main().catch((error: unknown) => {
   // eslint-disable-next-line no-console
   console.error(
-    `kindraw-mcp failed to start: ${error instanceof Error ? error.message : String(error)}`,
+    `kindraw-mcp failed to start: ${
+      error instanceof Error ? error.message : String(error)
+    }`,
   );
   process.exit(1);
 });
