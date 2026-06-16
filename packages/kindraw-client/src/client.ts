@@ -83,6 +83,36 @@ export class KindrawClient {
     return (await response.json()) as T;
   }
 
+  // Sibling of request<T> for endpoints that return a raw (non-JSON) body —
+  // specifically GET /api/icons/svg, which returns image/svg+xml. We reuse the
+  // SAME Bearer header + 401 hint + KindrawApiError handling; only the success
+  // path differs (.text() instead of .json()). (Verified C1: request<T> always
+  // calls response.json() and would throw on an SVG body.)
+  private async requestText(method: string, path: string): Promise<string> {
+    const response = await fetch(`${this.baseUrl}${path}`, {
+      method,
+      headers: { Authorization: `Bearer ${this.token}` },
+    });
+
+    if (!response.ok) {
+      let detail = response.statusText;
+      try {
+        const parsed = (await response.json()) as { error?: string };
+        if (parsed?.error) {
+          detail = parsed.error;
+        }
+      } catch {
+        // ignore non-JSON error bodies
+      }
+      if (response.status === 401) {
+        detail = `${detail} (run "kindraw login" or check KINDRAW_TOKEN)`;
+      }
+      throw new KindrawApiError(response.status, detail);
+    }
+
+    return response.text();
+  }
+
   whoami(): Promise<KindrawMe> {
     return this.request<KindrawMe>("GET", "/v1/api/me");
   }
