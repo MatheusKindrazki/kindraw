@@ -2,6 +2,7 @@ import { KindrawApiError } from "@kindraw/client";
 
 import { login, logout } from "./commands/login.js";
 import { generate } from "./commands/generate.js";
+import { docCreate } from "./commands/doc.js";
 import {
   itemsList,
   itemsGet,
@@ -18,6 +19,9 @@ Usage:
   kindraw generate --mermaid <file|->   Create a drawing from a Mermaid diagram
                    --spec <file|->      ...or from a structured node/edge spec
                   [--title <title>]
+  kindraw doc create --md <file|->      Create a markdown doc
+                    --title <title>
+                   [--folder <id>]
   kindraw items list [--json]           List your drawings/docs
   kindraw items get <id> [--json]       Show one item
   kindraw items delete <id>             Delete an item
@@ -76,6 +80,16 @@ const main = async () => {
         spec: str(flags.spec),
         title: str(flags.title),
       });
+    case "doc": {
+      if (sub === "create") {
+        return docCreate({
+          md: str(flags.md),
+          title: str(flags.title),
+          folder: str(flags.folder),
+        });
+      }
+      throw new Error(`Unknown doc command: ${sub ?? "(none)"}`);
+    }
     case "items": {
       if (sub === "list") {
         return itemsList({ json: flags.json === true });

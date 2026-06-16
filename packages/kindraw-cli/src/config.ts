@@ -8,6 +8,9 @@ import path from "node:path";
 export type KindrawConfig = {
   token?: string;
   baseUrl?: string;
+  // App origin for building user-facing /doc /draw /hybrid URLs. Honors
+  // KINDRAW_APP_ORIGIN (env wins over file), matching the MCP's resolution (C12).
+  appOrigin?: string;
 };
 
 const configDir = () =>
@@ -24,6 +27,9 @@ export const loadConfig = (): KindrawConfig => {
   }
   if (process.env.KINDRAW_API_BASE_URL) {
     fromEnv.baseUrl = process.env.KINDRAW_API_BASE_URL;
+  }
+  if (process.env.KINDRAW_APP_ORIGIN) {
+    fromEnv.appOrigin = process.env.KINDRAW_APP_ORIGIN;
   }
 
   let fromFile: KindrawConfig = {};

@@ -12,5 +12,6 @@ export const requireClient = (): KindrawClient => {
   return new KindrawClient({
     token: config.token,
     baseUrl: config.baseUrl || DEFAULT_API_BASE_URL,
+    appOrigin: config.appOrigin,
   });
 };
