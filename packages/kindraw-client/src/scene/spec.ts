@@ -121,12 +121,22 @@ const HEX_COLOR_RE = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
 const isValidColor = (value: string): boolean =>
   value === "transparent" || HEX_COLOR_RE.test(value);
 
+// A kindraw://section/<hybridId>/<sectionId> deep-link with BOTH segments
+// constrained to a safe charset (the same chars slugify/buildSectionId emit,
+// plus the id-style chars hybrid/doc ids use). Self-contained on purpose: we
+// don't import parseKindrawSectionLink from sections/index.ts because that pulls
+// `marked` into the lean scene bundle. A bare prefix check let
+// "kindraw://section/javascript:alert(1)/x" through; this matches the FULL path
+// so an unsafe scheme can't be smuggled inside a segment. (Code-review Security H1.)
+const KINDRAW_SECTION_LINK_RE =
+  /^kindraw:\/\/section\/[a-zA-Z0-9._-]+\/[a-zA-Z0-9._-]+$/;
+
 // Element links are either an in-app section deep-link or a normal web URL.
 // Reject anything else (e.g. javascript:, data:) so we never serialize a hostile
 // href into the canvas. (Security: node.link is attacker-controllable input.)
 const isValidNodeLink = (value: string): boolean => {
   if (value.startsWith("kindraw://section/")) {
-    return true;
+    return KINDRAW_SECTION_LINK_RE.test(value);
   }
   try {
     const u = new URL(value);

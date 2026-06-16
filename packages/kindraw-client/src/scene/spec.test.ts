@@ -304,6 +304,67 @@ describe("validateDiagramSpec", () => {
     });
   });
 
+  // Code-review FIX 2 (Security H1) — full kindraw:// link path validation,
+  // not just the prefix. The scene builder is the defense-in-depth backstop.
+  describe("kindraw:// link validation", () => {
+    it("accepts a well-formed kindraw://section link", () => {
+      expect(() =>
+        validateDiagramSpec({
+          nodes: [
+            { id: "a", label: "A", link: "kindraw://section/h1/overview" },
+          ],
+          edges: [],
+        }),
+      ).not.toThrow();
+    });
+
+    it("rejects a kindraw:// link whose segments smuggle an unsafe scheme", () => {
+      expect(() =>
+        validateDiagramSpec({
+          nodes: [
+            {
+              id: "a",
+              label: "A",
+              link: "kindraw://section/javascript:alert(1)/x",
+            },
+          ],
+          edges: [],
+        }),
+      ).toThrow(/invalid link/i);
+    });
+
+    it("rejects a kindraw:// link with a missing segment", () => {
+      expect(() =>
+        validateDiagramSpec({
+          nodes: [{ id: "a", label: "A", link: "kindraw://section/h1" }],
+          edges: [],
+        }),
+      ).toThrow(/invalid link/i);
+    });
+
+    it("rejects a kindraw:// link with extra path segments", () => {
+      expect(() =>
+        validateDiagramSpec({
+          nodes: [
+            { id: "a", label: "A", link: "kindraw://section/h1/over/view" },
+          ],
+          edges: [],
+        }),
+      ).toThrow(/invalid link/i);
+    });
+
+    it("still accepts plain http(s) URLs", () => {
+      expect(() =>
+        validateDiagramSpec({
+          nodes: [
+            { id: "a", label: "A", link: "https://example.com/path?q=1" },
+          ],
+          edges: [],
+        }),
+      ).not.toThrow();
+    });
+  });
+
   // FIX 5 (BizLogic MEDIUM-2) — dedup edges
   describe("edge de-duplication", () => {
     it("drops exact-duplicate edges (same from|to|label|style)", () => {
