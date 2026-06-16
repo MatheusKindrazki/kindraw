@@ -13,7 +13,11 @@ await build({
   target: "node18",
   // @kindraw/client (and its heavy deps) are resolved from node_modules at run
   // time; keep them external so the CLI bundle stays tiny.
-  external: ["@kindraw/client", "@kindraw/client/generate"],
+  external: [
+    "@kindraw/client",
+    "@kindraw/client/generate",
+    "@kindraw/client/scene",
+  ],
   banner: { js: "#!/usr/bin/env node" },
   logLevel: "info",
 });

@@ -16,6 +16,7 @@ Usage:
   kindraw logout                        Remove local credentials
   kindraw whoami                        Show the logged-in account
   kindraw generate --mermaid <file|->   Create a drawing from a Mermaid diagram
+                   --spec <file|->      ...or from a structured node/edge spec
                   [--title <title>]
   kindraw items list [--json]           List your drawings/docs
   kindraw items get <id> [--json]       Show one item
@@ -72,6 +73,7 @@ const main = async () => {
     case "generate":
       return generate({
         mermaid: str(flags.mermaid),
+        spec: str(flags.spec),
         title: str(flags.title),
       });
     case "items": {
