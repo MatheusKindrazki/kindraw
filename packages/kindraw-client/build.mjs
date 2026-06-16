@@ -97,7 +97,8 @@ await build({
     index: path.resolve(__dirname, "src/index.ts"),
     generate: path.resolve(__dirname, "src/generate.ts"),
     // Nested key so esbuild emits dist/scene/index.js, matching the package.json
-    // "./scene" export. dagre/elkjs are bundled (pure JS, see `external` above).
+    // "./scene" export. dagre/elkjs are EXTERNAL (see `external` above) — declared
+    // deps of @kindraw/client, resolved from node_modules at runtime, not bundled.
     "scene/index": path.resolve(__dirname, "src/scene/index.ts"),
   },
 });

@@ -48,13 +48,16 @@ const ensureProvider = (): void => {
 // reads `window?.DEBUG_FRACTIONAL_INDICES`. In plain Node `window` is undeclared
 // (not just undefined), so that bare reference throws a ReferenceError — the `?.`
 // only guards null/undefined *values*, not an undeclared identifier. We define a
-// minimal empty `window` so the (typeof-guarded) feature checks all evaluate
-// safely. This is the DOM-free counterpart to what jsdom provides on the mermaid
-// path; it does not pull in jsdom. Idempotent + non-destructive.
+// MINIMAL window object exposing only DEBUG_FRACTIONAL_INDICES — deliberately NOT
+// `globalThis`, which would make `typeof window !== "undefined"` true and flip
+// browser-only branches in bundled modules (e.g. colors.ts allocates a browser
+// cache). This is the DOM-free counterpart to what jsdom provides on the mermaid
+// path; it does not pull in jsdom. Idempotent + non-destructive (never clobbers a
+// real window in jsdom/electron/browser).
 const ensureWindowShim = (): void => {
   const g = globalThis as { window?: unknown };
   if (typeof g.window === "undefined") {
-    g.window = g;
+    g.window = { DEBUG_FRACTIONAL_INDICES: false };
   }
 };
 
