@@ -74,4 +74,15 @@ describe("layoutNodes (dagre)", () => {
       expect(p.height).toBeGreaterThanOrEqual(40);
     }
   });
+
+  // FIX 7 (Code M1) — origin normalization: top-left-most node sits at the
+  // fixed margin so switching engines doesn't shift the whole diagram.
+  it("normalizes origin so min x and min y are the fixed margin (20)", () => {
+    const spec = chainSpec(4);
+    const placed = layoutNodes(spec);
+    const minX = Math.min(...placed.map((p) => p.x));
+    const minY = Math.min(...placed.map((p) => p.y));
+    expect(minX).toBe(20);
+    expect(minY).toBe(20);
+  });
 });

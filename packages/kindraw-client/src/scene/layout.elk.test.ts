@@ -47,4 +47,26 @@ describe("layoutNodesAsync (elk engine)", () => {
     const placed = await layoutNodesAsync(spec);
     expect(placed).toHaveLength(2);
   });
+
+  // FIX 7 (Code M1) — elk output is origin-normalized to the same fixed margin
+  // as dagre so switching engines doesn't shift the diagram.
+  it("normalizes origin so min x and min y are the fixed margin (20)", async () => {
+    const spec = validateDiagramSpec({
+      nodes: [
+        { id: "a", label: "A" },
+        { id: "b", label: "B" },
+        { id: "c", label: "C" },
+      ],
+      edges: [
+        { from: "a", to: "b" },
+        { from: "a", to: "c" },
+      ],
+      engine: "elk",
+    });
+    const placed = await layoutNodesAsync(spec);
+    const minX = Math.min(...placed.map((p) => p.x));
+    const minY = Math.min(...placed.map((p) => p.y));
+    expect(minX).toBe(20);
+    expect(minY).toBe(20);
+  });
 });
