@@ -18,6 +18,7 @@
 
 import type { KindrawClient } from "./client.js";
 import { buildScene } from "./scene/build.js";
+import { validateDiagramSpec } from "./scene/spec.js";
 import type { DiagramEdge, DiagramGroup, DiagramNode } from "./scene/spec.js";
 import {
   buildKindrawSectionLink,
@@ -25,7 +26,17 @@ import {
 } from "./sections/index.js";
 
 export type HybridDiagramNode = DiagramNode & {
-  /** Exact heading text to deep-link this node to its parsed doc section. */
+  /**
+   * Exact heading text to deep-link this node to its parsed doc section.
+   *
+   * Matching is by the heading's literal text. Limitations:
+   * - The synthetic intro (no leading heading) is NOT addressable — its
+   *   hardcoded title "Visao geral" never resolves here.
+   * - If two headings share the exact same text, only the FIRST occurrence is
+   *   deep-linkable by the bare title; later duplicates (which the parser gives
+   *   dedup-suffixed ids like `base-2`) can't be targeted by title alone.
+   * Unmatched headings are reported in `unmatchedHeadings`, not an error.
+   */
   linkToHeading?: string;
 };
 
@@ -71,6 +82,21 @@ export const composeHybrid = async (
   client: KindrawClient,
   input: ComposeHybridInput,
 ): Promise<ComposeHybridResult> => {
+  // Fail-fast: validate the diagram BEFORE seeding anything. The CLI has no zod
+  // schema, so a malformed/over-cap diagram would otherwise POST the hybrid and
+  // PUT the doc, then throw inside buildScene — leaving a half-built orphan
+  // hybrid behind. Validating here (it throws on any structural problem) makes
+  // both CLI and MCP fail with NO side effects. buildScene re-validates later
+  // (cheap, idempotent). (Security M2.) The linkToHeading field is stripped per
+  // node below, so validate the plain DiagramNode view of each node.
+  validateDiagramSpec({
+    nodes: input.diagram.nodes.map(({ linkToHeading, ...rest }) => rest),
+    edges: input.diagram.edges,
+    groups: input.diagram.groups,
+    direction: input.diagram.direction,
+    engine: input.diagram.engine,
+  });
+
   // Step 0: seed the hybrid (doc + empty drawing).
   const { hybridId, docItemId, drawingItemId } = await client.createHybrid({
     title: input.title,
@@ -83,10 +109,13 @@ export const composeHybrid = async (
   const sections = parseHybridMarkdownSections(input.markdown);
   const idByTitle = new Map<string, string>();
   for (const section of sections) {
-    // First occurrence of a title wins. Duplicate titles get dedup suffixes
-    // (-2, -3); the first stays addressable by its bare heading text, which is
-    // the most predictable behavior for the agent composing the diagram.
-    if (!idByTitle.has(section.title)) {
+    // Skip the synthetic intro: it isn't an addressable heading (its hardcoded
+    // title "Visao geral" would otherwise shadow a real heading of that text and
+    // let a node "deep-link" to a non-heading). First occurrence of a real title
+    // wins; duplicate titles get dedup suffixes (-2, -3) and only the first stays
+    // addressable by its bare heading text — the most predictable behavior for
+    // the agent composing the diagram. (Code M2 / BizLogic LOW-2.)
+    if (!section.isIntro && !idByTitle.has(section.title)) {
       idByTitle.set(section.title, section.id);
     }
   }
@@ -132,9 +161,24 @@ export const composeHybrid = async (
     engine: input.diagram.engine,
   });
   // Defensive: the server does NOT validate the JSON it stores, so we guarantee
-  // ours parses before the PUT. buildScene already JSON.stringifies, so this is
-  // a belt-and-suspenders check that can only fail on a builder regression.
-  JSON.parse(content);
+  // ours parses before the PUT. buildScene already JSON.stringifies, so this can
+  // only fail on a builder regression — but if it ever emits non-JSON, surface
+  // it as a drawing-step partial failure (steps 0+2 already succeeded) instead
+  // of a raw SyntaxError that bypasses the HybridPartialError contract.
+  // (Security M1 / Code M3.)
+  try {
+    JSON.parse(content);
+  } catch (err) {
+    throw new HybridPartialError(
+      `Hybrid ${hybridId} doc set but built drawing JSON is invalid: ${
+        err instanceof Error ? err.message : String(err)
+      }`,
+      hybridId,
+      docItemId,
+      drawingItemId,
+      "drawing",
+    );
+  }
   try {
     await client.updateHybridDrawing(drawingItemId, content);
   } catch (err) {

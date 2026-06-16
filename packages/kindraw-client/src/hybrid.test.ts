@@ -2,6 +2,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { KindrawClient } from "./client";
 import { composeHybrid, HybridPartialError } from "./hybrid";
+import * as build from "./scene/build";
+
+// Keep the REAL buildScene by default; individual tests override it via
+// mockImplementationOnce to exercise the JSON-parse partial-failure path.
+vi.mock("./scene/build", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./scene/build")>();
+  return { ...actual, buildScene: vi.fn(actual.buildScene) };
+});
 
 type Captured = { url: string; init: RequestInit };
 let calls: Captured[] = [];
@@ -178,6 +186,106 @@ describe("composeHybrid", () => {
     });
     // Doc PUT failed → drawing PUT must NOT have been attempted (only 2 calls).
     expect(calls).toHaveLength(2);
+  });
+
+  // FIX 3 (Security M1 / Code M3) — a non-JSON build output surfaces as a
+  // drawing-step HybridPartialError, not a raw SyntaxError that bypasses the
+  // partial-failure contract.
+  it("reports invalid built drawing JSON as a drawing-step partial failure", async () => {
+    vi.mocked(build.buildScene).mockImplementationOnce(async () => ({
+      content: "this is not json {",
+      elementCount: 0,
+    }));
+    mockFetch([
+      {
+        status: 201,
+        json: { hybridId: "h7", docItemId: "d7", drawingItemId: "g7" },
+      },
+      { status: 204 }, // doc PUT OK
+      // drawing PUT must NOT be reached (parse throws first) — none queued.
+    ]);
+    const err = await composeHybrid(client(), {
+      title: "X",
+      markdown: "# A\n",
+      diagram: { nodes: [{ id: "a", label: "A" }], edges: [] },
+    }).catch((e) => e);
+
+    expect(err).toBeInstanceOf(HybridPartialError);
+    expect(err.failedStep).toBe("drawing");
+    expect(err.hybridId).toBe("h7");
+    expect(err.docItemId).toBe("d7");
+    expect(err.drawingItemId).toBe("g7");
+    expect(err.message).toMatch(/invalid/i);
+    // Only seed + doc PUT happened; the drawing PUT was never attempted.
+    expect(calls).toHaveLength(2);
+  });
+
+  // FIX 4 (Security M2) — fail-fast validation BEFORE seeding the hybrid, so a
+  // malformed diagram never creates a half-built orphan hybrid.
+  it("rejects an invalid diagram BEFORE any fetch (no orphan hybrid)", async () => {
+    mockFetch([]); // no responses queued — any fetch would throw "unexpected"
+    await expect(
+      composeHybrid(client(), {
+        title: "X",
+        markdown: "# A\n",
+        diagram: {
+          // duplicate node id → validateDiagramSpec throws
+          nodes: [
+            { id: "a", label: "A" },
+            { id: "a", label: "A2" },
+          ],
+          edges: [],
+        },
+      }),
+    ).rejects.toThrow(/duplicate node id/i);
+    // Nothing was created: the validation fired before step 0 (createHybrid).
+    expect(calls).toHaveLength(0);
+  });
+
+  it("rejects an over-cap diagram (>500 nodes) BEFORE any fetch", async () => {
+    mockFetch([]);
+    const nodes = Array.from({ length: 501 }, (_, i) => ({
+      id: `n${i}`,
+      label: `N${i}`,
+    }));
+    await expect(
+      composeHybrid(client(), {
+        title: "X",
+        markdown: "# A\n",
+        diagram: { nodes, edges: [] },
+      }),
+    ).rejects.toThrow(/too many nodes/i);
+    expect(calls).toHaveLength(0);
+  });
+
+  // FIX 6 (Code M2 / BizLogic LOW-2) — the synthetic intro ("Visao geral") is not
+  // an addressable heading; linkToHeading: "Visao geral" must NOT resolve to it.
+  it("does not deep-link a node to the synthetic intro by its title", async () => {
+    mockFetch([
+      {
+        status: 201,
+        json: { hybridId: "h6", docItemId: "d6", drawingItemId: "g6" },
+      },
+      { status: 204 },
+      { status: 204 },
+    ]);
+    const res = await composeHybrid(client(), {
+      title: "X",
+      // Preamble (no heading) → parser emits an intro section titled "Visao geral".
+      markdown: "Preamble text\n\n# Real\n\nBody\n",
+      diagram: {
+        nodes: [{ id: "a", label: "A", linkToHeading: "Visao geral" }],
+        edges: [],
+      },
+    });
+    // "Visao geral" matched the intro before the fix; now it's unmatched.
+    expect(res.linksWired).toBe(0);
+    expect(res.unmatchedHeadings).toEqual(["Visao geral"]);
+    const drawing = JSON.parse(
+      JSON.parse(calls[2].init.body as string).content,
+    );
+    const a = drawing.elements.find((e: { id: string }) => e.id === "a");
+    expect(a.link ?? null).toBeNull();
   });
 
   it("surfaces a drawing-step partial failure after the doc succeeds", async () => {
