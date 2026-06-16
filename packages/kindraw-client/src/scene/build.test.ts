@@ -280,3 +280,108 @@ describe("buildScene", () => {
     });
   });
 });
+
+describe("buildScene additive inputs (templateElements + files + iconImages)", () => {
+  it("prepends templateElements and merges files + iconImages into the envelope", async () => {
+    const { content } = await buildScene(
+      { nodes: [{ id: "a", label: "A" }], edges: [] },
+      {
+        templateElements: [
+          {
+            id: "tpl-bg",
+            type: "rectangle",
+            x: 0,
+            y: 0,
+            width: 200,
+            height: 200,
+            isDeleted: false,
+          },
+        ],
+        files: {
+          "icon-deadbeef": {
+            id: "icon-deadbeef",
+            mimeType: "image/svg+xml",
+            dataURL: "data:image/svg+xml;base64,PHN2Zy8+",
+            created: 1,
+          },
+        },
+        iconImages: [
+          {
+            type: "image",
+            id: "icon-0",
+            fileId: "icon-deadbeef",
+            status: "saved",
+            x: 5,
+            y: 5,
+            width: 28,
+            height: 28,
+          },
+        ],
+      },
+    );
+    const parsed = JSON.parse(content);
+    // Template element present, before the node.
+    const ids = parsed.elements.map((e: { id: string }) => e.id);
+    expect(ids).toContain("tpl-bg");
+    expect(ids.indexOf("tpl-bg")).toBeLessThan(ids.indexOf("a"));
+    // Image element present.
+    expect(
+      parsed.elements.some((e: { type: string }) => e.type === "image"),
+    ).toBe(true);
+    // Files merged (not {}).
+    expect(parsed.files["icon-deadbeef"]).toBeDefined();
+  });
+
+  it("still serializes files:{} when no extra inputs are given (back-compat)", async () => {
+    const { content } = await buildScene({
+      nodes: [{ id: "a", label: "A" }],
+      edges: [],
+    });
+    expect(JSON.parse(content).files).toEqual({});
+  });
+
+  it("is deterministic with additive inputs", async () => {
+    const extras = {
+      templateElements: [
+        {
+          id: "tpl-bg",
+          type: "rectangle",
+          x: 0,
+          y: 0,
+          width: 200,
+          height: 200,
+          isDeleted: false,
+        },
+      ],
+      iconImages: [
+        {
+          type: "image",
+          id: "icon-0",
+          fileId: "icon-deadbeef",
+          status: "saved",
+          x: 5,
+          y: 5,
+          width: 28,
+          height: 28,
+        },
+      ],
+      files: {
+        "icon-deadbeef": {
+          id: "icon-deadbeef",
+          mimeType: "image/svg+xml",
+          dataURL: "data:image/svg+xml;base64,PHN2Zy8+",
+          created: 1,
+        },
+      },
+    };
+    const a = await buildScene(
+      { nodes: [{ id: "a", label: "A" }], edges: [] },
+      structuredClone(extras),
+    );
+    const b = await buildScene(
+      { nodes: [{ id: "a", label: "A" }], edges: [] },
+      structuredClone(extras),
+    );
+    expect(a.content).toBe(b.content);
+  });
+});

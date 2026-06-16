@@ -32,12 +32,29 @@ export type BuildResult = {
   elementCount: number;
 };
 
+// Additive, optional inputs that let a scene carry template background elements
+// and embedded icon images without changing the default (back-compat) behavior.
+export type BuildSceneExtras = {
+  /**
+   * Pre-serialized template elements to PREPEND (already excalidraw elements,
+   * e.g. from buildFromSkeletons). They render BEHIND the laid-out scene.
+   */
+  templateElements?: ExEl[];
+  /**
+   * Image skeletons (icons, from composeIconImages) to APPEND. They are
+   * converted alongside the scene — no layout, no reanchor — then stabilized.
+   */
+  iconImages?: Array<Record<string, unknown>>;
+  /** Files map to merge into the envelope (icon dataURLs). */
+  files?: Record<string, unknown>;
+};
+
 // Register the DOM-free provider exactly once, before any conversion. The
 // provider is cheap + stateless (its canvas context is lazily memoized), so a
 // single shared instance is all we need. (textMetrics.ts does NOT export its
 // internal sharedProvider, so we construct our own here — the cleaner option.)
 let providerInstalled = false;
-const ensureProvider = (): void => {
+export const ensureProvider = (): void => {
   if (!providerInstalled) {
     setCustomTextMetricsProvider(new NodeTextMetricsProvider());
     providerInstalled = true;
@@ -54,7 +71,7 @@ const ensureProvider = (): void => {
 // cache). This is the DOM-free counterpart to what jsdom provides on the mermaid
 // path; it does not pull in jsdom. Idempotent + non-destructive (never clobbers a
 // real window in jsdom/electron/browser).
-const ensureWindowShim = (): void => {
+export const ensureWindowShim = (): void => {
   const g = globalThis as { window?: unknown };
   if (typeof g.window === "undefined") {
     g.window = { DEBUG_FRACTIONAL_INDICES: false };
@@ -116,7 +133,7 @@ const toSkeleton = (
   return skeleton;
 };
 
-type ExEl = {
+export type ExEl = {
   id: string;
   type: string;
   containerId?: string | null;
@@ -156,7 +173,7 @@ const canonicalizeBoundTextIds = (elements: ExEl[]): void => {
 
 // Strip non-deterministic metadata so identical specs serialize identically.
 // These fields are recomputed by Excalidraw on load, so zeroing them is safe.
-const stabilize = (elements: ExEl[]): ExEl[] => {
+export const stabilize = (elements: ExEl[]): ExEl[] => {
   canonicalizeBoundTextIds(elements);
   for (const el of elements) {
     el.seed = 1;
@@ -177,6 +194,7 @@ const stabilize = (elements: ExEl[]): ExEl[] => {
  */
 export const buildScene = async (
   rawSpec: DiagramSpec,
+  extras?: BuildSceneExtras,
 ): Promise<BuildResult> => {
   // MUST come first: removes the document.createElement("canvas") dependency.
   ensureProvider();
@@ -198,14 +216,42 @@ export const buildScene = async (
   const visible = elements.filter((el) => !el.isDeleted);
   stabilize(visible as unknown as ExEl[]);
 
+  // Convert icon image skeletons SEPARATELY (no layout, no reanchor) and
+  // stabilize them too, so the whole scene stays deterministic. Their ids use a
+  // collision-free "icon-" prefix (RESERVED_ID_PREFIX_RE forbids text-/arrow-
+  // but not icon-, verified C8).
+  let iconEls: ExEl[] = [];
+  if (extras?.iconImages?.length) {
+    const converted = convertToExcalidrawElements(extras.iconImages as never, {
+      regenerateIds: false,
+    });
+    iconEls = (converted as unknown as ExEl[]).filter(
+      (el) => !(el as { isDeleted?: boolean }).isDeleted,
+    );
+    stabilize(iconEls);
+  }
+
+  // Template elements are already serialized (from buildFromSkeletons) — just
+  // drop any deleted ones and PREPEND so they render behind the scene.
+  const templateEls = (extras?.templateElements ?? []).filter(
+    (el) => !(el as { isDeleted?: boolean }).isDeleted,
+  );
+
+  const allElements = [
+    ...templateEls,
+    ...(visible as unknown as ExEl[]),
+    ...iconEls,
+  ];
+
   const content = JSON.stringify({
     type: "excalidraw",
     version: 2,
     source: "@kindraw/client",
-    elements: visible,
+    elements: allElements,
     appState: { viewBackgroundColor: "#ffffff", gridSize: null },
-    files: {},
+    // Spread of `{}` when no files given keeps the back-compat `files:{}` shape.
+    files: { ...(extras?.files ?? {}) },
   });
 
-  return { content, elementCount: visible.length };
+  return { content, elementCount: allElements.length };
 };

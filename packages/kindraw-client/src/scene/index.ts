@@ -4,7 +4,10 @@
 // whole point: structured specs lay out DOM-free with real spacing.
 
 export { buildScene } from "./build.js";
-export type { BuildResult } from "./build.js";
+export type { BuildResult, BuildSceneExtras, ExEl } from "./build.js";
+
+export { buildFromSkeletons } from "./buildFromSkeletons.js";
+export type { BuildFromSkeletonsResult } from "./buildFromSkeletons.js";
 
 export { validateDiagramSpec } from "./spec.js";
 export type {
