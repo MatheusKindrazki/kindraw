@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import path from "node:path";
 
 import { requireClient } from "../client.js";
 
@@ -43,8 +44,26 @@ export const iconsSvg = async (args: {
   const client = requireClient();
   const svg = await client.getIconSvg(args.id, args.color);
   if (args.out) {
-    fs.writeFileSync(args.out, svg, "utf8");
-    console.log(`Wrote ${args.out}`);
+    // Contain --out to the current working directory: an attacker-supplied path
+    // (e.g. "../../etc/cron.d/x" or "/etc/passwd") must not let us write outside
+    // CWD. Resolve against CWD and require the result to stay inside it, and
+    // refuse to clobber an existing file (no silent overwrite). (Security MEDIUM.)
+    const target = path.resolve(process.cwd(), args.out);
+    if (
+      target !== process.cwd() &&
+      !target.startsWith(process.cwd() + path.sep)
+    ) {
+      throw new Error(
+        `--out must stay within the current directory: ${args.out}`,
+      );
+    }
+    if (fs.existsSync(target)) {
+      throw new Error(
+        `Refusing to overwrite existing file: ${target} (remove it first).`,
+      );
+    }
+    fs.writeFileSync(target, svg, "utf8");
+    console.log(`Wrote ${target}`);
     return;
   }
   console.log(svg);

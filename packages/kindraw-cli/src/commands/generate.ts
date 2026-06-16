@@ -1,8 +1,8 @@
 import fs from "node:fs";
 
-import { KindrawClient } from "@kindraw/client";
-
 import { requireClient } from "../client.js";
+
+import type { KindrawClient } from "@kindraw/client";
 
 const USAGE =
   "Usage: kindraw generate (--mermaid <file|-> | --spec <file|->) [--title <title>]";
