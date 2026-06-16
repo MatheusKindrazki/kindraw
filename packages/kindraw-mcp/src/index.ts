@@ -329,9 +329,29 @@ const main = async () => {
             engine: z.enum(["dagre", "elk"]).optional(),
           })
           .describe("The canvas graph beside the doc"),
+        icons: z
+          .array(
+            z.object({
+              iconId: z
+                .string()
+                .max(200)
+                .describe("Iconify id 'prefix:name' from kindraw_search_icons"),
+              color: z
+                .string()
+                .max(64)
+                .optional()
+                .describe("Optional hex color for the icon"),
+            }),
+          )
+          .max(100)
+          .optional()
+          .describe(
+            "Icons to embed as images on the canvas (SVG fetched + embedded " +
+              "for you). Grid-placed at the canvas origin.",
+          ),
       },
     },
-    async ({ title, markdown, folderId, diagram }) => {
+    async ({ title, markdown, folderId, diagram, icons }) => {
       try {
         const { composeHybrid, HybridPartialError } = await import(
           "@kindraw/client/hybrid"
@@ -342,15 +362,20 @@ const main = async () => {
             markdown,
             folderId,
             diagram: diagram as Parameters<typeof composeHybrid>[1]["diagram"],
+            icons,
           });
           const warn = res.unmatchedHeadings.length
             ? `\nWARNING: ${res.unmatchedHeadings.length} linkToHeading value(s) ` +
               `matched no heading: ${res.unmatchedHeadings.join(", ")}. ` +
               `Fix the heading text and retry.`
             : "";
+          const iconWarn = res.iconWarnings.length
+            ? `\nWARNING: ${res.iconWarnings.length} icon(s) could not be ` +
+              `fetched and were skipped: ${res.iconWarnings.join(", ")}.`
+            : "";
           return text(
             `Created hybrid "${title}" (${res.elementCount} canvas elements, ` +
-              `${res.linksWired} section link(s) wired).\n${res.url}${warn}`,
+              `${res.linksWired} section link(s) wired).\n${res.url}${warn}${iconWarn}`,
           );
         } catch (err) {
           if (err instanceof HybridPartialError) {
@@ -366,6 +391,218 @@ const main = async () => {
           }
           throw err;
         }
+      } catch (error) {
+        return { ...text(formatError(error)), isError: true };
+      }
+    },
+  );
+
+  server.registerTool(
+    "kindraw_list_templates",
+    {
+      description:
+        "List the built-in Kindraw templates (id, title, category). Template ids " +
+        "are opaque — list them first, then pass an id to kindraw_apply_template.",
+      inputSchema: {
+        category: z
+          .string()
+          .max(100)
+          .optional()
+          .describe("Optional client-side category filter"),
+      },
+    },
+    async ({ category }) => {
+      try {
+        const { templates } = await client.listTemplates();
+        const filtered = category
+          ? templates.filter((t) => t.category === category)
+          : templates;
+        if (!filtered.length) {
+          return text("No templates found.");
+        }
+        return text(
+          filtered
+            .map(
+              (t) =>
+                `- ${t.id} — ${t.title}${t.category ? ` [${t.category}]` : ""}`,
+            )
+            .join("\n"),
+        );
+      } catch (error) {
+        return { ...text(formatError(error)), isError: true };
+      }
+    },
+  );
+
+  server.registerTool(
+    "kindraw_apply_template",
+    {
+      description:
+        "Instantiate a built-in template by id into a NEW drawing, or — if " +
+        "hybridDrawingItemId is set — write it into an existing hybrid canvas. " +
+        "Optionally add extraNodes/extraEdges (laid out and merged beside the " +
+        "template) and icons[] (Iconify ids from kindraw_search_icons, embedded " +
+        "as images). List ids first with kindraw_list_templates.",
+      inputSchema: {
+        templateId: z.string().max(200).describe("Template id to instantiate"),
+        title: z
+          .string()
+          .max(500)
+          .optional()
+          .describe(
+            "Title for the new drawing (ignored when writing to a hybrid)",
+          ),
+        hybridDrawingItemId: z
+          .string()
+          .max(200)
+          .optional()
+          .describe(
+            "If set, PUT into this existing hybrid canvas instead of a new drawing",
+          ),
+        extraNodes: z
+          .array(
+            z.object({
+              id: z.string().max(200),
+              label: z.string().max(2000),
+              shape: z.enum(["rectangle", "diamond", "ellipse"]).optional(),
+            }),
+          )
+          .max(500)
+          .optional()
+          .describe("Extra nodes to add beside the template"),
+        extraEdges: z
+          .array(
+            z.object({ from: z.string().max(200), to: z.string().max(200) }),
+          )
+          .max(2000)
+          .optional(),
+        icons: z
+          .array(
+            z.object({
+              iconId: z
+                .string()
+                .max(200)
+                .describe("Iconify id 'prefix:name' from kindraw_search_icons"),
+              color: z
+                .string()
+                .max(64)
+                .optional()
+                .describe("Optional hex color for the icon"),
+            }),
+          )
+          .max(100)
+          .optional()
+          .describe(
+            "Icons to embed as images (SVG fetched + embedded for you). " +
+              "Placed on a grid at the canvas origin.",
+          ),
+      },
+    },
+    async ({
+      templateId,
+      title,
+      hybridDrawingItemId,
+      extraNodes,
+      extraEdges,
+      icons,
+    }) => {
+      try {
+        const tpl = await client.getTemplate(templateId);
+        const { buildScene, buildFromSkeletons } = await import(
+          "@kindraw/client/scene"
+        );
+        const { composeIconImages } = await import("@kindraw/client");
+
+        // Compose any requested icons up-front (fetch-free composer; we inject
+        // the client's getIconSvg). Skipped icons return as warnings.
+        const { imageSkeletons, files, warnings } = icons?.length
+          ? await composeIconImages(icons, (id, color) =>
+              client.getIconSvg(id, color),
+            )
+          : { imageSkeletons: [], files: {}, warnings: [] as string[] };
+
+        let content: string;
+        let elementCount: number;
+        if (extraNodes?.length) {
+          // Extra nodes need real layout, so serialize the template
+          // (reanchor-free) into elements and merge them + any icons via
+          // buildScene's additive extras.
+          const { elements: templateElements } = await buildFromSkeletons(
+            tpl.elements,
+          );
+          ({ content, elementCount } = await buildScene(
+            { nodes: extraNodes, edges: extraEdges ?? [] },
+            { templateElements, iconImages: imageSkeletons, files },
+          ));
+        } else {
+          // No extra nodes: serialize the template (plus any icon image
+          // skeletons, grid-placed) directly — no layout needed. Icon skeletons
+          // are valid convertToExcalidrawElements input, so they ride along.
+          const built = await buildFromSkeletons(
+            [...tpl.elements, ...imageSkeletons],
+            { files },
+          );
+          content = built.content;
+          elementCount = built.elementCount;
+        }
+
+        const warn = warnings.length
+          ? `\nWARNING: ${warnings.length} icon(s) could not be fetched and ` +
+            `were skipped: ${warnings.join(", ")}.`
+          : "";
+
+        if (hybridDrawingItemId) {
+          JSON.parse(content); // defensive (PUT does not validate)
+          await client.updateHybridDrawing(hybridDrawingItemId, content);
+          return text(
+            `Applied template "${tpl.title}" to hybrid canvas ${hybridDrawingItemId} ` +
+              `(${elementCount} elements).${warn}`,
+          );
+        }
+
+        const result = await client.createDrawing({
+          title: title || tpl.title,
+          content,
+        });
+        return text(
+          `Created drawing "${title || tpl.title}" from template ` +
+            `(${elementCount} elements).\n${result.url}${warn}`,
+        );
+      } catch (error) {
+        return { ...text(formatError(error)), isError: true };
+      }
+    },
+  );
+
+  server.registerTool(
+    "kindraw_search_icons",
+    {
+      description:
+        "Search the Iconify icon set (returns id + set/name). Pick ids from here, " +
+        "then pass them as icons[] to kindraw_apply_template — the SVG is " +
+        "embedded for you. (No raw-SVG tool: SVG strings waste tokens.)",
+      inputSchema: {
+        query: z
+          .string()
+          .min(1)
+          .max(200)
+          .describe("Search term, e.g. 'database'"),
+        limit: z
+          .number()
+          .int()
+          .min(1)
+          .max(96)
+          .optional()
+          .describe("Max results (default 48)"),
+      },
+    },
+    async ({ query, limit }) => {
+      try {
+        const { icons } = await client.searchIcons(query, limit ?? 48);
+        if (!icons.length) {
+          return text(`No icons found for "${query}".`);
+        }
+        return text(icons.map((i) => `${i.id} — ${i.set}/${i.name}`).join("\n"));
       } catch (error) {
         return { ...text(formatError(error)), isError: true };
       }
