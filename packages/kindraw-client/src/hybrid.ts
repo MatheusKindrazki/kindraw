@@ -36,13 +36,19 @@ export type HybridDiagramNode = DiagramNode & {
   /**
    * Exact heading text to deep-link this node to its parsed doc section.
    *
+   * Must reference a TOP-LEVEL heading (markdown `#`): section links attach to
+   * top-level sections only. The parser NESTS deeper headings (`##` and below)
+   * into their parent, so a `## Sub` is absorbed and is NOT linkable by title.
+   * To link a subsection, promote it to a top-level `#` in the markdown.
+   *
    * Matching is by the heading's literal text. Limitations:
    * - The synthetic intro (no leading heading) is NOT addressable — its
    *   hardcoded title "Visao geral" never resolves here.
    * - If two headings share the exact same text, only the FIRST occurrence is
    *   deep-linkable by the bare title; later duplicates (which the parser gives
    *   dedup-suffixed ids like `base-2`) can't be targeted by title alone.
-   * Unmatched headings are reported in `unmatchedHeadings`, not an error.
+   * Unmatched headings are reported in `unmatchedHeadings`; the linkable
+   * top-level set is reported in `linkableHeadings`. Neither is an error.
    */
   linkToHeading?: string;
 };
@@ -76,6 +82,14 @@ export type ComposeHybridResult = {
   url: string;
   linksWired: number;
   unmatchedHeadings: string[];
+  /**
+   * The TOP-LEVEL section titles that ARE linkable (markdown `#`), in document
+   * order, excluding the synthetic intro. The parser NESTS deeper headings (`##`
+   * and below) into their parent, so only these top-level titles resolve a
+   * `linkToHeading`. Exposed so the caller can tell the user/LLM exactly which
+   * headings a node CAN link to (and why an `unmatchedHeading` didn't match).
+   */
+  linkableHeadings: string[];
   elementCount: number;
   /** iconIds that could not be fetched and were skipped (not fatal). */
   iconWarnings: string[];
@@ -149,6 +163,10 @@ export const composeHybrid = async (
       idByTitle.set(section.title, section.id);
     }
   }
+  // The linkable set IS the keys of idByTitle: the top-level (non-intro)
+  // headings, in document order. A `linkToHeading` only resolves to one of
+  // these — deeper headings were nested into their parent by the parser.
+  const linkableHeadings = [...idByTitle.keys()];
 
   // Resolve linkToHeading -> kindraw:// link; collect any that match nothing.
   const unmatchedHeadings: string[] = [];
@@ -206,7 +224,8 @@ export const composeHybrid = async (
   let iconWarnings: string[] = [];
   if (input.icons?.length) {
     const probe = await buildScene(sceneSpec);
-    const originY = sceneMaxY(JSON.parse(probe.content).elements) + ICON_GRID_GAP;
+    const originY =
+      sceneMaxY(JSON.parse(probe.content).elements) + ICON_GRID_GAP;
     ({
       imageSkeletons,
       files,
@@ -262,6 +281,7 @@ export const composeHybrid = async (
     url: client.hybridUrl(hybridId),
     linksWired,
     unmatchedHeadings,
+    linkableHeadings,
     elementCount,
     iconWarnings,
   };

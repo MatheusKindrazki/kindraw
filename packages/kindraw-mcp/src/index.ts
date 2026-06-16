@@ -274,9 +274,15 @@ const main = async () => {
         "Create a hybrid item: a live markdown doc BESIDE an Excalidraw canvas, " +
         "wired together with clickable section links. Provide the full markdown " +
         "AND a diagram in ONE call. Each diagram node may carry linkToHeading " +
-        "(exact heading text) to deep-link that node to its doc section. Returns " +
-        "the /hybrid/<id> URL plus a report of how many links were wired and any " +
-        "linkToHeading that matched NO heading (fix the heading text and retry).",
+        "(exact heading text) to deep-link that node to its doc section. " +
+        "IMPORTANT: section links attach to TOP-LEVEL headings ONLY (markdown " +
+        "`#`). The doc parser nests deeper headings (`##` and below) into their " +
+        "parent, so a `## Sub` is NOT linkable — structure each section you want " +
+        "to link as a top-level `#`. (A title `#` plus `#` sections all become " +
+        "top-level and are all linkable; for a non-linkable lead-in, put prose " +
+        "BEFORE the first `#`.) Returns the /hybrid/<id> URL plus a report of how " +
+        "many links were wired and any linkToHeading that matched no top-level " +
+        "section (with the list of headings you CAN link to, so you can retry).",
       inputSchema: {
         title: z.string().max(500).describe("Title for the hybrid item"),
         markdown: z
@@ -300,7 +306,11 @@ const main = async () => {
                     .max(500)
                     .optional()
                     .describe(
-                      "Exact heading text to deep-link this node to its section",
+                      "Exact text of a TOP-LEVEL heading (markdown `#`) to " +
+                        "deep-link this node to its doc section. Section links " +
+                        "attach to top-level sections only — a `##`/deeper " +
+                        "heading is nested into its parent and is NOT linkable; " +
+                        "promote it to a `#` to link it.",
                     ),
                 }),
               )
@@ -365,9 +375,19 @@ const main = async () => {
             icons,
           });
           const warn = res.unmatchedHeadings.length
-            ? `\nWARNING: ${res.unmatchedHeadings.length} linkToHeading value(s) ` +
-              `matched no heading: ${res.unmatchedHeadings.join(", ")}. ` +
-              `Fix the heading text and retry.`
+            ? `\n⚠️ ${res.unmatchedHeadings.length} linkToHeading value(s) ` +
+              `didn't match a top-level section: ` +
+              `${res.unmatchedHeadings.join(", ")}. ` +
+              `Section links attach to TOP-LEVEL headings (markdown \`#\`) only. ` +
+              `Linkable headings in this doc: ` +
+              `${
+                res.linkableHeadings.length
+                  ? res.linkableHeadings.join(", ")
+                  : "(none — the doc has no top-level `#` headings)"
+              }. ` +
+              `To link a node to a subsection, promote that heading to a ` +
+              `top-level \`#\` in the markdown, or set linkToHeading to one of ` +
+              `the linkable headings above.`
             : "";
           const iconWarn = res.iconWarnings.length
             ? `\nWARNING: ${res.iconWarnings.length} icon(s) could not be ` +
@@ -706,13 +726,17 @@ const main = async () => {
   server.registerTool(
     "kindraw_delete_item",
     {
-      description: "Delete an item (drawing or doc) by id. This is permanent.",
+      description:
+        "Delete an item by id. This is permanent. Handles drawings, docs, AND " +
+        "hybrids: a hybrid is removed via its dedicated route and its backing " +
+        "doc + drawing items are cleaned up too (otherwise they'd be orphaned " +
+        "as loose items). The kind is auto-detected from the workspace.",
       inputSchema: { id: z.string().describe("The item id to delete") },
     },
     async ({ id }) => {
       try {
-        await client.deleteItem(id);
-        return text(`Deleted ${id}.`);
+        const kind = await client.deleteAny(id);
+        return text(`Deleted ${kind} ${id}.`);
       } catch (error) {
         return { ...text(formatError(error)), isError: true };
       }

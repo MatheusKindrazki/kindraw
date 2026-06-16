@@ -329,8 +329,7 @@ describe("composeHybrid", () => {
       ...drawing.elements
         .filter((e: { type: string }) => e.type !== "image")
         .map(
-          (e: { y?: number; height?: number }) =>
-            (e.y ?? 0) + (e.height ?? 0),
+          (e: { y?: number; height?: number }) => (e.y ?? 0) + (e.height ?? 0),
         ),
     );
     expect(img.y).toBeGreaterThanOrEqual(contentBottom);
@@ -349,6 +348,66 @@ describe("composeHybrid", () => {
     // Fail-fast: the malformed icon id is validated alongside the diagram,
     // BEFORE step 0 (createHybrid) — so nothing was created.
     expect(calls).toHaveLength(0);
+  });
+
+  // FIX 1 (diagnostics) — section links attach ONLY to TOP-LEVEL headings
+  // (markdown `#`). The parser NESTS deeper headings into their parent, so a
+  // `## Sub` is absorbed and is NOT linkable. composeHybrid must report the set
+  // of linkable (top-level) headings so the caller can self-correct.
+  it("does not link a nested (##) heading and reports the linkable top-level set", async () => {
+    mockFetch([
+      {
+        status: 201,
+        json: { hybridId: "hL1", docItemId: "dL1", drawingItemId: "gL1" },
+      },
+      { status: 204 },
+      { status: 204 },
+    ]);
+    const res = await composeHybrid(client(), {
+      title: "X",
+      // "Title" is top-level; "Sub" is a ## nested under it → absorbed, not a
+      // top-level section, so not linkable.
+      markdown: "# Title\n\nIntro\n\n## Sub\n\nBody\n",
+      diagram: {
+        nodes: [{ id: "a", label: "A", linkToHeading: "Sub" }],
+        edges: [],
+      },
+    });
+    expect(res.linksWired).toBe(0);
+    expect(res.unmatchedHeadings).toEqual(["Sub"]);
+    // Only the top-level heading is linkable.
+    expect(res.linkableHeadings).toEqual(["Title"]);
+    const drawing = JSON.parse(
+      JSON.parse(calls[2].init.body as string).content,
+    );
+    const a = drawing.elements.find((e: { id: string }) => e.id === "a");
+    expect(a.link ?? null).toBeNull();
+  });
+
+  it("wires links for all-top-level (#) headings and lists them as linkable", async () => {
+    mockFetch([
+      {
+        status: 201,
+        json: { hybridId: "hL2", docItemId: "dL2", drawingItemId: "gL2" },
+      },
+      { status: 204 },
+      { status: 204 },
+    ]);
+    const res = await composeHybrid(client(), {
+      title: "X",
+      // All three are top-level `#` → all linkable.
+      markdown: "# Title\n\nT\n\n# Section A\n\nA\n\n# Section B\n\nB\n",
+      diagram: {
+        nodes: [
+          { id: "a", label: "A", linkToHeading: "Section A" },
+          { id: "b", label: "B", linkToHeading: "Section B" },
+        ],
+        edges: [{ from: "a", to: "b" }],
+      },
+    });
+    expect(res.linksWired).toBe(2);
+    expect(res.unmatchedHeadings).toEqual([]);
+    expect(res.linkableHeadings).toEqual(["Title", "Section A", "Section B"]);
   });
 
   it("surfaces a drawing-step partial failure after the doc succeeds", async () => {

@@ -57,7 +57,18 @@ export const hybridCreate = async (args: {
   );
   if (res.unmatchedHeadings.length) {
     console.log(
-      `WARNING: unmatched linkToHeading: ${res.unmatchedHeadings.join(", ")}`,
+      `WARNING: ${res.unmatchedHeadings.length} linkToHeading value(s) ` +
+        `didn't match a top-level section: ${res.unmatchedHeadings.join(
+          ", ",
+        )}.`,
+    );
+    console.log(
+      "Section links attach to TOP-LEVEL headings (markdown `#`) only. " +
+        "Linkable headings in this doc: " +
+        (res.linkableHeadings.length
+          ? res.linkableHeadings.join(", ")
+          : "(none — the doc has no top-level `#` headings)") +
+        ". Promote the subsection to a `#`, or use one of the linkable headings.",
     );
   }
   console.log(res.url);
