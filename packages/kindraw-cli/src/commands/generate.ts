@@ -7,11 +7,48 @@ import { requireClient } from "../client.js";
 const USAGE =
   "Usage: kindraw generate (--mermaid <file|-> | --spec <file|->) [--title <title>]";
 
-// Read a source from a file path or stdin ("-").
-const readSource = (location: string): string =>
-  location === "-"
-    ? fs.readFileSync(0, "utf8")
-    : fs.readFileSync(location, "utf8");
+// Cap the input we read (file or stdin) before parsing. Inputs are local but
+// can be arbitrarily large (a generated file, a piped stream), and we'd
+// otherwise buffer the whole thing into memory before any spec-level cap
+// applies — a trivial local OOM. (Security H1.)
+const MAX_SPEC_BYTES = 5 * 1024 * 1024;
+
+// Titles are forwarded verbatim to createDrawing; cap them so an oversized
+// --title can't bloat the request. (Security H2.)
+const MAX_TITLE_LEN = 500;
+
+// Read a source from a file path or stdin ("-"), bounded to MAX_SPEC_BYTES.
+// Raw fs errors are suppressed so absolute paths aren't echoed back to the
+// caller; only the size-cap message is surfaced as-is. (Security H1 + M1.)
+const readSource = (location: string): string => {
+  try {
+    if (location === "-") {
+      const buf = fs.readFileSync(0);
+      if (buf.byteLength > MAX_SPEC_BYTES) {
+        throw new Error(
+          `Input too large: ${buf.byteLength} bytes (max ${MAX_SPEC_BYTES}).`,
+        );
+      }
+      return buf.toString("utf8");
+    }
+    const { size } = fs.statSync(location);
+    if (size > MAX_SPEC_BYTES) {
+      throw new Error(
+        `Input file too large: ${size} bytes (max ${MAX_SPEC_BYTES}).`,
+      );
+    }
+    return fs.readFileSync(location, "utf8");
+  } catch (err) {
+    if (err instanceof Error && /too large/.test(err.message)) {
+      throw err;
+    }
+    throw new Error(
+      location === "-"
+        ? "Could not read input from stdin."
+        : "Could not read the input file.",
+    );
+  }
+};
 
 // `kindraw generate (--mermaid <file|-> | --spec <file|->) [--title T]`
 //
@@ -60,7 +97,10 @@ export const generate = async (args: {
     ({ content, elementCount } = await generateExcalidrawFromMermaid(mermaid));
   }
 
-  const title = args.title || "Untitled drawing";
+  const rawTitle = args.title || "Untitled drawing";
+  // Cap the title length before it reaches createDrawing. (Security H2.)
+  const title =
+    rawTitle.length > MAX_TITLE_LEN ? rawTitle.slice(0, MAX_TITLE_LEN) : rawTitle;
   const result = await client.createDrawing({ title, content });
 
   console.log(`Created "${title}" (${elementCount} elements)`);
