@@ -17,13 +17,8 @@ export type {
 export { startLoopbackLogin } from "./auth.js";
 export type { LoopbackLoginOptions, LoopbackLoginResult } from "./auth.js";
 
-// Shared hybrid section parser (slug parity source of truth). Light: only pulls
-// in `marked`, no @excalidraw transform — safe for the light index entry.
-export {
-  slugify,
-  buildSectionId,
-  parseHybridMarkdownSections,
-  buildKindrawSectionLink,
-  parseKindrawSectionLink,
-} from "./sections/index.js";
-export type { KindrawHybridSection } from "./sections/index.js";
+// The shared hybrid section parser (slugify, buildSectionId,
+// parseHybridMarkdownSections, buildKindrawSectionLink, parseKindrawSectionLink)
+// is intentionally NOT re-exported here: it pulls in `marked`, and this index is
+// the documented LIGHT entry (no heavy deps). Consumers that need the slug
+// helpers import them from the dedicated "@kindraw/client/sections" entrypoint.
