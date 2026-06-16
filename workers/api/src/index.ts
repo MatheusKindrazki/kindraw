@@ -272,6 +272,13 @@ const normalizeEmail = (value: string | null | undefined): string | null => {
   return trimmed ? trimmed : null;
 };
 
+// Basic, intentionally-lenient email shape check for the public waitlist
+// endpoint. We are not RFC-5322 perfect on purpose — we only need to reject
+// obvious junk while keeping a tight length cap so the public endpoint can't be
+// used to stuff garbage into the DB.
+const isPlausibleEmail = (value: string): boolean =>
+  value.length >= 3 && value.length <= 254 && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(value);
+
 const readGithubOAuthPayload = async (response: Response) => {
   try {
     return (await response.json()) as {
@@ -955,6 +962,25 @@ export const routeRequest = async (request: Request, env: Env) => {
       }),
     );
     return response;
+  }
+
+  // Public waitlist capture from the landing page (logged-out root). No auth.
+  // Idempotent on duplicate email. Returns 400 on an invalid/oversized address.
+  if (pathname === "/api/waitlist" && request.method === "POST") {
+    const input = await readJson<{ email?: unknown; source?: unknown }>(request);
+    const email = normalizeEmail(
+      typeof input.email === "string" ? input.email : null,
+    );
+    if (!email || !isPlausibleEmail(email)) {
+      throw new HttpError(400, "Please enter a valid email address.");
+    }
+    const source =
+      typeof input.source === "string" && input.source.trim()
+        ? input.source.trim().slice(0, 64)
+        : "landing";
+    const store = createStore(env.KINDRAW_DB, env.KINDRAW_BLOBS);
+    await store.addToWaitlist(email, source);
+    return json({ ok: true });
   }
 
   // CLI loopback: exchange a one-time auth code for a PAT (the code is the

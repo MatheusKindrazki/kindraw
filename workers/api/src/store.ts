@@ -586,6 +586,20 @@ export class KindrawStore {
       .run();
   }
 
+  // Capture an email for the product waitlist (public landing page). Idempotent:
+  // a repeat sign-up of the same (normalized) address is a no-op, not an error.
+  // The caller is responsible for validating/normalizing `email` first.
+  async addToWaitlist(email: string, source: string | null) {
+    await this.db
+      .prepare(
+        `INSERT INTO waitlist (email, source, created_at)
+         VALUES (?, ?, ?)
+         ON CONFLICT(email) DO NOTHING`,
+      )
+      .bind(email, source, isoNow())
+      .run();
+  }
+
   async resolveSession(sessionId: string): Promise<AuthContext | null> {
     if (!sessionId) {
       return null;
