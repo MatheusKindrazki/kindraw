@@ -288,6 +288,53 @@ describe("composeHybrid", () => {
     expect(a.link ?? null).toBeNull();
   });
 
+  it("embeds requested icons as image elements + files (skip-on-404)", async () => {
+    // step 0 seed, step 2 doc PUT, then TWO icon SVG fetches (one OK, one 404),
+    // then step 3 drawing PUT. The icon fetch loop runs BETWEEN doc and drawing
+    // PUT (composeIconImages is awaited before buildScene), so queue carefully.
+    mockFetch([
+      {
+        status: 201,
+        json: { hybridId: "h8", docItemId: "d8", drawingItemId: "g8" },
+      },
+      { status: 204 }, // doc PUT OK
+      { status: 200, json: { ignored: true } }, // icon svg #1 — text() returns ""
+      { status: 404, json: { error: "not found" } }, // icon svg #2 — skipped
+      { status: 204 }, // drawing PUT OK
+    ]);
+    const res = await composeHybrid(client(), {
+      title: "Iconned",
+      markdown: "# A\n",
+      diagram: { nodes: [{ id: "a", label: "A" }], edges: [] },
+      icons: [{ iconId: "mdi:home" }, { iconId: "bad:icon" }],
+    });
+    // One icon embedded, one skipped-with-warning.
+    expect(res.iconWarnings).toEqual(["bad:icon"]);
+    // The drawing carries an image element + a matching files entry.
+    const drawing = JSON.parse(
+      JSON.parse(calls[calls.length - 1].init.body as string).content,
+    );
+    const img = drawing.elements.find((e: { type: string }) => e.type === "image");
+    expect(img).toBeDefined();
+    expect(img.status).toBe("saved");
+    expect(drawing.files[img.fileId]).toBeDefined();
+  });
+
+  it("rejects an invalid icon id BEFORE seeding (no orphan hybrid)", async () => {
+    mockFetch([]); // any fetch would throw "unexpected"
+    await expect(
+      composeHybrid(client(), {
+        title: "X",
+        markdown: "# A\n",
+        diagram: { nodes: [{ id: "a", label: "A" }], edges: [] },
+        icons: [{ iconId: "not a valid id" }],
+      }),
+    ).rejects.toThrow(/invalid icon id/i);
+    // Fail-fast: the malformed icon id is validated alongside the diagram,
+    // BEFORE step 0 (createHybrid) — so nothing was created.
+    expect(calls).toHaveLength(0);
+  });
+
   it("surfaces a drawing-step partial failure after the doc succeeds", async () => {
     mockFetch([
       {

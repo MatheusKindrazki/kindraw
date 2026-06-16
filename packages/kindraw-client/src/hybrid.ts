@@ -17,6 +17,7 @@
 // cleanup (there is no verified delete-hybrid contract).
 
 import type { KindrawClient } from "./client.js";
+import { composeIconImages, type IconPlacement } from "./icons.js";
 import { buildScene } from "./scene/build.js";
 import { validateDiagramSpec } from "./scene/spec.js";
 import type { DiagramEdge, DiagramGroup, DiagramNode } from "./scene/spec.js";
@@ -53,6 +54,12 @@ export type ComposeHybridInput = {
   markdown: string;
   folderId?: string | null;
   diagram: HybridDiagram;
+  /**
+   * Optional Iconify icons to embed as images on the canvas (grid-placed at the
+   * canvas origin). The SVG is fetched via the injected client.getIconSvg and
+   * embedded; a failed fetch is skipped-with-warning (see iconWarnings).
+   */
+  icons?: IconPlacement[];
 };
 
 export type ComposeHybridResult = {
@@ -63,6 +70,8 @@ export type ComposeHybridResult = {
   linksWired: number;
   unmatchedHeadings: string[];
   elementCount: number;
+  /** iconIds that could not be fetched and were skipped (not fatal). */
+  iconWarnings: string[];
 };
 
 export class HybridPartialError extends Error {
@@ -96,6 +105,20 @@ export const composeHybrid = async (
     direction: input.diagram.direction,
     engine: input.diagram.engine,
   });
+
+  // Fail-fast on a malformed icon id too: getIconSvg would throw mid-flow (after
+  // seeding) and orphan the hybrid. Validate the SAME shape it requires here, so
+  // a bad id fails with NO side effects. (A 404 on a well-formed id is still a
+  // non-fatal skip-with-warning inside composeIconImages — that's different.)
+  if (input.icons?.length) {
+    for (const icon of input.icons) {
+      if (!/^[a-z0-9-]+:[a-z0-9-]+$/i.test(icon.iconId)) {
+        throw new Error(
+          `Invalid icon id "${icon.iconId}" (expected "prefix:name").`,
+        );
+      }
+    }
+  }
 
   // Step 0: seed the hybrid (doc + empty drawing).
   const { hybridId, docItemId, drawingItemId } = await client.createHybrid({
@@ -152,14 +175,30 @@ export const composeHybrid = async (
     );
   }
 
+  // Compose any requested icons into image skeletons + a files map. FETCH-FREE
+  // composer: we INJECT client.getIconSvg so scene/icons stays HTTP-free. A
+  // failed icon fetch is skipped-with-warning, never fatal to the hybrid.
+  const {
+    imageSkeletons,
+    files,
+    warnings: iconWarnings,
+  } = input.icons?.length
+    ? await composeIconImages(input.icons, (id, color) =>
+        client.getIconSvg(id, color),
+      )
+    : { imageSkeletons: [], files: {}, warnings: [] as string[] };
+
   // Step 3: build + populate the canvas. buildScene already validates node.link.
-  const { content, elementCount } = await buildScene({
-    nodes,
-    edges: input.diagram.edges,
-    groups: input.diagram.groups,
-    direction: input.diagram.direction,
-    engine: input.diagram.engine,
-  });
+  const { content, elementCount } = await buildScene(
+    {
+      nodes,
+      edges: input.diagram.edges,
+      groups: input.diagram.groups,
+      direction: input.diagram.direction,
+      engine: input.diagram.engine,
+    },
+    { iconImages: imageSkeletons, files },
+  );
   // Defensive: the server does NOT validate the JSON it stores, so we guarantee
   // ours parses before the PUT. buildScene already JSON.stringifies, so this can
   // only fail on a builder regression — but if it ever emits non-JSON, surface
@@ -201,5 +240,6 @@ export const composeHybrid = async (
     linksWired,
     unmatchedHeadings,
     elementCount,
+    iconWarnings,
   };
 };
