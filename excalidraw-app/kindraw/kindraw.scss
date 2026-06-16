@@ -3601,3 +3601,628 @@
     display: none;
   }
 }
+
+/* ─────────────────────────────────────────────────────────
+   Landing (logged-out root) — vende o produto + segura o login.
+   Direção Ateliê: papel quente, navy/âmbar, grid de pontos suave.
+   ───────────────────────────────────────────────────────── */
+
+.kindraw-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.kindraw-landing {
+  position: relative;
+  /* the global app CSS locks html/body to 100vh + overflow:hidden (the editor
+     is normally a full-screen canvas), so the landing must be its own scroll
+     viewport — otherwise everything below the fold is unreachable. */
+  height: 100vh;
+  height: 100dvh;
+  overflow-x: hidden;
+  overflow-y: auto;
+  background: var(--kd-bg);
+  color: var(--kd-ink);
+  font-family: var(--kd-font);
+}
+
+/* atmosfera: grid de pontos + clarão âmbar no topo, atrás de tudo */
+.kindraw-landing__paper {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-image: radial-gradient(
+    var(--kd-canvas-dot) 1.3px,
+    transparent 1.3px
+  );
+  background-size: 26px 26px;
+  background-position: -13px -13px;
+  -webkit-mask-image: radial-gradient(
+    120% 80% at 50% -10%,
+    #000 0%,
+    rgba(0, 0, 0, 0.55) 45%,
+    transparent 78%
+  );
+  mask-image: radial-gradient(
+    120% 80% at 50% -10%,
+    #000 0%,
+    rgba(0, 0, 0, 0.55) 45%,
+    transparent 78%
+  );
+}
+
+.kindraw-landing__nav,
+.kindraw-landing__main,
+.kindraw-landing__footer {
+  position: relative;
+  z-index: 1;
+}
+
+/* nav */
+.kindraw-landing__nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 22px 28px;
+}
+
+.kindraw-landing__brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  color: var(--kd-ink);
+  text-decoration: none;
+}
+
+.kindraw-landing__nav-link {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--kd-muted);
+  text-decoration: none;
+}
+
+.kindraw-landing__nav-link:hover {
+  color: var(--kd-ink);
+}
+
+.kindraw-landing__main {
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 0 28px;
+}
+
+/* ─── HERO ─── */
+.kindraw-landing__hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
+  gap: 56px;
+  align-items: center;
+  padding: 48px 0 64px;
+}
+
+.kindraw-landing__hero-copy {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 18px;
+  animation: kindraw-landing-rise 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.kindraw-landing__headline {
+  margin: 0;
+  font-size: clamp(34px, 4.4vw, 52px);
+  line-height: 1.06;
+  font-weight: 800;
+  letter-spacing: -0.025em;
+  color: var(--kd-ink);
+}
+
+/* a expressão-chave ganha um traço âmbar feito à mão (SVG inline em mask) */
+.kindraw-landing__headline-mark {
+  position: relative;
+  color: var(--kd-amber-deep);
+  white-space: nowrap;
+}
+
+.kindraw-landing__headline-mark::after {
+  content: "";
+  position: absolute;
+  left: -2%;
+  right: -2%;
+  bottom: 0.04em;
+  height: 0.42em;
+  z-index: -1;
+  background: var(--kd-amber-chip);
+  border-radius: 0.3em 0.5em 0.35em 0.45em;
+  transform: rotate(-0.8deg);
+}
+
+.kindraw-landing__subhead {
+  margin: 0;
+  max-width: 38ch;
+  font-size: clamp(15px, 1.4vw, 17.5px);
+  line-height: 1.55;
+  color: var(--kd-ink-soft);
+}
+
+.kindraw-landing__cta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 4px;
+}
+
+.kindraw-landing__cta--center {
+  justify-content: center;
+  align-items: center;
+}
+
+.kindraw-landing__cta .kindraw-provider-btn {
+  flex: 0 1 auto;
+  min-width: 196px;
+}
+
+/* waitlist secundário */
+.kindraw-landing__waitlist-block {
+  width: 100%;
+  max-width: 440px;
+  margin-top: 6px;
+  padding-top: 18px;
+  border-top: 1px dashed var(--kd-line);
+}
+
+.kindraw-landing__or {
+  display: block;
+  margin-bottom: 9px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--kd-muted);
+}
+
+.kindraw-landing__waitlist {
+  width: 100%;
+}
+
+.kindraw-landing__waitlist-row {
+  display: flex;
+  gap: 8px;
+}
+
+.kindraw-landing__waitlist-input {
+  flex: 1 1 auto;
+  height: 44px;
+  padding: 0 14px;
+  border: 1px solid var(--kd-line);
+  border-radius: var(--kd-r-btn);
+  background: var(--kd-surface);
+  color: var(--kd-ink);
+  font-family: var(--kd-font);
+  font-size: 14px;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.kindraw-landing__waitlist-input::placeholder {
+  color: var(--kd-faint);
+}
+
+.kindraw-landing__waitlist-input:focus-visible {
+  outline: none;
+  border-color: var(--kd-amber);
+  box-shadow: 0 0 0 3px var(--kd-amber-soft);
+}
+
+.kindraw-landing__waitlist-input[aria-invalid="true"] {
+  border-color: var(--kd-danger);
+}
+
+.kindraw-landing__waitlist-btn {
+  flex: 0 0 auto;
+  height: 44px;
+}
+
+.kindraw-landing__waitlist-msg {
+  margin: 8px 0 0;
+  font-size: 12.5px;
+  line-height: 1.4;
+  color: var(--kd-faint);
+}
+
+.kindraw-landing__waitlist-msg--error {
+  color: var(--kd-danger);
+  font-weight: 600;
+}
+
+.kindraw-landing__waitlist-success {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  margin: 0;
+  padding: 11px 15px;
+  border-radius: var(--kd-r-btn);
+  background: var(--kd-ok-bg);
+  color: var(--kd-ok);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.kindraw-landing__waitlist-check {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--kd-ok);
+  color: #fff;
+}
+
+/* demo slot — moldura de janela com play, 16:10 */
+.kindraw-landing__demo {
+  animation: kindraw-landing-rise 0.6s cubic-bezier(0.22, 1, 0.36, 1) 0.08s both;
+}
+
+.kindraw-landing__demo-frame {
+  border: 1px solid var(--kd-line);
+  border-radius: 16px;
+  background: var(--kd-surface);
+  box-shadow: var(--kd-shadow-popover);
+  overflow: hidden;
+  transform: rotate(0.6deg);
+}
+
+.kindraw-landing__demo-bar {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  height: 38px;
+  padding: 0 14px;
+  background: var(--kd-surface-warm);
+  border-bottom: 1px solid var(--kd-line-soft);
+}
+
+.kindraw-landing__demo-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--kd-line);
+}
+
+.kindraw-landing__demo-dot:first-child {
+  background: #e8b4ad;
+}
+.kindraw-landing__demo-dot:nth-child(2) {
+  background: var(--kd-amber-chip);
+}
+.kindraw-landing__demo-dot:nth-child(3) {
+  background: #bcd9bf;
+}
+
+.kindraw-landing__demo-url {
+  margin-left: 8px;
+  font-size: 12px;
+  color: var(--kd-faint);
+  letter-spacing: 0.01em;
+}
+
+.kindraw-landing__demo-stage {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  aspect-ratio: 16 / 10;
+  padding: 28px;
+  text-align: center;
+  background: var(--kd-canvas);
+  background-image: radial-gradient(
+    var(--kd-canvas-dot) 1.2px,
+    transparent 1.2px
+  );
+  background-size: 22px 22px;
+}
+
+.kindraw-landing__demo-stage p {
+  max-width: 34ch;
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--kd-muted);
+}
+
+.kindraw-landing__demo-play {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  background: var(--kd-surface);
+  color: var(--kd-amber-deep);
+  border: 1px solid var(--kd-line);
+  box-shadow: var(--kd-shadow-island);
+}
+
+/* ─── VALUE PROPS ─── */
+.kindraw-landing__values {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
+  padding: 16px 0 28px;
+}
+
+.kindraw-landing__value {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  padding: 24px;
+  background: var(--kd-surface);
+  border: 1px solid var(--kd-line);
+  border-radius: var(--kd-r-card);
+  transition: box-shadow 0.18s ease, transform 0.18s ease;
+}
+
+.kindraw-landing__value:hover {
+  box-shadow: var(--kd-shadow-card-hover);
+  transform: translateY(-2px);
+}
+
+.kindraw-landing__value-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 11px;
+  background: var(--kd-amber-soft);
+  color: var(--kd-amber-deep);
+}
+
+.kindraw-landing__value h3 {
+  margin: 4px 0 0;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--kd-ink);
+}
+
+.kindraw-landing__value p {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--kd-muted);
+}
+
+/* ─── HOW IT WORKS ─── */
+.kindraw-landing__how {
+  padding: 52px 0 12px;
+}
+
+.kindraw-landing__how-head {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-width: 30ch;
+  margin-bottom: 30px;
+}
+
+.kindraw-landing__how-head h2 {
+  margin: 0;
+  font-size: clamp(24px, 2.6vw, 30px);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--kd-ink);
+}
+
+.kindraw-landing__steps {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 22px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: kindraw-step;
+}
+
+.kindraw-landing__step {
+  display: flex;
+  gap: 14px;
+}
+
+.kindraw-landing__step-n {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: var(--kd-ink);
+  color: var(--kd-surface-warm);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.kindraw-landing__step h3 {
+  margin: 4px 0 6px;
+  font-size: 15.5px;
+  font-weight: 700;
+  color: var(--kd-ink);
+}
+
+.kindraw-landing__step p {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--kd-muted);
+}
+
+.kindraw-landing__code {
+  display: inline-block;
+  margin-top: 10px;
+  padding: 5px 10px;
+  border-radius: 8px;
+  background: var(--kd-ink);
+  color: var(--kd-amber-chip);
+  font-family: ui-monospace, "SFMono-Regular", "Menlo", monospace;
+  font-size: 12.5px;
+  letter-spacing: 0.01em;
+}
+
+/* ─── CLOSER ─── */
+.kindraw-landing__closer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  margin: 56px 0;
+  padding: 48px 28px;
+  text-align: center;
+  background: var(--kd-surface-warm);
+  border: 1px solid var(--kd-line);
+  border-radius: 22px;
+  box-shadow: var(--kd-shadow-island);
+}
+
+.kindraw-landing__closer h2 {
+  margin: 0;
+  font-size: clamp(24px, 3vw, 34px);
+  font-weight: 800;
+  letter-spacing: -0.022em;
+  color: var(--kd-ink);
+}
+
+.kindraw-landing__closer p {
+  margin: 0;
+  font-size: 16px;
+  color: var(--kd-ink-soft);
+}
+
+.kindraw-landing__privacy {
+  margin-top: 6px;
+  font-size: 11.5px;
+  color: var(--kd-faint);
+}
+
+/* ─── FOOTER ─── */
+.kindraw-landing__footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 28px;
+  border-top: 1px solid var(--kd-line);
+  font-size: 13px;
+  color: var(--kd-muted);
+}
+
+.kindraw-landing__footer-credit a {
+  color: var(--kd-amber-deep);
+  font-weight: 600;
+  text-decoration: none;
+  border-bottom: 1px solid var(--kd-amber-chip);
+}
+
+.kindraw-landing__footer-credit a:hover {
+  border-bottom-color: var(--kd-amber-deep);
+}
+
+.kindraw-landing__footer-dev {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.kindraw-landing__footer-dev .kindraw-landing__code {
+  margin-top: 0;
+}
+
+@keyframes kindraw-landing-rise {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ─── responsivo ─── */
+@media (max-width: 920px) {
+  .kindraw-landing__hero {
+    grid-template-columns: 1fr;
+    gap: 36px;
+    padding: 28px 0 44px;
+  }
+
+  .kindraw-landing__demo {
+    order: -1;
+  }
+
+  .kindraw-landing__values,
+  .kindraw-landing__steps {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 560px) {
+  .kindraw-landing__main {
+    padding: 0 18px;
+  }
+
+  .kindraw-landing__nav,
+  .kindraw-landing__footer {
+    padding: 18px;
+  }
+
+  .kindraw-landing__cta {
+    width: 100%;
+  }
+
+  .kindraw-landing__cta .kindraw-provider-btn {
+    flex: 1 1 100%;
+    min-width: 0;
+  }
+
+  .kindraw-landing__waitlist-row {
+    flex-direction: column;
+  }
+
+  .kindraw-landing__waitlist-btn {
+    width: 100%;
+  }
+
+  .kindraw-landing__closer {
+    padding: 36px 22px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .kindraw-landing__hero-copy,
+  .kindraw-landing__demo {
+    animation: none;
+  }
+
+  .kindraw-landing__value:hover {
+    transform: none;
+  }
+
+  .kindraw-landing__demo-frame {
+    transform: none;
+  }
+}

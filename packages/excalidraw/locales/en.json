@@ -1083,6 +1083,58 @@
       "exploreWithoutAccount": "Explore without an account",
       "privacyNote": "We use your GitHub or Google only for sign-in and presence in live sessions."
     },
+    "landing": {
+      "hero": {
+        "eyebrow": "AI architecture diagrams · MCP for Claude Code & Cursor",
+        "headlineA": "Architecture & system-design diagrams that",
+        "headlineMark": "stay alive",
+        "headlineB": "next to your code.",
+        "subhead": "Your agent draws the diagram; Kindraw keeps it. Real graph layout, a shareable team workspace, and a living link — instead of a throwaway file that's stale by the time you share it.",
+        "ctaGithub": "Continue with GitHub",
+        "ctaGoogle": "Continue with Google",
+        "or": "Not ready to sign in?"
+      },
+      "demo": {
+        "caption": "Watch: prompt in Claude Code → diagram → share link → your team edits it live. (60-second demo coming soon.)"
+      },
+      "waitlist": {
+        "label": "Your work email",
+        "placeholder": "you@company.com",
+        "cta": "Join the waitlist",
+        "loading": "Adding…",
+        "hint": "Get early access and product updates. No spam.",
+        "success": "You're on the list. We'll be in touch.",
+        "invalid": "Please enter a valid email address.",
+        "error": "Something went wrong. Please try again."
+      },
+      "values": {
+        "aria": "Why Kindraw",
+        "layoutTitle": "Real layout, not raw Mermaid",
+        "layoutBody": "A genuine graph engine (dagre/elk) lays out your agent's diagram — clean ranks, no spaghetti. Not an ASCII dump pasted into a canvas.",
+        "workspaceTitle": "Lives in a workspace",
+        "workspaceBody": "Every diagram is persistent, foldered, and named — a place it belongs, not a .excalidraw file rotting in your downloads.",
+        "collabTitle": "Stays in sync, together",
+        "collabBody": "One share link. The whole team opens it, edits in real time, and re-runs the agent when the infra changes. The diagram updates, it doesn't rot."
+      },
+      "how": {
+        "eyebrow": "How it works",
+        "title": "From a prompt to a living diagram in three steps",
+        "step1Title": "Connect the MCP",
+        "step1Body": "Add the Kindraw MCP to Claude Code or Cursor. One command, no account juggling.",
+        "step2Title": "Ask for the diagram",
+        "step2Body": "“Diagram our payments service and its dependencies.” The agent generates it with real auto-layout.",
+        "step3Title": "It lands in your workspace",
+        "step3Body": "The diagram appears in Kindraw with a share link, ready for the team to open, edit, and keep in sync."
+      },
+      "closer": {
+        "title": "Stop redrawing diagrams in draw.io.",
+        "subtitle": "Let your agent draw them once, and keep them alive."
+      },
+      "footer": {
+        "builtOn": "Proudly built on the open-source",
+        "forDevs": "For developers:"
+      }
+    },
     "topbar": {
       "searchPlaceholder": "Search drawings, docs, and hybrids…",
       "openGlobalSearchAria": "Open global search (⌘K)"
