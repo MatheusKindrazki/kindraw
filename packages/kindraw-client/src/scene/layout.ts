@@ -84,3 +84,84 @@ export const layoutNodes = (spec: NormalizedSpec): PlacedNode[] => {
   // async elk path is exposed separately (layoutNodesAsync) in a later task.
   return layoutWithDagre(spec);
 };
+
+/**
+ * elk layout (async). Orthogonal-friendly routing for complex diagrams.
+ * Opt-in via spec.engine === "elk". Returns the same PlacedNode[] contract.
+ */
+export const layoutWithElk = async (
+  spec: NormalizedSpec,
+): Promise<PlacedNode[]> => {
+  // elkjs is heavy; import it lazily so dagre-only callers don't pay for it.
+  const ELK = (await import("elkjs")).default;
+  const elk = new ELK();
+
+  const sized = new Map<string, { width: number; height: number }>();
+  const children = spec.nodes.map((node) => {
+    const { width, height } = measureLabel(node.label, LABEL_FONT_SIZE);
+    sized.set(node.id, { width, height });
+    return { id: node.id, width, height };
+  });
+
+  const elkDirection =
+    spec.direction === "LR"
+      ? "RIGHT"
+      : spec.direction === "RL"
+        ? "LEFT"
+        : spec.direction === "BT"
+          ? "UP"
+          : "DOWN";
+
+  const graph = {
+    id: "root",
+    layoutOptions: {
+      "elk.algorithm": "layered",
+      "elk.direction": elkDirection,
+      "elk.layered.spacing.nodeNodeBetweenLayers": String(RANK_SEP),
+      "elk.spacing.nodeNode": String(NODE_SEP),
+      "elk.edgeRouting": "ORTHOGONAL",
+    },
+    children,
+    edges: spec.edges.map((edge, i) => ({
+      id: `e${i}`,
+      sources: [edge.from],
+      targets: [edge.to],
+    })),
+  };
+
+  const laid = (await elk.layout(graph)) as {
+    children?: Array<{ id: string; x?: number; y?: number }>;
+  };
+  const posById = new Map(
+    (laid.children ?? []).map((c) => [c.id, { x: c.x ?? 0, y: c.y ?? 0 }]),
+  );
+
+  return spec.nodes.map((node) => {
+    const size = sized.get(node.id)!;
+    const pos = posById.get(node.id) ?? { x: 0, y: 0 };
+    return {
+      id: node.id,
+      label: node.label,
+      shape: node.shape,
+      x: Math.round(pos.x), // elk already returns top-left corners
+      y: Math.round(pos.y),
+      width: size.width,
+      height: size.height,
+      strokeColor: node.strokeColor,
+      backgroundColor: node.backgroundColor,
+      group: node.group,
+    };
+  });
+};
+
+/**
+ * Async layout entry: dispatches to elk when requested, else dagre.
+ */
+export const layoutNodesAsync = async (
+  spec: NormalizedSpec,
+): Promise<PlacedNode[]> => {
+  if (spec.engine === "elk") {
+    return layoutWithElk(spec);
+  }
+  return layoutWithDagre(spec);
+};
