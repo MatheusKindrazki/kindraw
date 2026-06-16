@@ -11,16 +11,16 @@ const USAGE =
 // can be arbitrarily large (a generated file, a piped stream), and we'd
 // otherwise buffer the whole thing into memory before any spec-level cap
 // applies — a trivial local OOM. (Security H1.)
-const MAX_SPEC_BYTES = 5 * 1024 * 1024;
+export const MAX_SPEC_BYTES = 5 * 1024 * 1024;
 
 // Titles are forwarded verbatim to createDrawing; cap them so an oversized
 // --title can't bloat the request. (Security H2.)
-const MAX_TITLE_LEN = 500;
+export const MAX_TITLE_LEN = 500;
 
 // Read a source from a file path or stdin ("-"), bounded to MAX_SPEC_BYTES.
 // Raw fs errors are suppressed so absolute paths aren't echoed back to the
 // caller; only the size-cap message is surfaced as-is. (Security H1 + M1.)
-const readSource = (location: string): string => {
+export const readSource = (location: string): string => {
   try {
     if (location === "-") {
       const buf = fs.readFileSync(0);
