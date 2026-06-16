@@ -2,8 +2,16 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { buildScene } from "./build";
 
+type Box = {
+  type: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
+
 // Helper to extract node-shape elements (the boxes that carry labels).
-const nodeBoxes = (elements: Array<{ type: string }>) =>
+const nodeBoxes = (elements: Box[]): Box[] =>
   elements.filter((e) =>
     ["rectangle", "diamond", "ellipse"].includes(e.type),
   );
