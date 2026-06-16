@@ -96,6 +96,28 @@ export class KindrawClient {
     return `${this.appOrigin}/hybrid/${encodeURIComponent(id)}`;
   }
 
+  // Shared non-OK handler for request<T> and requestText: parse a JSON {error}
+  // body for a human detail, append the 401 login hint, and throw a typed
+  // KindrawApiError. A no-op when the response is ok.
+  private async assertOk(response: Response): Promise<void> {
+    if (response.ok) {
+      return;
+    }
+    let detail = response.statusText;
+    try {
+      const parsed = (await response.json()) as { error?: string };
+      if (parsed?.error) {
+        detail = parsed.error;
+      }
+    } catch {
+      // ignore non-JSON error bodies
+    }
+    if (response.status === 401) {
+      detail = `${detail} (run "kindraw login" or check KINDRAW_TOKEN)`;
+    }
+    throw new KindrawApiError(response.status, detail);
+  }
+
   private async request<T>(
     method: string,
     path: string,
@@ -110,21 +132,7 @@ export class KindrawClient {
       body: body !== undefined ? JSON.stringify(body) : undefined,
     });
 
-    if (!response.ok) {
-      let detail = response.statusText;
-      try {
-        const parsed = (await response.json()) as { error?: string };
-        if (parsed?.error) {
-          detail = parsed.error;
-        }
-      } catch {
-        // ignore non-JSON error bodies
-      }
-      if (response.status === 401) {
-        detail = `${detail} (run "kindraw login" or check KINDRAW_TOKEN)`;
-      }
-      throw new KindrawApiError(response.status, detail);
-    }
+    await this.assertOk(response);
 
     if (response.status === 204) {
       return undefined as T;
@@ -143,21 +151,7 @@ export class KindrawClient {
       headers: { Authorization: `Bearer ${this.token}` },
     });
 
-    if (!response.ok) {
-      let detail = response.statusText;
-      try {
-        const parsed = (await response.json()) as { error?: string };
-        if (parsed?.error) {
-          detail = parsed.error;
-        }
-      } catch {
-        // ignore non-JSON error bodies
-      }
-      if (response.status === 401) {
-        detail = `${detail} (run "kindraw login" or check KINDRAW_TOKEN)`;
-      }
-      throw new KindrawApiError(response.status, detail);
-    }
+    await this.assertOk(response);
 
     return response.text();
   }
@@ -176,17 +170,26 @@ export class KindrawClient {
     return this.request("GET", `/v1/api/items/${encodeURIComponent(itemId)}`);
   }
 
-  // Create a drawing from already-serialized Excalidraw content.
-  createDrawing(input: {
+  // Create a drawing from already-serialized Excalidraw content. Returns a
+  // CLIENT-BUILT /draw/<id> url — for a token-auth request the server's url
+  // field resolves to the API host (https://api.kindraw.dev/draw/<id>), which
+  // won't open the app, so we discard it and rebuild via drawUrl (mirrors
+  // createDoc; verified C3/BizLogic M1).
+  async createDrawing(input: {
     title: string;
     content: string;
     folderId?: string | null;
   }): Promise<CreateDrawingResult> {
-    return this.request<CreateDrawingResult>("POST", "/v1/api/items:generate", {
-      title: input.title,
-      folderId: input.folderId ?? null,
-      content: input.content,
-    });
+    const { itemId } = await this.request<{ itemId: string; url: string }>(
+      "POST",
+      "/v1/api/items:generate",
+      {
+        title: input.title,
+        folderId: input.folderId ?? null,
+        content: input.content,
+      },
+    );
+    return { itemId, url: this.drawUrl(itemId) };
   }
 
   // Create a raw-markdown doc. Returns a CLIENT-BUILT /doc/<id> url — the

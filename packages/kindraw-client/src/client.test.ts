@@ -21,7 +21,12 @@ const mockFetch = (
     "fetch",
     vi.fn(async (url: string, init: RequestInit) => {
       calls.push({ url, init });
-      const r = responses[Math.min(i, responses.length - 1)];
+      if (i >= responses.length) {
+        throw new Error(
+          `mockFetch: unexpected fetch #${i + 1} to ${url} (only ${responses.length} response(s) queued)`,
+        );
+      }
+      const r = responses[i];
       i += 1;
       const status = r.status ?? 200;
       return {
@@ -83,7 +88,12 @@ describe("KindrawClient.requestText (raw text mode)", () => {
   });
 
   it("throws KindrawApiError with 401 hint on auth failure", async () => {
-    mockFetch([{ status: 401, json: { error: "bad token" } }]);
+    // Two probes below each make one fetch; queue one 401 response per probe so
+    // the over-fetch guard in mockFetch isn't tripped.
+    mockFetch([
+      { status: 401, json: { error: "bad token" } },
+      { status: 401, json: { error: "bad token" } },
+    ]);
     await expect(
       // private method probe via `as any`
       (client() as any).requestText("GET", "/api/icons/svg?id=a:b"),
@@ -173,5 +183,54 @@ describe("createDoc", () => {
     });
     await c.createDoc({ title: "T", content: "c", folderId: "f1" });
     expect(JSON.parse(calls[0].init.body as string).folderId).toBe("f1");
+  });
+});
+
+describe("createDrawing", () => {
+  it("returns a built appOrigin /draw url, NOT the server's wrong-host url", async () => {
+    mockFetch([
+      {
+        status: 201,
+        // Token-auth requests resolve relative urls against the API host, so the
+        // server returns the WRONG-host url for the app — we must DISCARD it.
+        json: { itemId: "scene9", url: "https://api.kindraw.dev/draw/scene9" },
+      },
+    ]);
+    const c = new KindrawClient({
+      token: "kdr_test",
+      baseUrl: "https://api.kindraw.dev",
+      appOrigin: "https://kindraw.dev",
+    });
+    const res = await c.createDrawing({ title: "Flow", content: "{}" });
+
+    expect(res).toEqual({
+      itemId: "scene9",
+      url: "https://kindraw.dev/draw/scene9",
+    });
+    expect(calls[0].url).toBe("https://api.kindraw.dev/v1/api/items:generate");
+    expect(calls[0].init.method).toBe("POST");
+    expect(JSON.parse(calls[0].init.body as string)).toEqual({
+      title: "Flow",
+      folderId: null,
+      content: "{}",
+    });
+  });
+
+  it("passes folderId through when provided", async () => {
+    mockFetch([
+      { status: 201, json: { itemId: "d3", url: "https://api.kindraw.dev/draw/d3" } },
+    ]);
+    const c = new KindrawClient({
+      token: "kdr_test",
+      baseUrl: "https://api.kindraw.dev",
+      appOrigin: "https://kindraw.dev",
+    });
+    const res = await c.createDrawing({
+      title: "T",
+      content: "{}",
+      folderId: "f2",
+    });
+    expect(res.url).toBe("https://kindraw.dev/draw/d3");
+    expect(JSON.parse(calls[0].init.body as string).folderId).toBe("f2");
   });
 });
