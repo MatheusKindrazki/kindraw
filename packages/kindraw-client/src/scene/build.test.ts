@@ -12,9 +12,7 @@ type Box = {
 
 // Helper to extract node-shape elements (the boxes that carry labels).
 const nodeBoxes = (elements: Box[]): Box[] =>
-  elements.filter((e) =>
-    ["rectangle", "diamond", "ellipse"].includes(e.type),
-  );
+  elements.filter((e) => ["rectangle", "diamond", "ellipse"].includes(e.type));
 
 const overlaps = (
   a: { x: number; y: number; width: number; height: number },
@@ -94,9 +92,7 @@ describe("buildScene", () => {
       edges: [{ from: "a", to: "b" }],
     });
     const elements = JSON.parse(content).elements;
-    const arrow = elements.find(
-      (e: { type: string }) => e.type === "arrow",
-    );
+    const arrow = elements.find((e: { type: string }) => e.type === "arrow");
     expect(arrow).toBeTruthy();
     expect(arrow.startBinding?.elementId).toBeTruthy();
     expect(arrow.endBinding?.elementId).toBeTruthy();
@@ -125,7 +121,12 @@ describe("buildScene", () => {
   it("applies node stroke/background colors", async () => {
     const { content } = await buildScene({
       nodes: [
-        { id: "a", label: "A", strokeColor: "#1971c2", backgroundColor: "#a5d8ff" },
+        {
+          id: "a",
+          label: "A",
+          strokeColor: "#1971c2",
+          backgroundColor: "#a5d8ff",
+        },
         { id: "b", label: "B" },
       ],
       edges: [{ from: "a", to: "b" }],
@@ -226,6 +227,56 @@ describe("buildScene", () => {
       expect(parsed.type).toBe("excalidraw");
       expect(elementCount).toBeGreaterThan(0);
       expect(nodeBoxes(parsed.elements).length).toBe(2);
+    });
+  });
+
+  describe("node.link passthrough", () => {
+    it("attaches a kindraw:// section link to the node element", async () => {
+      const { content } = await buildScene({
+        nodes: [
+          { id: "a", label: "A", link: "kindraw://section/h1/overview" },
+          { id: "b", label: "B" },
+        ],
+        edges: [{ from: "a", to: "b" }],
+      });
+      const elements = JSON.parse(content).elements as Array<{
+        id: string;
+        link?: string;
+      }>;
+      const a = elements.find((e) => e.id === "a");
+      expect(a?.link).toBe("kindraw://section/h1/overview");
+      // A node without a link must not get a bogus link field.
+      const b = elements.find((e) => e.id === "b");
+      expect(b?.link ?? null).toBeNull();
+    });
+
+    it("accepts a normal https link", async () => {
+      const { content } = await buildScene({
+        nodes: [{ id: "a", label: "A", link: "https://example.com" }],
+        edges: [],
+      });
+      const a = (
+        JSON.parse(content).elements as Array<{ id: string; link?: string }>
+      ).find((e) => e.id === "a");
+      expect(a?.link).toBe("https://example.com");
+    });
+
+    it("rejects a link that is neither kindraw:// nor http(s)", async () => {
+      await expect(
+        buildScene({
+          nodes: [{ id: "a", label: "A", link: "javascript:alert(1)" }],
+          edges: [],
+        }),
+      ).rejects.toThrow(/invalid link/i);
+    });
+
+    it("rejects a data: link", async () => {
+      await expect(
+        buildScene({
+          nodes: [{ id: "a", label: "A", link: "data:text/html,<x>" }],
+          edges: [],
+        }),
+      ).rejects.toThrow(/invalid link/i);
     });
   });
 });

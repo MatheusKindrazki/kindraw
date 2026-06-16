@@ -18,6 +18,7 @@ export type PlacedNode = {
   strokeColor?: string;
   backgroundColor?: string;
   group?: string;
+  link?: string;
 };
 
 type Size = { width: number; height: number };
@@ -66,6 +67,7 @@ const toPlacedNode = (
   strokeColor: node.strokeColor,
   backgroundColor: node.backgroundColor,
   group: node.group,
+  link: node.link,
 });
 
 /**
@@ -124,7 +126,12 @@ export const layoutWithDagre = (spec: NormalizedSpec): PlacedNode[] => {
       throw new Error(`Layout failed to place node "${node.id}".`);
     }
     // dagre pos.x/pos.y are centers; convert to top-left.
-    return toPlacedNode(node, size, pos.x - size.width / 2, pos.y - size.height / 2);
+    return toPlacedNode(
+      node,
+      size,
+      pos.x - size.width / 2,
+      pos.y - size.height / 2,
+    );
   });
 
   return normalizeOrigin(placed);
@@ -161,10 +168,10 @@ export const layoutWithElk = async (
     spec.direction === "LR"
       ? "RIGHT"
       : spec.direction === "RL"
-        ? "LEFT"
-        : spec.direction === "BT"
-          ? "UP"
-          : "DOWN";
+      ? "LEFT"
+      : spec.direction === "BT"
+      ? "UP"
+      : "DOWN";
 
   const graph = {
     id: "root",

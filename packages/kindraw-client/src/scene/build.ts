@@ -90,6 +90,10 @@ const toSkeleton = (
       ...(node.backgroundColor
         ? { backgroundColor: node.backgroundColor }
         : {}),
+      // Conditional spread so link-less nodes serialize identically to before
+      // (determinism). Validated in validateDiagramSpec; passes through
+      // convertToExcalidrawElements untouched (newElement({...element})).
+      ...(node.link ? { link: node.link } : {}),
       roundness: node.shape === "rectangle" ? { type: 3 } : null,
     });
   }
