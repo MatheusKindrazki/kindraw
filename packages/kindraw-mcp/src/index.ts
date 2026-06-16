@@ -602,7 +602,9 @@ const main = async () => {
         if (!icons.length) {
           return text(`No icons found for "${query}".`);
         }
-        return text(icons.map((i) => `${i.id} — ${i.set}/${i.name}`).join("\n"));
+        return text(
+          icons.map((i) => `${i.id} — ${i.set}/${i.name}`).join("\n"),
+        );
       } catch (error) {
         return { ...text(formatError(error)), isError: true };
       }

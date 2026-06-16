@@ -314,7 +314,9 @@ describe("composeHybrid", () => {
     const drawing = JSON.parse(
       JSON.parse(calls[calls.length - 1].init.body as string).content,
     );
-    const img = drawing.elements.find((e: { type: string }) => e.type === "image");
+    const img = drawing.elements.find(
+      (e: { type: string }) => e.type === "image",
+    );
     expect(img).toBeDefined();
     expect(img.status).toBe("saved");
     expect(drawing.files[img.fileId]).toBeDefined();

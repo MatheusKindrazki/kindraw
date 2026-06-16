@@ -16,15 +16,17 @@
 // so the caller retries idempotently (PUTs are idempotent) — we do NOT attempt
 // cleanup (there is no verified delete-hybrid contract).
 
-import type { KindrawClient } from "./client.js";
 import { composeIconImages, type IconPlacement } from "./icons.js";
 import { buildScene } from "./scene/build.js";
 import { validateDiagramSpec } from "./scene/spec.js";
-import type { DiagramEdge, DiagramGroup, DiagramNode } from "./scene/spec.js";
+
 import {
   buildKindrawSectionLink,
   parseHybridMarkdownSections,
 } from "./sections/index.js";
+
+import type { DiagramEdge, DiagramGroup, DiagramNode } from "./scene/spec.js";
+import type { KindrawClient } from "./client.js";
 
 export type HybridDiagramNode = DiagramNode & {
   /**

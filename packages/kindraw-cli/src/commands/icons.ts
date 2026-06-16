@@ -36,7 +36,9 @@ export const iconsSvg = async (args: {
   out?: string;
 }): Promise<void> => {
   if (!args.id) {
-    throw new Error("Usage: kindraw icons svg <id> [--color #hex] [--out file]");
+    throw new Error(
+      "Usage: kindraw icons svg <id> [--color #hex] [--out file]",
+    );
   }
   const client = requireClient();
   const svg = await client.getIconSvg(args.id, args.color);

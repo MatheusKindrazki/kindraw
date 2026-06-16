@@ -1,4 +1,5 @@
 import { requireClient } from "../client.js";
+
 import { readSource } from "./generate.js";
 
 // `kindraw templates list [--category C] [--json]`
@@ -83,6 +84,8 @@ export const templatesApply = async (args: {
     console.log(JSON.stringify({ url: result.url, elementCount }));
     return;
   }
-  console.log(`Created "${args.title || tpl.title}" (${elementCount} elements)`);
+  console.log(
+    `Created "${args.title || tpl.title}" (${elementCount} elements)`,
+  );
   console.log(result.url);
 };

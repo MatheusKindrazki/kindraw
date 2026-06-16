@@ -325,7 +325,9 @@ describe("templates + icons", () => {
   });
 
   it("getTemplate GETs /api/templates/:id", async () => {
-    mockFetch([{ status: 200, json: { id: "t1", title: "Flow", elements: [] } }]);
+    mockFetch([
+      { status: 200, json: { id: "t1", title: "Flow", elements: [] } },
+    ]);
     const c = new KindrawClient({ token: "kdr_test" });
     await c.getTemplate("t1");
     expect(calls[0].url).toBe("https://api.kindraw.dev/api/templates/t1");
