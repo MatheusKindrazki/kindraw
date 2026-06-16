@@ -133,3 +133,45 @@ describe("app-origin resolution + URL helpers", () => {
     expect(c.docUrl("a/b")).toBe("https://kindraw.dev/doc/a%2Fb");
   });
 });
+
+describe("createDoc", () => {
+  it("POSTs /v1/api/items with kind:doc and returns a built /doc url (not server url)", async () => {
+    mockFetch([
+      {
+        status: 201,
+        // Server returns a /draw url even for docs — we must DISCARD it.
+        json: { itemId: "doc123", url: "https://kindraw.dev/draw/doc123" },
+      },
+    ]);
+    const c = new KindrawClient({
+      token: "kdr_test",
+      baseUrl: "https://api.kindraw.dev",
+      appOrigin: "https://kindraw.dev",
+    });
+    const res = await c.createDoc({ title: "Notes", content: "# Hi\n" });
+
+    expect(res).toEqual({
+      itemId: "doc123",
+      url: "https://kindraw.dev/doc/doc123",
+    });
+    expect(calls[0].url).toBe("https://api.kindraw.dev/v1/api/items");
+    expect(calls[0].init.method).toBe("POST");
+    expect(JSON.parse(calls[0].init.body as string)).toEqual({
+      kind: "doc",
+      title: "Notes",
+      folderId: null,
+      content: "# Hi\n",
+    });
+  });
+
+  it("passes folderId through when provided", async () => {
+    mockFetch([{ status: 201, json: { itemId: "d2", url: "x" } }]);
+    const c = new KindrawClient({
+      token: "kdr_test",
+      baseUrl: "https://api.kindraw.dev",
+      appOrigin: "https://kindraw.dev",
+    });
+    await c.createDoc({ title: "T", content: "c", folderId: "f1" });
+    expect(JSON.parse(calls[0].init.body as string).folderId).toBe("f1");
+  });
+});

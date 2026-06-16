@@ -11,6 +11,7 @@ export type {
   KindrawItemSummary,
   KindrawMe,
   CreateDrawingResult,
+  CreateDocResult,
 } from "./client.js";
 export { startLoopbackLogin } from "./auth.js";
 export type { LoopbackLoginOptions, LoopbackLoginResult } from "./auth.js";

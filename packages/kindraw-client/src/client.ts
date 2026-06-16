@@ -20,6 +20,8 @@ export type KindrawMe = {
 
 export type CreateDrawingResult = { itemId: string; url: string };
 
+export type CreateDocResult = { itemId: string; url: string };
+
 export class KindrawApiError extends Error {
   constructor(
     public status: number,
@@ -185,6 +187,27 @@ export class KindrawClient {
       folderId: input.folderId ?? null,
       content: input.content,
     });
+  }
+
+  // Create a raw-markdown doc. Returns a CLIENT-BUILT /doc/<id> url — the
+  // server's url field is /draw/<id> even for docs (verified C3) so we discard
+  // it. (Distinct endpoint from createDrawing: kind:"doc", path /v1/api/items.)
+  async createDoc(input: {
+    title: string;
+    content: string;
+    folderId?: string | null;
+  }): Promise<CreateDocResult> {
+    const { itemId } = await this.request<{ itemId: string; url: string }>(
+      "POST",
+      "/v1/api/items",
+      {
+        kind: "doc",
+        title: input.title,
+        folderId: input.folderId ?? null,
+        content: input.content,
+      },
+    );
+    return { itemId, url: this.docUrl(itemId) };
   }
 
   updateContent(itemId: string, content: string): Promise<void> {
