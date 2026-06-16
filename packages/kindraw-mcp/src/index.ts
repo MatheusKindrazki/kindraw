@@ -234,7 +234,7 @@ const main = async () => {
         "Create a markdown document in the user's Kindraw workspace. Provide " +
         "the FULL markdown (GFM: headings, lists, tables, code). Returns the " +
         "doc URL (/doc/<id>). Use this for prose/notes; use kindraw_create_scene " +
-        "for canvas diagrams, or kindraw_create_hybrid for a doc beside a canvas.",
+        "for canvas diagrams.",
       inputSchema: {
         title: z.string().max(500).describe("Title for the new doc"),
         markdown: z
