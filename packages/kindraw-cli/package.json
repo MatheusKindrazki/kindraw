@@ -1,6 +1,6 @@
 {
   "name": "@kindraw/cli",
-  "version": "0.1.3",
+  "version": "0.2.0",
   "description": "Kindraw command-line tool: connect with GitHub and create drawings from the terminal or from Mermaid.",
   "type": "module",
   "license": "MIT",
@@ -18,7 +18,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@kindraw/client": "0.1.3"
+    "@kindraw/client": "0.2.0"
   },
   "devDependencies": {
     "esbuild": "^0.21.0"

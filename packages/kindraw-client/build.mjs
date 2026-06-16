@@ -72,7 +72,16 @@ const shared = {
   outdir: "dist",
   plugins: [excalidrawResolver],
   // Keep native/heavy runtime deps external (installed at the consumer).
-  external: ["jsdom", "canvas", "@excalidraw/mermaid-to-excalidraw"],
+  // elkjs is external because it `require("web-worker")`, which esbuild can't
+  // bundle for Node. dagre is kept external alongside it for consistency (both
+  // are declared deps of @kindraw/client, so consumers get them transitively).
+  external: [
+    "jsdom",
+    "canvas",
+    "@excalidraw/mermaid-to-excalidraw",
+    "dagre",
+    "elkjs",
+  ],
   define: {
     "import.meta.env.DEV": "false",
     "import.meta.env.PROD": "true",
@@ -87,6 +96,17 @@ await build({
   entryPoints: {
     index: path.resolve(__dirname, "src/index.ts"),
     generate: path.resolve(__dirname, "src/generate.ts"),
+    // Nested key so esbuild emits dist/scene/index.js, matching the package.json
+    // "./scene" export. dagre/elkjs are EXTERNAL (see `external` above) — declared
+    // deps of @kindraw/client, resolved from node_modules at runtime, not bundled.
+    "scene/index": path.resolve(__dirname, "src/scene/index.ts"),
+    // hybrid.js orchestrates seed+doc+drawing. It imports scene/build (the heavy
+    // @excalidraw transform) so it lives in its OWN entry, keeping index.js light.
+    // The "./hybrid" export resolves here.
+    hybrid: path.resolve(__dirname, "src/hybrid.ts"),
+    // sections/index.js is the SHARED slug parser (only pulls in `marked`).
+    // The "./sections" export resolves here; index.js also re-exports it.
+    "sections/index": path.resolve(__dirname, "src/sections/index.ts"),
   },
 });
 
@@ -95,7 +115,7 @@ const { execSync } = await import("node:child_process");
 execSync(
   "npx tsc --emitDeclarationOnly --declaration --outDir dist " +
     "--module ESNext --moduleResolution Bundler --target ES2022 " +
-    "--skipLibCheck --types node src/index.ts src/client.ts src/auth.ts src/generate.ts src/dom.ts",
+    "--skipLibCheck --types node src/ambient.d.ts src/index.ts src/client.ts src/auth.ts src/generate.ts src/dom.ts src/scene/index.ts src/hybrid.ts src/sections/index.ts",
   { cwd: __dirname, stdio: "inherit" },
 );
 

@@ -6,6 +6,14 @@ declare module "@excalidraw/element" {
     elements: unknown[],
     opts?: { regenerateIds?: boolean },
   ) => Array<{ type: string; isDeleted?: boolean; [key: string]: unknown }>;
+
+  export interface TextMetricsProvider {
+    getLineWidth(text: string, fontString: string): number;
+  }
+
+  export const setCustomTextMetricsProvider: (
+    provider: TextMetricsProvider,
+  ) => void;
 }
 
 declare module "@excalidraw/mermaid-to-excalidraw" {

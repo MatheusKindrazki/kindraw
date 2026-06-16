@@ -75,6 +75,17 @@ export default defineConfig(({ mode }) => {
           find: /^@excalidraw\/utils\/(.*?)/,
           replacement: path.resolve(__dirname, "../packages/utils/src/$1"),
         },
+        // Resolve the shared hybrid section parser to its workspace source so the
+        // app and the @kindraw/client orchestrator (MCP/CLI) never drift on the
+        // kindraw://section/<id>/<slug> slug format. Source alias, no build step —
+        // mirrors the @excalidraw/* convention above. (Code H1.)
+        {
+          find: /^@kindraw\/client\/sections$/,
+          replacement: path.resolve(
+            __dirname,
+            "../packages/kindraw-client/src/sections/index.ts",
+          ),
+        },
       ],
     },
     build: {

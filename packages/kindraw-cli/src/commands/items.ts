@@ -12,9 +12,7 @@ export const itemsList = async (args: { json?: boolean }): Promise<void> => {
     return;
   }
   for (const item of items) {
-    console.log(
-      `${item.id}  ${item.kind.padEnd(7)}  ${item.title}`,
-    );
+    console.log(`${item.id}  ${item.kind.padEnd(7)}  ${item.title}`);
   }
 };
 
@@ -40,8 +38,10 @@ export const itemsDelete = async (args: { id?: string }): Promise<void> => {
     throw new Error("Usage: kindraw items delete <id>");
   }
   const client = requireClient();
-  await client.deleteItem(args.id);
-  console.log(`Deleted ${args.id}`);
+  // deleteAny routes hybrids to the dedicated delete (+ backing-item cleanup)
+  // and everything else to the plain item delete; the kind is auto-detected.
+  const kind = await client.deleteAny(args.id);
+  console.log(`Deleted ${kind} ${args.id}`);
 };
 
 export const whoami = async (): Promise<void> => {

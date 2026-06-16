@@ -45,6 +45,15 @@ export default defineConfig({
         find: /^@excalidraw\/utils\/(.*?)/,
         replacement: path.resolve(__dirname, "./packages/utils/src/$1"),
       },
+      // Shared hybrid section parser source alias (Code H1) — mirrors the app's
+      // vite.config alias so app tests resolve the same workspace source.
+      {
+        find: /^@kindraw\/client\/sections$/,
+        replacement: path.resolve(
+          __dirname,
+          "./packages/kindraw-client/src/sections/index.ts",
+        ),
+      },
     ],
   },
   //@ts-ignore
