@@ -1069,54 +1069,65 @@
     },
     "landing": {
       "hero": {
-        "eyebrow": "Diagramas de arquitetura com IA · MCP para Claude Code & Cursor",
-        "headlineA": "Diagramas de arquitetura e system design que",
+        "eyebrow": "Diagramas de arquitetura no Claude Code & Cursor",
+        "headlineA": "Diagramas de arquitetura que",
         "headlineMark": "ficam vivos",
         "headlineB": "ao lado do seu código.",
-        "subhead": "O seu agente desenha o diagrama; o Kindraw guarda-o. Layout de grafo a sério, um workspace de equipa partilhável e um link vivo — em vez de um ficheiro descartável que já está desatualizado quando o partilha.",
+        "subhead": "O seu agente desenha o sistema; o Kindraw guarda-o. Layout de grafo a sério num workspace partilhável por link — o diagrama continua correto na próxima vez que alguém o abre, em vez de nascer desatualizado na exportação.",
         "ctaGithub": "Continuar com GitHub",
         "ctaGoogle": "Continuar com Google",
-        "or": "Ainda não quer iniciar sessão?"
+        "or": "Ainda não quer iniciar sessão?",
+        "proof": "Grátis durante o beta · funciona em qualquer editor com MCP"
       },
       "demo": {
-        "caption": "Veja: prompt no Claude Code → diagrama → link de partilha → a sua equipa edita ao vivo. (Demo de 60s em breve.)"
+        "caption": "Pede no Claude Code, sai um diagrama já organizado, partilha o link, editam em conjunto. Um tour rápido aparece aqui em breve.",
+        "badge": "Demo em breve"
       },
       "waitlist": {
         "label": "O seu e-mail de trabalho",
         "placeholder": "voce@empresa.com",
         "cta": "Entrar na lista",
         "loading": "A adicionar…",
-        "hint": "Receba acesso antecipado e novidades do produto. Sem spam.",
-        "success": "Está na lista. Em breve entraremos em contacto.",
+        "hint": "Acesso antecipado e novidades do produto. Sem spam.",
+        "success": "Pronto, está na lista. Damos notícias em breve.",
         "invalid": "Introduza um e-mail válido.",
-        "error": "Algo correu mal. Tente novamente."
+        "error": "Algo correu mal. Tente de novo."
       },
       "values": {
         "aria": "Porquê o Kindraw",
+        "label": "A diferença",
         "layoutTitle": "Layout a sério, não Mermaid cru",
-        "layoutBody": "Um motor de grafo a sério (dagre/elk) organiza o diagrama do seu agente — níveis limpos, sem esparguete. Não é um despejo de ASCII colado num canvas.",
-        "workspaceTitle": "Vive num workspace",
-        "workspaceBody": "Cada diagrama é persistente, em pastas e com nome — um lugar a que pertence, não um ficheiro .excalidraw a apodrecer nas transferências.",
+        "layoutLead": "Quem organiza é um motor de grafo.",
+        "layoutBody": "O dagre e o elk posicionam os nós — níveis limpos, arestas que fazem sentido, zero esparguete. Fica com ar de algo que um engenheiro desenharia, não um despejo de ASCII atirado para um canvas.",
+        "workspaceTitle": "Um lar, não a pasta de transferências",
+        "workspaceLead": "Cada diagrama tem um sítio onde mora.",
+        "workspaceBody": "Com nome, em pastas e persistente — com link de partilha desde que nasce. Acabou andar à procura do .excalidraw que estava certo há quatro versões.",
         "collabTitle": "Fica em sincronia, em equipa",
-        "collabBody": "Um link de partilha. A equipa inteira abre, edita em tempo real e corre o agente de novo quando a infraestrutura muda. O diagrama atualiza, não apodrece."
+        "collabLead": "Um link só, e a equipa inteira trabalha nele.",
+        "collabBody": "Abre, edita em tempo real, corre o agente de novo quando a infraestrutura muda. O diagrama acompanha o sistema em vez de apodrecer atrás dele."
       },
       "how": {
         "eyebrow": "Como funciona",
-        "title": "De um prompt a um diagrama vivo em três passos",
-        "step1Title": "Ligue o MCP",
-        "step1Body": "Adicione o MCP do Kindraw ao Claude Code ou Cursor. Um comando, sem malabarismo de contas.",
-        "step2Title": "Peça o diagrama",
-        "step2Body": "“Faça o diagrama do nosso serviço de pagamentos e das suas dependências.” O agente gera com auto-layout a sério.",
-        "step3Title": "Aparece no seu workspace",
-        "step3Body": "O diagrama surge no Kindraw com um link de partilha, pronto para a equipa abrir, editar e manter em sincronia."
+        "title": "De um prompt a um diagrama vivo",
+        "subtitle": "Três passos, sem hábitos novos para aprender.",
+        "step1Tag": "Uma vez",
+        "step1Title": "Aponte o seu editor para o Kindraw",
+        "step1Body": "Adicione o MCP ao Claude Code ou Cursor. Uma linha na configuração e pode esquecer que lá está.",
+        "step2Tag": "Quando quiser",
+        "step2Title": "Descreva o sistema",
+        "step2Body": "“Mapeia o serviço de pagamentos — a API, a fila, as duas bases de dados e quem lhe chama.” O agente monta-o e organiza-o a sério.",
+        "step3Tag": "Para sempre",
+        "step3Title": "Já está no seu workspace",
+        "step3Body": "O diagrama abre no Kindraw com o link de partilha junto. A equipa edita-o e corre o prompt de novo quando a realidade muda."
       },
       "closer": {
-        "title": "Pare de redesenhar diagramas no draw.io.",
-        "subtitle": "Deixe o seu agente desenhá-los uma vez e mantê-los vivos."
+        "label": "O ponto",
+        "title": "Desenhe o sistema uma vez. Guarde-o.",
+        "subtitle": "O diagrama que o seu agente faz não devia expirar na pasta de transferências. Dê-lhe um lar que fica em sincronia com o código."
       },
       "footer": {
-        "builtOn": "Feito com orgulho sobre o open-source",
-        "forDevs": "Para programadores:"
+        "builtOn": "Feito sobre o open-source",
+        "forDevs": "Ligue o seu editor:"
       }
     },
     "topbar": {
