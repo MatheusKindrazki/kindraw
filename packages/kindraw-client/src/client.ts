@@ -33,11 +33,23 @@ export class KindrawApiError extends Error {
 export type KindrawClientOptions = {
   token: string;
   baseUrl?: string;
+  /**
+   * The Kindraw app origin used to build user-facing URLs (/doc, /draw,
+   * /hybrid). The server's create responses always return a /draw URL even for
+   * docs (verified C3: buildItemPath), so we never trust them — we build URLs
+   * here. Resolution order:
+   *   (a) this option, if set;
+   *   (b) else derive from baseUrl by stripping a leading "api." host segment
+   *       (api.kindraw.dev -> kindraw.dev), a deterministic backstop.
+   * The MCP/CLI pass this from the same config.json they already load.
+   */
+  appOrigin?: string;
 };
 
 export class KindrawClient {
   private readonly baseUrl: string;
   private readonly token: string;
+  private readonly appOrigin: string;
 
   constructor(options: KindrawClientOptions) {
     if (!options.token) {
@@ -45,6 +57,41 @@ export class KindrawClient {
     }
     this.token = options.token;
     this.baseUrl = (options.baseUrl || DEFAULT_API_BASE_URL).replace(/\/+$/, "");
+    this.appOrigin = KindrawClient.resolveAppOrigin(
+      this.baseUrl,
+      options.appOrigin,
+    );
+  }
+
+  // Resolve the app origin once at construction. Prefer the explicit option;
+  // otherwise strip a leading "api." label from the baseUrl host so
+  // https://api.kindraw.dev -> https://kindraw.dev. A baseUrl whose host does
+  // not start with "api." is returned as-is (e.g. http://localhost:8787).
+  private static resolveAppOrigin(baseUrl: string, explicit?: string): string {
+    if (explicit) {
+      return explicit.replace(/\/+$/, "");
+    }
+    try {
+      const u = new URL(baseUrl);
+      if (u.hostname.startsWith("api.")) {
+        u.hostname = u.hostname.slice("api.".length);
+      }
+      return u.origin;
+    } catch {
+      return baseUrl.replace(/\/+$/, "");
+    }
+  }
+
+  // Public, pure URL builders. The server's returned `url` is /draw/<id> even
+  // for docs (verified C3), so callers MUST use these instead of trusting it.
+  docUrl(id: string): string {
+    return `${this.appOrigin}/doc/${encodeURIComponent(id)}`;
+  }
+  drawUrl(id: string): string {
+    return `${this.appOrigin}/draw/${encodeURIComponent(id)}`;
+  }
+  hybridUrl(id: string): string {
+    return `${this.appOrigin}/hybrid/${encodeURIComponent(id)}`;
   }
 
   private async request<T>(

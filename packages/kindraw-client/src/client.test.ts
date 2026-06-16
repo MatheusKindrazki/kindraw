@@ -94,3 +94,42 @@ describe("KindrawClient.requestText (raw text mode)", () => {
     ).rejects.toThrowError(/kindraw login|KINDRAW_TOKEN/);
   });
 });
+
+describe("app-origin resolution + URL helpers", () => {
+  it("uses the explicit appOrigin option when set", () => {
+    const c = new KindrawClient({
+      token: "kdr_test",
+      baseUrl: "https://api.kindraw.dev",
+      appOrigin: "https://kindraw.dev",
+    });
+    expect(c.docUrl("abc")).toBe("https://kindraw.dev/doc/abc");
+    expect(c.drawUrl("abc")).toBe("https://kindraw.dev/draw/abc");
+    expect(c.hybridUrl("h1")).toBe("https://kindraw.dev/hybrid/h1");
+  });
+
+  it("derives origin from baseUrl by stripping a leading 'api.' when no option", () => {
+    const c = new KindrawClient({
+      token: "kdr_test",
+      baseUrl: "https://api.kindraw.dev",
+    });
+    // api.kindraw.dev -> kindraw.dev (deterministic backstop)
+    expect(c.docUrl("abc")).toBe("https://kindraw.dev/doc/abc");
+  });
+
+  it("leaves a non-'api.' baseUrl host untouched", () => {
+    const c = new KindrawClient({
+      token: "kdr_test",
+      baseUrl: "http://localhost:8787",
+    });
+    expect(c.docUrl("abc")).toBe("http://localhost:8787/doc/abc");
+  });
+
+  it("url-encodes the id segment", () => {
+    const c = new KindrawClient({
+      token: "kdr_test",
+      baseUrl: "https://api.kindraw.dev",
+      appOrigin: "https://kindraw.dev",
+    });
+    expect(c.docUrl("a/b")).toBe("https://kindraw.dev/doc/a%2Fb");
+  });
+});
