@@ -1,9 +1,14 @@
+// `.kindraw-modal` (kindraw.scss) define width: min(380px,...); como o modal
+// tem as duas classes, combinamos `.kindraw-modal.kindraw-settings` para
+// vencer por especificidade e dar a largura maior do painel de Configurações.
+.kindraw-modal.kindraw-settings,
 .kindraw-settings {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
-  width: min(560px, 92vw);
+  gap: 1.35rem;
+  width: min(640px, 92vw);
   max-height: 86vh;
+  padding: 24px;
 
   &__head {
     display: flex;
@@ -13,8 +18,9 @@
 
     h2 {
       margin: 0;
-      font-size: 18px;
+      font-size: 19px;
       font-weight: 700;
+      letter-spacing: -0.01em;
       color: var(--kd-ink, #20283a);
     }
   }
@@ -39,22 +45,25 @@
 
   &__tablist {
     display: flex;
-    gap: 4px;
-    padding: 4px;
+    gap: 5px;
+    padding: 5px;
     border-radius: var(--kd-r-btn, 10px);
     background: var(--kd-amber-soft, #f1e6cf);
   }
 
   &__tab {
     flex: 1;
-    padding: 8px 12px;
+    min-width: 0;
+    padding: 9px 14px;
     border: none;
-    border-radius: 8px;
+    border-radius: 9px;
     background: transparent;
     color: var(--kd-ink-soft, #4a4434);
     font-family: var(--kd-font, inherit);
     font-size: 13.5px;
     font-weight: 600;
+    line-height: 1.2;
+    white-space: nowrap;
     cursor: pointer;
     transition: background 0.15s ease, color 0.15s ease;
 
@@ -82,27 +91,73 @@
     display: flex;
     flex-direction: column;
     gap: 1rem;
-    padding: 4px 0;
+    padding: 2px 0;
   }
 
   &__field {
     display: flex;
     flex-direction: column;
-    gap: 8px;
-
-    .dropdown-select__language {
-      max-width: 280px;
-    }
+    gap: 10px;
+    padding: 16px;
+    border: 1px solid var(--kd-line, #e7ddc8);
+    border-radius: var(--kd-r-popover, 14px);
+    background: color-mix(
+      in srgb,
+      var(--kd-amber-soft, #f1e6cf) 35%,
+      var(--kd-surface, #fff)
+    );
   }
 
   &__field-label {
     font-size: 13.5px;
-    font-weight: 600;
+    font-weight: 700;
     color: var(--kd-ink, #20283a);
   }
 
   &__field-help {
     font-size: 12.5px;
+    line-height: 1.5;
     color: var(--kd-muted, #6b6450);
+  }
+
+  /* Select de idioma com o visual do design system (não o <select> cru). */
+  .dropdown-select__language {
+    appearance: none;
+    -webkit-appearance: none;
+    width: 100%;
+    max-width: 320px;
+    height: 42px;
+    margin: 0;
+    padding: 0 40px 0 14px;
+    border: 1px solid var(--kd-line, #e7ddc8);
+    border-radius: var(--kd-r-btn, 10px);
+    background-color: var(--kd-surface, #fff);
+    /* chevron âmbar inline */
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23b08a3e' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 13px center;
+    color: var(--kd-ink, #20283a);
+    font-family: var(--kd-font, inherit);
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease,
+      background-color 0.15s ease;
+
+    &:hover {
+      border-color: #d9b36a;
+      background-color: color-mix(
+        in srgb,
+        var(--kd-amber-soft, #f1e6cf) 30%,
+        var(--kd-surface, #fff)
+      );
+    }
+
+    &:focus,
+    &:focus-visible {
+      outline: none;
+      border-color: #d9b36a;
+      box-shadow: 0 0 0 3px var(--kd-amber-soft, #f1e6cf);
+    }
   }
 }
