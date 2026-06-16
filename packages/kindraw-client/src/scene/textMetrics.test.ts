@@ -19,6 +19,15 @@ describe("NodeTextMetricsProvider", () => {
       provider.getLineWidth("Service", font),
     );
   });
+
+  // FIX 6 (Security M1) — anchored parseFontSize regex; behavior unchanged for
+  // valid font strings. Width must stay sane (positive, font-size proportional).
+  it("returns a sane width for a standard '20px Virgil' font string", () => {
+    const provider = new NodeTextMetricsProvider();
+    const width = provider.getLineWidth("Service", "20px Virgil");
+    expect(width).toBeGreaterThan(0);
+    expect(Number.isFinite(width)).toBe(true);
+  });
 });
 
 describe("measureLabel", () => {

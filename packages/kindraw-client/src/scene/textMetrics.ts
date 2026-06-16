@@ -48,8 +48,10 @@ const getNodeCanvasCtx = () => {
 const AVG_CHAR_RATIO = 0.55;
 
 const parseFontSize = (fontString: string): number => {
-  // fontString looks like "20px Virgil, Segoe UI Emoji".
-  const match = /(\d+(\.\d+)?)px/.exec(fontString);
+  // fontString looks like "20px Virgil, Segoe UI Emoji". Anchored + bounded so
+  // a hostile string can't make the regex engine do superlinear work and so we
+  // only ever read a leading, sanely-sized px value. (Security M1.)
+  const match = /^\s*(\d{1,4}(?:\.\d{1,3})?)px/.exec(fontString);
   return match ? parseFloat(match[1]) : 16;
 };
 
