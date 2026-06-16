@@ -28,6 +28,30 @@ export type CreateHybridResult = {
   drawingItemId: string;
 };
 
+// Template metadata as returned by GET /api/templates (no elements).
+export type KindrawTemplateMeta = {
+  id: string;
+  title: string;
+  description?: string;
+  category?: string;
+};
+
+// A full template (GET /api/templates/:id). `elements` are loose
+// convertToExcalidrawElements INPUT skeletons (verified against the Worker
+// source workers/api/src/templates.ts): shape elements carry
+// {type:'rectangle'|'ellipse'|'diamond', id?, x, y, width, height,
+// backgroundColor?, label:{text, verticalAlign?, fontFamily?, fontSize?}}, and
+// arrow elements carry {type:'arrow', x, y, points:[[x,y],...], label?,
+// startArrowhead?, endArrowhead?} — arrows have NO id and NO start/end bindings:
+// they are INTENTIONALLY UNBOUND (explicit absolute x/y + relative points) and
+// must NOT be run through reanchorArrows (see buildFromSkeletons).
+export type KindrawTemplate = KindrawTemplateMeta & {
+  elements: Array<Record<string, unknown>>;
+};
+
+// One Iconify search hit (GET /api/icons/search). `id` is "prefix:name".
+export type KindrawIconHit = { id: string; set: string; name: string };
+
 export class KindrawApiError extends Error {
   constructor(public status: number, message: string) {
     super(message);
@@ -261,6 +285,43 @@ export class KindrawClient {
       `/api/items/${encodeURIComponent(drawingItemId)}/content`,
       { content: json },
     );
+  }
+
+  // --- Templates + icons (PUBLIC endpoints; Bearer is harmless) ---
+
+  // List the built-in templates (metadata only). The id is opaque — list first,
+  // then pass it to getTemplate / kindraw_apply_template.
+  listTemplates(): Promise<{ templates: KindrawTemplateMeta[] }> {
+    return this.request("GET", "/api/templates");
+  }
+
+  // Fetch one full template, including its loose element skeletons.
+  getTemplate(id: string): Promise<KindrawTemplate> {
+    return this.request("GET", `/api/templates/${encodeURIComponent(id)}`);
+  }
+
+  // Search the Iconify proxy. Empty q -> {icons:[]}; limit default 48, max 96.
+  searchIcons(q: string, limit = 48): Promise<{ icons: KindrawIconHit[] }> {
+    const params = new URLSearchParams({ q, limit: String(limit) });
+    return this.request("GET", `/api/icons/search?${params.toString()}`);
+  }
+
+  // Returns a RAW SVG string (image/svg+xml) via requestText (verified C1 —
+  // request<T> always calls .json() and would throw on an SVG body). Validate
+  // the id BEFORE the call: the server requires /^[a-z0-9-]+:[a-z0-9-]+$/i, and
+  // we never want to spend a network round-trip on a malformed id.
+  // `async` so a bad id rejects the returned Promise (rather than throwing
+  // synchronously at the call site) — the validation still runs BEFORE any
+  // fetch, so a malformed id never reaches the network.
+  async getIconSvg(id: string, color?: string): Promise<string> {
+    if (!/^[a-z0-9-]+:[a-z0-9-]+$/i.test(id)) {
+      throw new Error(`Invalid icon id "${id}" (expected "prefix:name").`);
+    }
+    const params = new URLSearchParams({ id });
+    if (color) {
+      params.set("color", color);
+    }
+    return this.requestText("GET", `/api/icons/svg?${params.toString()}`);
   }
 
   updateContent(itemId: string, content: string): Promise<void> {

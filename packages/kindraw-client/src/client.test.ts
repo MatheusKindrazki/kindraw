@@ -308,3 +308,67 @@ describe("hybrid methods", () => {
     });
   });
 });
+
+describe("templates + icons", () => {
+  it("listTemplates GETs /api/templates", async () => {
+    mockFetch([
+      {
+        status: 200,
+        json: { templates: [{ id: "t1", title: "Flow", category: "diagram" }] },
+      },
+    ]);
+    const c = new KindrawClient({ token: "kdr_test" });
+    const res = await c.listTemplates();
+    expect(res.templates[0].id).toBe("t1");
+    expect(calls[0].url).toBe("https://api.kindraw.dev/api/templates");
+    expect(calls[0].init.method).toBe("GET");
+  });
+
+  it("getTemplate GETs /api/templates/:id", async () => {
+    mockFetch([{ status: 200, json: { id: "t1", title: "Flow", elements: [] } }]);
+    const c = new KindrawClient({ token: "kdr_test" });
+    await c.getTemplate("t1");
+    expect(calls[0].url).toBe("https://api.kindraw.dev/api/templates/t1");
+  });
+
+  it("searchIcons GETs /api/icons/search with q + limit", async () => {
+    mockFetch([
+      {
+        status: 200,
+        json: { icons: [{ id: "mdi:home", set: "mdi", name: "home" }] },
+      },
+    ]);
+    const c = new KindrawClient({ token: "kdr_test" });
+    const res = await c.searchIcons("home", 10);
+    expect(res.icons[0].id).toBe("mdi:home");
+    expect(calls[0].url).toBe(
+      "https://api.kindraw.dev/api/icons/search?q=home&limit=10",
+    );
+  });
+
+  it("searchIcons defaults limit to 48", async () => {
+    mockFetch([{ status: 200, json: { icons: [] } }]);
+    const c = new KindrawClient({ token: "kdr_test" });
+    await c.searchIcons("x");
+    expect(calls[0].url).toContain("limit=48");
+  });
+
+  it("getIconSvg validates id then GETs /api/icons/svg as TEXT", async () => {
+    mockFetch([{ status: 200, text: "<svg/>", contentType: "image/svg+xml" }]);
+    const c = new KindrawClient({ token: "kdr_test" });
+    const svg = await c.getIconSvg("mdi:home", "#ff0000");
+    expect(svg).toBe("<svg/>");
+    expect(calls[0].url).toBe(
+      "https://api.kindraw.dev/api/icons/svg?id=mdi%3Ahome&color=%23ff0000",
+    );
+  });
+
+  it("getIconSvg rejects a malformed id WITHOUT calling fetch", async () => {
+    mockFetch([{ status: 200, text: "<svg/>" }]);
+    const c = new KindrawClient({ token: "kdr_test" });
+    await expect(c.getIconSvg("not a valid id")).rejects.toThrow(
+      /invalid icon id/i,
+    );
+    expect(calls.length).toBe(0);
+  });
+});
