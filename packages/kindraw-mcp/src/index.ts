@@ -13,9 +13,14 @@ import { z } from "zod";
 
 // Resolve the token from env, falling back to the CLI's saved config so a user
 // who ran `kindraw login` doesn't have to re-paste a token for the MCP server.
-const resolveCredentials = (): { token: string; baseUrl: string } => {
+const resolveCredentials = (): {
+  token: string;
+  baseUrl: string;
+  appOrigin?: string;
+} => {
   let token = process.env.KINDRAW_TOKEN;
   let baseUrl = process.env.KINDRAW_API_BASE_URL;
+  let appOrigin = process.env.KINDRAW_APP_ORIGIN;
 
   if (!token) {
     try {
@@ -25,9 +30,11 @@ const resolveCredentials = (): { token: string; baseUrl: string } => {
       const config = JSON.parse(fs.readFileSync(configPath, "utf8")) as {
         token?: string;
         baseUrl?: string;
+        appOrigin?: string;
       };
       token = config.token;
       baseUrl = baseUrl || config.baseUrl;
+      appOrigin = appOrigin || config.appOrigin;
     } catch {
       // no config file
     }
@@ -38,7 +45,7 @@ const resolveCredentials = (): { token: string; baseUrl: string } => {
       "No Kindraw token found. Set KINDRAW_TOKEN or run `kindraw login` first.",
     );
   }
-  return { token, baseUrl: baseUrl || DEFAULT_API_BASE_URL };
+  return { token, baseUrl: baseUrl || DEFAULT_API_BASE_URL, appOrigin };
 };
 
 const formatError = (error: unknown): string => {
@@ -53,8 +60,8 @@ const text = (value: string) => ({
 });
 
 const main = async () => {
-  const { token, baseUrl } = resolveCredentials();
-  const client = new KindrawClient({ token, baseUrl });
+  const { token, baseUrl, appOrigin } = resolveCredentials();
+  const client = new KindrawClient({ token, baseUrl, appOrigin });
 
   const server = new McpServer({
     name: "kindraw",
@@ -214,6 +221,41 @@ const main = async () => {
         return text(
           `Created diagram "${title || "Untitled diagram"}" (${elementCount} elements).\n${result.url}`,
         );
+      } catch (error) {
+        return { ...text(formatError(error)), isError: true };
+      }
+    },
+  );
+
+  server.registerTool(
+    "kindraw_create_doc",
+    {
+      description:
+        "Create a markdown document in the user's Kindraw workspace. Provide " +
+        "the FULL markdown (GFM: headings, lists, tables, code). Returns the " +
+        "doc URL (/doc/<id>). Use this for prose/notes; use kindraw_create_scene " +
+        "for canvas diagrams, or kindraw_create_hybrid for a doc beside a canvas.",
+      inputSchema: {
+        title: z.string().max(500).describe("Title for the new doc"),
+        markdown: z
+          .string()
+          .max(500_000)
+          .describe("The full document body as GitHub-Flavored Markdown"),
+        folderId: z
+          .string()
+          .max(200)
+          .nullish()
+          .describe("Optional folder id to place the doc in"),
+      },
+    },
+    async ({ title, markdown, folderId }) => {
+      try {
+        const result = await client.createDoc({
+          title,
+          content: markdown,
+          folderId,
+        });
+        return text(`Created doc "${title}".\n${result.url}`);
       } catch (error) {
         return { ...text(formatError(error)), isError: true };
       }
