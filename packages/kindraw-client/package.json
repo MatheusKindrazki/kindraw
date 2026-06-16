@@ -15,6 +15,10 @@
     "./generate": {
       "types": "./dist/generate.d.ts",
       "default": "./dist/generate.js"
+    },
+    "./scene": {
+      "types": "./dist/scene/index.d.ts",
+      "default": "./dist/scene/index.js"
     }
   },
   "files": [
@@ -27,9 +31,12 @@
   "dependencies": {
     "@excalidraw/mermaid-to-excalidraw": "2.0.0-rc4",
     "canvas": "^3.0.0",
+    "dagre": "^0.8.5",
+    "elkjs": "^0.9.3",
     "jsdom": "^24.0.0"
   },
   "devDependencies": {
+    "@types/dagre": "^0.7.52",
     "@types/jsdom": "28.0.3",
     "esbuild": "^0.21.0"
   }
