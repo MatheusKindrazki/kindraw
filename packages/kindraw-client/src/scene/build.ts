@@ -44,6 +44,20 @@ const ensureProvider = (): void => {
   }
 };
 
+// convertToExcalidrawElements builds a temporary Scene, whose index validation
+// reads `window?.DEBUG_FRACTIONAL_INDICES`. In plain Node `window` is undeclared
+// (not just undefined), so that bare reference throws a ReferenceError — the `?.`
+// only guards null/undefined *values*, not an undeclared identifier. We define a
+// minimal empty `window` so the (typeof-guarded) feature checks all evaluate
+// safely. This is the DOM-free counterpart to what jsdom provides on the mermaid
+// path; it does not pull in jsdom. Idempotent + non-destructive.
+const ensureWindowShim = (): void => {
+  const g = globalThis as { window?: unknown };
+  if (typeof g.window === "undefined") {
+    g.window = g;
+  }
+};
+
 const LABEL_FONT_SIZE = 20;
 
 // Map our edge style to Excalidraw strokeStyle (identity for the values we
@@ -159,6 +173,8 @@ export const buildScene = async (
 ): Promise<BuildResult> => {
   // MUST come first: removes the document.createElement("canvas") dependency.
   ensureProvider();
+  // Make the Scene's index validation safe in plain Node (no `window`).
+  ensureWindowShim();
 
   const spec = validateDiagramSpec(rawSpec);
 

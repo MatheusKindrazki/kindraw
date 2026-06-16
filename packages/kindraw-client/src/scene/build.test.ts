@@ -156,23 +156,31 @@ describe("buildScene", () => {
     );
   });
 
-  // DOM-FREE PROOF: with global.document deleted, buildScene must still work,
-  // because the registered NodeTextMetricsProvider replaces the
-  // document.createElement("canvas") path inside convertToExcalidrawElements.
+  // DOM-FREE PROOF: with global.document AND global.window deleted, buildScene
+  // must still work, because (a) the registered NodeTextMetricsProvider replaces
+  // the document.createElement("canvas") path inside convertToExcalidrawElements,
+  // and (b) buildScene installs a minimal window shim for the Scene's index
+  // validation. This mirrors the real Node runtime (plain `node`, no jsdom).
   describe("DOM-free", () => {
-    const savedDocument = (globalThis as { document?: unknown }).document;
+    const g = globalThis as { document?: unknown; window?: unknown };
+    const savedDocument = g.document;
+    const savedWindow = g.window;
 
     afterEach(() => {
-      (globalThis as { document?: unknown }).document = savedDocument;
+      g.document = savedDocument;
+      g.window = savedWindow;
     });
 
-    it("builds a scene with no global.document available", async () => {
-      // Prime the provider registration once (idempotent) while document still
-      // exists, then remove document entirely to prove no DOM is touched.
+    it("builds a scene with no global.document or global.window available", async () => {
+      // Prime the provider registration once (idempotent) while the DOM still
+      // exists, then remove document + window entirely to prove no DOM is
+      // touched (the window shim is re-installed by buildScene each call).
       await buildScene({ nodes: [{ id: "a", label: "A" }], edges: [] });
 
-      delete (globalThis as { document?: unknown }).document;
-      expect((globalThis as { document?: unknown }).document).toBeUndefined();
+      delete g.document;
+      delete g.window;
+      expect(g.document).toBeUndefined();
+      expect(g.window).toBeUndefined();
 
       const { content, elementCount } = await buildScene({
         nodes: [
@@ -181,6 +189,8 @@ describe("buildScene", () => {
         ],
         edges: [{ from: "x", to: "y" }],
       });
+      // document must STILL be absent — we never touched it.
+      expect(g.document).toBeUndefined();
       const parsed = JSON.parse(content);
       expect(parsed.type).toBe("excalidraw");
       expect(elementCount).toBeGreaterThan(0);
