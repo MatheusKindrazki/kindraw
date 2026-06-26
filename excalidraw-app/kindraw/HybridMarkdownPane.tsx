@@ -25,6 +25,10 @@ type HybridMarkdownPaneProps = {
   // Quando há uma sessão ao vivo, o painel troca o modo seção por um único
   // editor colaborativo full-document (Yjs).
   collabProvider?: KindrawYjsProvider | null;
+  // Este painel é o editor AUTORITATIVO (dono/editor autenticado com permissão
+  // de escrita) e pode semear um Y.Doc vazio? Repassado ao RichTextEditor como
+  // `canSeed`. Convidados (live-share) NUNCA semeiam.
+  canSeed?: boolean;
   // identidade do usuário local p/ o caret nomeado (CollaborationCaret) +
   // facepile (avatar/login/id).
   collabUser?: {
@@ -55,6 +59,7 @@ export const HybridMarkdownPane = ({
   linkingSectionId,
   collabProvider,
   collabUser,
+  canSeed = false,
   onMarkdownChange,
   onNavigate,
   onOpenCanvas,
@@ -158,6 +163,7 @@ export const HybridMarkdownPane = ({
             }}
             onChange={onMarkdownChange}
             placeholder={t("kindraw.hybrid.liveEditorPlaceholder")}
+            canSeed={canSeed}
             seedMarkdown={markdown}
             value={markdown}
           />

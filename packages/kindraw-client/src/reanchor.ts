@@ -19,6 +19,7 @@ type AnyEl = {
   points?: Pt[];
   startBinding?: { elementId?: string } | null;
   endBinding?: { elementId?: string } | null;
+  containerId?: string | null;
   isDeleted?: boolean;
 };
 
@@ -66,9 +67,17 @@ const borderPoint = (n: AnyEl, toward: Pt): Pt => {
  */
 export const reanchorArrows = <T extends AnyEl>(elements: T[]): T[] => {
   const byId = new Map<string, AnyEl>();
+  // Bound text labels keyed by the id of the element they live on. Arrow labels
+  // are positioned by convertToExcalidrawElements relative to the arrow's
+  // ORIGINAL (0,0) geometry, so once we move the arrow they must follow — else
+  // every edge label collapses onto the origin.
+  const labelByContainer = new Map<string, AnyEl>();
   for (const el of elements) {
     if (el.id && NODE_TYPES.has(el.type)) {
       byId.set(el.id, el);
+    }
+    if (el.type === "text" && el.containerId) {
+      labelByContainer.set(el.containerId, el);
     }
   }
 
@@ -99,6 +108,16 @@ export const reanchorArrows = <T extends AnyEl>(elements: T[]): T[] => {
     ];
     el.width = Math.abs(end[0] - start[0]);
     el.height = Math.abs(end[1] - start[1]);
+
+    // Recenter the arrow's bound label on the new midpoint. Excalidraw stores
+    // the label's absolute x/y (top-left) and does not recompute it on load.
+    const label = labelByContainer.get(el.id);
+    if (label) {
+      const midX = (start[0] + end[0]) / 2;
+      const midY = (start[1] + end[1]) / 2;
+      label.x = midX - (label.width ?? 0) / 2;
+      label.y = midY - (label.height ?? 0) / 2;
+    }
   }
 
   return elements;

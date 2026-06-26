@@ -87,6 +87,15 @@ export const openGoogleLogin = () => {
 export const getSession = () =>
   requestJson<KindrawSession | null>("/api/auth/session");
 
+// Public landing-page waitlist capture. No auth; the backend validates the
+// email and is idempotent on duplicates. Throws on 400 (invalid email) so the
+// form can surface an inline error.
+export const joinWaitlist = (email: string, source = "landing") =>
+  requestJson<{ ok: true }>("/api/waitlist", {
+    method: "POST",
+    body: { email, source },
+  });
+
 export const listApiTokens = () =>
   requestJson<{ tokens: KindrawApiToken[] }>("/api/auth/tokens");
 

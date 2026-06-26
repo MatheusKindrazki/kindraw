@@ -45,6 +45,7 @@ const { mockStore, mockOpenAIChatCreate, mockOpenAIConstructor } = vi.hoisted(
       hybridAccessRole: vi.fn(),
       resolveHybridShareLink: vi.fn(),
       createHybridShareLink: vi.fn(),
+      addToWaitlist: vi.fn(),
     },
     mockOpenAIChatCreate: vi.fn(),
     mockOpenAIConstructor: vi.fn(),
@@ -165,6 +166,60 @@ describe("routeRequest", () => {
 
     expect(response.status).toBe(200);
     expect(await response.json()).toBeNull();
+  });
+
+  it("captures a valid email on the public waitlist (no auth)", async () => {
+    mockStore.addToWaitlist.mockResolvedValue(undefined);
+
+    const response = await worker.fetch(
+      new Request("http://localhost:8787/api/waitlist", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: "  Dev@Example.com ", source: "hero" }),
+      }),
+      env,
+    );
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ ok: true });
+    // normalized (lower + trim) before storing
+    expect(mockStore.addToWaitlist).toHaveBeenCalledWith(
+      "dev@example.com",
+      "hero",
+    );
+  });
+
+  it("rejects an invalid email on the public waitlist", async () => {
+    const response = await worker.fetch(
+      new Request("http://localhost:8787/api/waitlist", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: "not-an-email" }),
+      }),
+      env,
+    );
+
+    expect(response.status).toBe(400);
+    expect(mockStore.addToWaitlist).not.toHaveBeenCalled();
+  });
+
+  it("defaults the waitlist source to 'landing' when omitted", async () => {
+    mockStore.addToWaitlist.mockResolvedValue(undefined);
+
+    const response = await worker.fetch(
+      new Request("http://localhost:8787/api/waitlist", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: "person@team.dev" }),
+      }),
+      env,
+    );
+
+    expect(response.status).toBe(200);
+    expect(mockStore.addToWaitlist).toHaveBeenCalledWith(
+      "person@team.dev",
+      "landing",
+    );
   });
 
   it("rejects authenticated routes without session cookie", async () => {

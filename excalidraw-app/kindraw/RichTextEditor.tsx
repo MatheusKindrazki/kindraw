@@ -12,6 +12,7 @@ import { Markdown } from "tiptap-markdown";
 import { KindrawIcon } from "./icons";
 import { SlashCommand } from "./SlashCommand";
 import { useKindrawI18n } from "./i18n";
+import { shouldSeed } from "./seedDecision";
 
 import type { Editor } from "@tiptap/react";
 import type { KindrawYjsProvider } from "./yjsProvider";
@@ -61,6 +62,14 @@ type RichTextEditorProps = {
   // Markdown inicial para popular um Y.Doc VAZIO ao entrar na sessão (só o
   // primeiro participante semeia; os demais recebem o estado já sincronizado).
   seedMarkdown?: string;
+  // Só um peer AUTORIZADO a semear um doc colaborativo vazio (o editor
+  // autoritativo: dono/editor autenticado com permissão de escrita) deve passar
+  // `true`. Convidados (guests) NÃO podem semear — eles só recebem o estado já
+  // sincronizado. Gating contra a RACE de seed: quando o `yjs-init` chega com
+  // `update: null` (DO reciclado / room novo) o `onSynced` dispara com o doc
+  // ainda vazio; se o guest semeasse aqui, plantaria o snapshot REST estável
+  // (ex.: só "# Payment Method") e colidiria com o conteúdo bom do dono.
+  canSeed?: boolean;
 };
 
 const MenuButton = ({
@@ -96,6 +105,7 @@ export const RichTextEditor = ({
   editable = true,
   collab,
   seedMarkdown,
+  canSeed = false,
 }: RichTextEditorProps) => {
   const { t } = useKindrawI18n();
   const effectivePlaceholder =
@@ -231,19 +241,37 @@ export const RichTextEditor = ({
   }, [editor, editable]);
 
   // Seed colaborativo: quando o provider sincroniza e o documento Yjs está
-  // VAZIO (room novo), o primeiro participante popula com o markdown atual.
-  // Se já há conteúdo sincronizado (outro peer semeou), não faz nada.
+  // VAZIO (room novo), só o peer AUTORITATIVO (canSeed) popula com o markdown
+  // atual. Convidados (canSeed=false) NUNCA semeiam — só recebem.
+  //
+  // GUARDA DE TIMING (contra a race de seed): `onSynced` pode disparar num
+  // `yjs-init` prematuro/vazio (DO reciclado, update: null) ANTES do `yjs-sync`
+  // que carrega o conteúdo real. Por isso adiamos o seed por um tick curto e
+  // RE-CHECAMOS se o doc ainda está vazio no momento do disparo. Se um yjs-sync
+  // com conteúdo real chegou nesse meio-tempo (Y.applyUpdate popula o doc), o
+  // re-check vê isEmpty=false e o seed é cancelado — mesmo para o dono. Assim a
+  // invariante é "semear só se realmente vazio depois do sync assentar".
   useEffect(() => {
     if (!collab || !editor) {
       return undefined;
     }
+    let seedTimer: ReturnType<typeof setTimeout> | null = null;
     const unsubscribe = collab.provider.onSynced(() => {
-      const isEmpty = editor.state.doc.textContent.trim().length === 0;
-      if (isEmpty && seedMarkdown && seedMarkdown.trim().length > 0) {
-        editor.commands.setContent(seedMarkdown);
-      }
+      // Re-checagem adiada: deixa qualquer yjs-sync com conteúdo real assentar
+      // primeiro. ~200ms é imperceptível e cobre o gap init→sync do relay.
+      seedTimer = setTimeout(() => {
+        seedTimer = null;
+        const isEmpty = editor.state.doc.textContent.trim().length === 0;
+        if (shouldSeed({ isEmpty, canSeed, seedMarkdown })) {
+          editor.commands.setContent(seedMarkdown as string);
+        }
+      }, 200);
     });
     return () => {
+      if (seedTimer !== null) {
+        clearTimeout(seedTimer);
+        seedTimer = null;
+      }
       unsubscribe();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps

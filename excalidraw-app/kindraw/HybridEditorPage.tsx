@@ -1082,6 +1082,7 @@ export const HybridEditorPage = ({
         activeSectionId={activeSectionId}
         canLinkSelection={showCanvas}
         collabProvider={liveProvider}
+        canSeed={canGoLive}
         collabUser={
           currentUser
             ? {

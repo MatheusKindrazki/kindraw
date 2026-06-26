@@ -18,6 +18,7 @@ import {
   getPublicItem,
   getSession,
   getWorkspaceTree,
+  joinWaitlist,
   logout,
   openGithubLogin,
   openGoogleLogin,
@@ -61,7 +62,11 @@ import type { KindrawThumbnail } from "./thumbnails";
 
 import "./kindraw.scss";
 
-import type { KeyboardEvent as ReactKeyboardEvent, ReactNode } from "react";
+import type {
+  FormEvent as ReactFormEvent,
+  KeyboardEvent as ReactKeyboardEvent,
+  ReactNode,
+} from "react";
 
 import type { KindrawIconName } from "./icons";
 
@@ -100,9 +105,12 @@ const RELATIVE_TIME_DIVISIONS: {
 ];
 
 const formatRelativeTime = (updatedAt: string) => {
-  const relativeTimeFormatter = new Intl.RelativeTimeFormat(getLanguage().code, {
-    numeric: "auto",
-  });
+  const relativeTimeFormatter = new Intl.RelativeTimeFormat(
+    getLanguage().code,
+    {
+      numeric: "auto",
+    },
+  );
   let duration = (new Date(updatedAt).getTime() - Date.now()) / 1000;
   if (Number.isNaN(duration)) {
     return formatUpdatedAt(updatedAt);
@@ -1680,6 +1688,390 @@ const isKindrawDocumentItem = (item: KindrawItem | KindrawHybridItem) =>
   !isKindrawHybridItem(item);
 
 /* ────────────────────────────────────────────────────────
+   Landing (logged-out root) — sells the product + holds sign-in.
+   Leaf component: only safe primitives (icons, no Excalidraw <Dialog>).
+   ──────────────────────────────────────────────────────── */
+
+type WaitlistStatus = "idle" | "loading" | "success" | "error";
+
+const KindrawWaitlistForm = ({ source }: { source: string }) => {
+  const { t } = useKindrawI18n();
+  const [email, setEmail] = useState("");
+  const [status, setStatus] = useState<WaitlistStatus>("idle");
+  const [message, setMessage] = useState<string | null>(null);
+
+  const handleSubmit = useCallback(
+    async (event: ReactFormEvent) => {
+      event.preventDefault();
+      if (status === "loading") {
+        return;
+      }
+      const value = email.trim();
+      if (!value || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(value)) {
+        setStatus("error");
+        setMessage(t("kindraw.landing.waitlist.invalid"));
+        return;
+      }
+      setStatus("loading");
+      setMessage(null);
+      try {
+        await joinWaitlist(value, source);
+        setStatus("success");
+        setMessage(t("kindraw.landing.waitlist.success"));
+        setEmail("");
+      } catch (error) {
+        setStatus("error");
+        setMessage(
+          getErrorMessage(error) || t("kindraw.landing.waitlist.error"),
+        );
+      }
+    },
+    [email, source, status, t],
+  );
+
+  if (status === "success") {
+    return (
+      <p className="kindraw-landing__waitlist-success" role="status">
+        <span className="kindraw-landing__waitlist-check">
+          <KindrawIcon name="check" size={15} strokeWidth={2.4} />
+        </span>
+        {message}
+      </p>
+    );
+  }
+
+  return (
+    <form
+      className="kindraw-landing__waitlist"
+      onSubmit={handleSubmit}
+      noValidate
+    >
+      <label className="kindraw-sr-only" htmlFor="kindraw-waitlist-email">
+        {t("kindraw.landing.waitlist.label")}
+      </label>
+      <div className="kindraw-landing__waitlist-row">
+        <input
+          aria-describedby={
+            status === "error" ? "kindraw-waitlist-status" : undefined
+          }
+          aria-invalid={status === "error"}
+          autoComplete="email"
+          className="kindraw-landing__waitlist-input"
+          id="kindraw-waitlist-email"
+          inputMode="email"
+          onChange={(event) => {
+            setEmail(event.target.value);
+            if (status === "error") {
+              setStatus("idle");
+              setMessage(null);
+            }
+          }}
+          placeholder={t("kindraw.landing.waitlist.placeholder")}
+          type="email"
+          value={email}
+        />
+        <button
+          className="kindraw-btn kindraw-btn--soft kindraw-landing__waitlist-btn"
+          disabled={status === "loading"}
+          type="submit"
+        >
+          {status === "loading"
+            ? t("kindraw.landing.waitlist.loading")
+            : t("kindraw.landing.waitlist.cta")}
+        </button>
+      </div>
+      <p
+        aria-live="polite"
+        className={
+          status === "error"
+            ? "kindraw-landing__waitlist-msg kindraw-landing__waitlist-msg--error"
+            : "kindraw-landing__waitlist-msg"
+        }
+        id="kindraw-waitlist-status"
+      >
+        {status === "error" ? message : t("kindraw.landing.waitlist.hint")}
+      </p>
+    </form>
+  );
+};
+
+const KindrawLandingValueProp = ({
+  index,
+  title,
+  lead,
+  body,
+}: {
+  index: number;
+  title: string;
+  lead: string;
+  body: string;
+}) => (
+  <article className="kindraw-landing__value">
+    <span aria-hidden className="kindraw-landing__value-index">
+      {String(index).padStart(2, "0")}
+    </span>
+    <div className="kindraw-landing__value-text">
+      <h3 className="kindraw-landing__value-title">{title}</h3>
+      <p className="kindraw-landing__value-lead">{lead}</p>
+      <p className="kindraw-landing__value-body">{body}</p>
+    </div>
+  </article>
+);
+
+const KindrawLanding = ({ errorMessage }: { errorMessage: string | null }) => {
+  const { t } = useKindrawI18n();
+
+  // Respect reduced-motion: if the visitor prefers less motion, don't autoplay
+  // the looping demo — the poster frame stands in for it.
+  const [reduceMotion, setReduceMotion] = useState(false);
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.matchMedia) {
+      return;
+    }
+    const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
+    setReduceMotion(mq.matches);
+    const onChange = (e: MediaQueryListEvent) => setReduceMotion(e.matches);
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  }, []);
+
+  return (
+    <div className="kindraw-landing">
+      {/* soft paper/grid atmosphere behind the whole page */}
+      <div aria-hidden className="kindraw-landing__paper" />
+
+      <header className="kindraw-landing__nav">
+        <a className="kindraw-landing__brand" href="/">
+          <span className="kindraw-logomark">
+            <KindrawIcon name="pen" size={15} strokeWidth={2.1} />
+          </span>
+          Kindraw
+        </a>
+        <a className="kindraw-landing__nav-link" href="/public">
+          {t("kindraw.login.exploreWithoutAccount")}
+        </a>
+      </header>
+
+      <main className="kindraw-landing__main">
+        {/* ─── HERO ─── */}
+        <section className="kindraw-landing__hero">
+          <div className="kindraw-landing__hero-copy">
+            <span className="kindraw-eyebrow">
+              {t("kindraw.landing.hero.eyebrow")}
+            </span>
+            <h1 className="kindraw-landing__headline">
+              {t("kindraw.landing.hero.headlineA")}{" "}
+              <span className="kindraw-landing__headline-mark">
+                {t("kindraw.landing.hero.headlineMark")}
+              </span>{" "}
+              {t("kindraw.landing.hero.headlineB")}
+            </h1>
+            <p className="kindraw-landing__subhead">
+              {t("kindraw.landing.hero.subhead")}
+            </p>
+
+            <div className="kindraw-landing__cta">
+              <button
+                className="kindraw-btn kindraw-btn--primary kindraw-provider-btn"
+                onClick={openGithubLogin}
+                type="button"
+              >
+                <span className="kindraw-provider-glyph kindraw-provider-glyph--github">
+                  <KindrawIcon name="github" size={18} />
+                </span>
+                {t("kindraw.landing.hero.ctaGithub")}
+              </button>
+              <button
+                className="kindraw-btn kindraw-btn--primary kindraw-provider-btn"
+                onClick={openGoogleLogin}
+                type="button"
+              >
+                <span className="kindraw-provider-glyph kindraw-provider-glyph--google">
+                  <GoogleGlyph size={16} />
+                </span>
+                {t("kindraw.landing.hero.ctaGoogle")}
+              </button>
+            </div>
+
+            <p className="kindraw-landing__proof">
+              {t("kindraw.landing.hero.proof")}
+            </p>
+
+            <div className="kindraw-landing__waitlist-block">
+              <span className="kindraw-landing__or">
+                {t("kindraw.landing.hero.or")}
+              </span>
+              <KindrawWaitlistForm source="landing-hero" />
+            </div>
+
+            {errorMessage ? (
+              <p className="kindraw-error-copy">{errorMessage}</p>
+            ) : null}
+          </div>
+
+          {/* DEMO — looping product clip: prompt → diagram → share link */}
+          <div className="kindraw-landing__demo">
+            <div className="kindraw-landing__demo-frame">
+              <div className="kindraw-landing__demo-bar" aria-hidden>
+                <span className="kindraw-landing__demo-dot" />
+                <span className="kindraw-landing__demo-dot" />
+                <span className="kindraw-landing__demo-dot" />
+                <span className="kindraw-landing__demo-url">
+                  kindraw.dev/draw/payments-architecture
+                </span>
+              </div>
+              <div className="kindraw-landing__demo-stage">
+                <video
+                  className="kindraw-landing__demo-video"
+                  autoPlay={!reduceMotion}
+                  loop
+                  muted
+                  playsInline
+                  controls={reduceMotion}
+                  preload="metadata"
+                  poster="/kindraw-demo-poster.jpg"
+                  aria-label={t("kindraw.landing.demo.caption")}
+                >
+                  <source src="/kindraw-demo.webm" type="video/webm" />
+                  <source src="/kindraw-demo.mp4" type="video/mp4" />
+                </video>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* ─── VALUE PROPS — editorial numbered rows (not an icon-card grid) ─── */}
+        <section
+          aria-label={t("kindraw.landing.values.aria")}
+          className="kindraw-landing__values"
+        >
+          <span className="kindraw-eyebrow kindraw-landing__values-label">
+            {t("kindraw.landing.values.label")}
+          </span>
+          <div className="kindraw-landing__value-list">
+            <KindrawLandingValueProp
+              body={t("kindraw.landing.values.layoutBody")}
+              index={1}
+              lead={t("kindraw.landing.values.layoutLead")}
+              title={t("kindraw.landing.values.layoutTitle")}
+            />
+            <KindrawLandingValueProp
+              body={t("kindraw.landing.values.workspaceBody")}
+              index={2}
+              lead={t("kindraw.landing.values.workspaceLead")}
+              title={t("kindraw.landing.values.workspaceTitle")}
+            />
+            <KindrawLandingValueProp
+              body={t("kindraw.landing.values.collabBody")}
+              index={3}
+              lead={t("kindraw.landing.values.collabLead")}
+              title={t("kindraw.landing.values.collabTitle")}
+            />
+          </div>
+        </section>
+
+        {/* ─── HOW IT WORKS — sticky header + threaded steps (asymmetric) ─── */}
+        <section className="kindraw-landing__how">
+          <div className="kindraw-landing__how-head">
+            <span className="kindraw-eyebrow">
+              {t("kindraw.landing.how.eyebrow")}
+            </span>
+            <h2>{t("kindraw.landing.how.title")}</h2>
+            <p className="kindraw-landing__how-sub">
+              {t("kindraw.landing.how.subtitle")}
+            </p>
+          </div>
+          <ol className="kindraw-landing__steps">
+            <li className="kindraw-landing__step">
+              <span aria-hidden className="kindraw-landing__step-n">
+                1
+              </span>
+              <div className="kindraw-landing__step-body">
+                <span className="kindraw-landing__step-tag">
+                  {t("kindraw.landing.how.step1Tag")}
+                </span>
+                <h3>{t("kindraw.landing.how.step1Title")}</h3>
+                <p>{t("kindraw.landing.how.step1Body")}</p>
+                <code className="kindraw-landing__code">npx @kindraw/mcp</code>
+              </div>
+            </li>
+            <li className="kindraw-landing__step">
+              <span aria-hidden className="kindraw-landing__step-n">
+                2
+              </span>
+              <div className="kindraw-landing__step-body">
+                <span className="kindraw-landing__step-tag">
+                  {t("kindraw.landing.how.step2Tag")}
+                </span>
+                <h3>{t("kindraw.landing.how.step2Title")}</h3>
+                <p>{t("kindraw.landing.how.step2Body")}</p>
+              </div>
+            </li>
+            <li className="kindraw-landing__step">
+              <span aria-hidden className="kindraw-landing__step-n">
+                3
+              </span>
+              <div className="kindraw-landing__step-body">
+                <span className="kindraw-landing__step-tag">
+                  {t("kindraw.landing.how.step3Tag")}
+                </span>
+                <h3>{t("kindraw.landing.how.step3Title")}</h3>
+                <p>{t("kindraw.landing.how.step3Body")}</p>
+              </div>
+            </li>
+          </ol>
+        </section>
+
+        {/* ─── CLOSING CTA ─── */}
+        <section className="kindraw-landing__closer">
+          <span className="kindraw-eyebrow kindraw-landing__closer-label">
+            {t("kindraw.landing.closer.label")}
+          </span>
+          <h2>{t("kindraw.landing.closer.title")}</h2>
+          <p>{t("kindraw.landing.closer.subtitle")}</p>
+          <div className="kindraw-landing__cta kindraw-landing__cta--center">
+            <button
+              className="kindraw-btn kindraw-btn--primary kindraw-provider-btn"
+              onClick={openGithubLogin}
+              type="button"
+            >
+              <span className="kindraw-provider-glyph kindraw-provider-glyph--github">
+                <KindrawIcon name="github" size={18} />
+              </span>
+              {t("kindraw.landing.hero.ctaGithub")}
+            </button>
+            <a className="kindraw-ghostlink" href="/public">
+              {t("kindraw.login.exploreWithoutAccount")}
+            </a>
+          </div>
+          <small className="kindraw-landing__privacy">
+            {t("kindraw.login.privacyNote")}
+          </small>
+        </section>
+      </main>
+
+      <footer className="kindraw-landing__footer">
+        <div className="kindraw-landing__footer-credit">
+          {t("kindraw.landing.footer.builtOn")}{" "}
+          <a
+            href="https://github.com/excalidraw/excalidraw"
+            rel="noreferrer noopener"
+            target="_blank"
+          >
+            Excalidraw
+          </a>
+          .
+        </div>
+        <div className="kindraw-landing__footer-dev">
+          <span>{t("kindraw.landing.footer.forDevs")}</span>
+          <code className="kindraw-landing__code">npx @kindraw/mcp</code>
+        </div>
+      </footer>
+    </div>
+  );
+};
+
+/* ────────────────────────────────────────────────────────
    App
    ──────────────────────────────────────────────────────── */
 
@@ -2174,47 +2566,7 @@ export const KindrawApp = () => {
   }
 
   if (!session) {
-    return (
-      <div className="kindraw-login-shell">
-        <div className="kindraw-login-card">
-          <span className="kindraw-logomark kindraw-logomark--lg">
-            <KindrawIcon name="pen" size={22} strokeWidth={2.1} />
-          </span>
-          <span className="kindraw-eyebrow">{t("kindraw.login.eyebrow")}</span>
-          <h1>{t("kindraw.login.title")}</h1>
-          <p>{t("kindraw.login.subtitle")}</p>
-          <div className="kindraw-login-providers">
-            <button
-              className="kindraw-btn kindraw-btn--primary kindraw-provider-btn"
-              onClick={openGithubLogin}
-              type="button"
-            >
-              <span className="kindraw-provider-glyph kindraw-provider-glyph--github">
-                <KindrawIcon name="github" size={18} />
-              </span>
-              {t("kindraw.commandPalette.github")}
-            </button>
-            <button
-              className="kindraw-btn kindraw-btn--primary kindraw-provider-btn"
-              onClick={openGoogleLogin}
-              type="button"
-            >
-              <span className="kindraw-provider-glyph kindraw-provider-glyph--google">
-                <GoogleGlyph size={16} />
-              </span>
-              {t("kindraw.login.google")}
-            </button>
-          </div>
-          <a className="kindraw-ghostlink" href="/public">
-            {t("kindraw.login.exploreWithoutAccount")}
-          </a>
-          <small>{t("kindraw.login.privacyNote")}</small>
-          {errorMessage ? (
-            <p className="kindraw-error-copy">{errorMessage}</p>
-          ) : null}
-        </div>
-      </div>
-    );
+    return <KindrawLanding errorMessage={errorMessage} />;
   }
 
   if (!tree) {

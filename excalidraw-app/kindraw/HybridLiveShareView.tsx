@@ -240,8 +240,15 @@ export const HybridLiveShareView = ({
                   }}
                   onChange={() => undefined}
                   placeholder={t("kindraw.hybrid.docPlaceholder")}
-                  seedMarkdown={itemResponse.content}
-                  value={itemResponse.content}
+                  // GUEST: NÃO semeia o Y.Doc compartilhado (canSeed default
+                  // false). O convidado só RECEBE o estado já sincronizado do
+                  // dono. Não passamos `seedMarkdown` nem um `value` com o
+                  // snapshot REST estável (que em modo colab é ignorado, mas
+                  // colidiria conceitualmente): renderiza o que o Y.Doc tem após
+                  // o sync. Se a room estiver genuinamente vazia e nenhum dono
+                  // semeou ainda, o convidado vê vazio até o dono semear — é o
+                  // comportamento correto (melhor que colidir conteúdo estável).
+                  value=""
                 />
               ) : (
                 <p className="kindraw-loading-shell">

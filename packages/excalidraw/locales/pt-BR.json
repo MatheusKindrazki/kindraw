@@ -1067,6 +1067,68 @@
       "exploreWithoutAccount": "Explorar sem uma conta",
       "privacyNote": "Usamos seu GitHub ou Google apenas para login e presença em sessões ao vivo."
     },
+    "landing": {
+      "hero": {
+        "eyebrow": "Diagramas de arquitetura no Claude Code & Cursor",
+        "headlineA": "Diagramas de arquitetura que",
+        "headlineMark": "ficam vivos",
+        "headlineB": "ao lado do seu código.",
+        "subhead": "Seu agente desenha o sistema; o Kindraw guarda. Layout de grafo de verdade num workspace compartilhável por link — então o diagrama continua certo na próxima vez que alguém abrir, em vez de nascer desatualizado no export.",
+        "ctaGithub": "Continuar com GitHub",
+        "ctaGoogle": "Continuar com Google",
+        "or": "Ainda não quer entrar?",
+        "proof": "Grátis no beta · roda em qualquer editor com MCP"
+      },
+      "demo": {
+        "caption": "Um tour de 25 segundos: você pede no Claude Code, sai um diagrama de arquitetura organizado e você compartilha o link ao vivo."
+      },
+      "waitlist": {
+        "label": "Seu e-mail de trabalho",
+        "placeholder": "voce@empresa.com",
+        "cta": "Entrar na lista",
+        "loading": "Adicionando…",
+        "hint": "Acesso antecipado e novidades do produto. Sem spam.",
+        "success": "Pronto, você está na lista. A gente te chama.",
+        "invalid": "Digite um e-mail válido.",
+        "error": "Algo deu errado. Tenta de novo."
+      },
+      "values": {
+        "aria": "Por que o Kindraw",
+        "label": "A diferença",
+        "layoutTitle": "Layout de verdade, não Mermaid cru",
+        "layoutLead": "Quem organiza é um motor de grafo.",
+        "layoutBody": "dagre e elk posicionam os nós — níveis limpos, arestas que fazem sentido, zero espaguete. Fica parecendo coisa que um engenheiro desenharia, não um dump de ASCII jogado num canvas.",
+        "workspaceTitle": "Um lar, não a pasta de downloads",
+        "workspaceLead": "Todo diagrama tem um lugar onde mora.",
+        "workspaceBody": "Nomeado, em pastas e persistente — com link de compartilhamento desde que nasce. Acabou caçar o .excalidraw que estava certo quatro versões atrás.",
+        "collabTitle": "Fica em sincronia, em equipe",
+        "collabLead": "Um link só, e o time todo trabalha nele.",
+        "collabBody": "Abre, edita em tempo real, roda o agente de novo quando a infra muda. O diagrama acompanha o sistema em vez de apodrecer atrás dele."
+      },
+      "how": {
+        "eyebrow": "Como funciona",
+        "title": "De um prompt a um diagrama vivo",
+        "subtitle": "Três passos, nenhum hábito novo pra aprender.",
+        "step1Tag": "Uma vez",
+        "step1Title": "Aponte seu editor pro Kindraw",
+        "step1Body": "Adicione o MCP ao Claude Code ou Cursor. Uma linha na config e pode esquecer que tá lá.",
+        "step2Tag": "Quando quiser",
+        "step2Title": "Descreva o sistema",
+        "step2Body": "“Mapeia o serviço de pagamentos — a API, a fila, os dois bancos e quem chama ele.” O agente monta e organiza de verdade.",
+        "step3Tag": "Pra sempre",
+        "step3Title": "Já tá no seu workspace",
+        "step3Body": "O diagrama abre no Kindraw com link de compartilhamento junto. O time edita e roda o prompt de novo quando a realidade muda."
+      },
+      "closer": {
+        "label": "O ponto",
+        "title": "Desenhe o sistema uma vez. Guarde.",
+        "subtitle": "O diagrama que seu agente faz não devia vencer na pasta de downloads. Dá um lar pra ele que fica em sincronia com o código."
+      },
+      "footer": {
+        "builtOn": "Feito sobre o open-source",
+        "forDevs": "Conecte seu editor:"
+      }
+    },
     "topbar": {
       "searchPlaceholder": "Buscar desenhos, documentos e híbridos…",
       "openGlobalSearchAria": "Abrir busca global (⌘K)"

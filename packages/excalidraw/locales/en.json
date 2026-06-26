@@ -1083,6 +1083,68 @@
       "exploreWithoutAccount": "Explore without an account",
       "privacyNote": "We use your GitHub or Google only for sign-in and presence in live sessions."
     },
+    "landing": {
+      "hero": {
+        "eyebrow": "Architecture diagrams for Claude Code & Cursor",
+        "headlineA": "Architecture diagrams that",
+        "headlineMark": "stay alive",
+        "headlineB": "next to your code.",
+        "subhead": "Your agent draws the system; Kindraw keeps it. Real graph layout and a shared, link-able workspace — so the diagram is still true the next time someone opens it, not stale the moment you export.",
+        "ctaGithub": "Continue with GitHub",
+        "ctaGoogle": "Continue with Google",
+        "or": "Not ready to sign in?",
+        "proof": "Free while in beta · works in any MCP-aware editor"
+      },
+      "demo": {
+        "caption": "A 25-second walkthrough: prompt in Claude Code, get a laid-out architecture diagram, then share the live link."
+      },
+      "waitlist": {
+        "label": "Your work email",
+        "placeholder": "you@company.com",
+        "cta": "Join the waitlist",
+        "loading": "Adding…",
+        "hint": "Early access and product updates. No spam.",
+        "success": "You're on the list. We'll be in touch.",
+        "invalid": "Please enter a valid email address.",
+        "error": "Something went wrong. Please try again."
+      },
+      "values": {
+        "aria": "Why Kindraw",
+        "label": "The difference",
+        "layoutTitle": "Real layout, not raw Mermaid",
+        "layoutLead": "A graph engine does the work.",
+        "layoutBody": "dagre and elk lay out the nodes — clean ranks, sane edges, no spaghetti. It reads like something an engineer would draw, not an ASCII dump dropped onto a canvas.",
+        "workspaceTitle": "A home, not a downloads folder",
+        "workspaceLead": "Every diagram has a place it belongs.",
+        "workspaceBody": "Named, foldered, and persistent — with a share link the moment it exists. No more hunting for the .excalidraw file that was right four versions ago.",
+        "collabTitle": "Stays in sync, together",
+        "collabLead": "One link the whole team works from.",
+        "collabBody": "Open it, edit in real time, re-run the agent when the infra moves. The diagram follows the system instead of rotting behind it."
+      },
+      "how": {
+        "eyebrow": "How it works",
+        "title": "From a prompt to a living diagram",
+        "subtitle": "Three steps, no new habits to learn.",
+        "step1Tag": "Once",
+        "step1Title": "Point your editor at Kindraw",
+        "step1Body": "Add the MCP to Claude Code or Cursor. One line in your config, then forget it's there.",
+        "step2Tag": "Anytime",
+        "step2Title": "Describe the system",
+        "step2Body": "“Map the payments service — its API, the queue, the two datastores, and what calls it.” The agent builds it and lays it out for real.",
+        "step3Tag": "Forever",
+        "step3Title": "It's already in your workspace",
+        "step3Body": "The diagram opens in Kindraw with a share link attached. The team edits it, and re-runs the prompt when reality changes."
+      },
+      "closer": {
+        "label": "The point",
+        "title": "Draw the system once. Keep it.",
+        "subtitle": "The diagram your agent makes shouldn't expire in a downloads folder. Give it a home that stays in sync with the code."
+      },
+      "footer": {
+        "builtOn": "Built on the open-source",
+        "forDevs": "Wire up your editor:"
+      }
+    },
     "topbar": {
       "searchPlaceholder": "Search drawings, docs, and hybrids…",
       "openGlobalSearchAria": "Open global search (⌘K)"

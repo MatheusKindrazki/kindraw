@@ -61,6 +61,49 @@ describe("reanchorArrows", () => {
     expect(arrow.points!.length).toBe(2); // straight border-to-border line
   });
 
+  it("recenters an arrow's bound label on the new midpoint", () => {
+    // The label is created (by convertToExcalidrawElements) relative to the
+    // arrow's original (0,0) geometry — near the origin. After reanchoring it
+    // must follow the arrow to its real midpoint, not stay stacked at origin.
+    const elements = [
+      { id: "n1", type: "rectangle", x: 0, y: 0, width: 100, height: 50 },
+      { id: "n2", type: "rectangle", x: 0, y: 200, width: 100, height: 50 },
+      {
+        id: "a1",
+        type: "arrow",
+        x: 0,
+        y: 0,
+        width: 0,
+        height: 0,
+        points: [
+          [0, 0],
+          [0, 0],
+        ] as [number, number][],
+        startBinding: { elementId: "n1" },
+        endBinding: { elementId: "n2" },
+      },
+      {
+        id: "t1",
+        type: "text",
+        x: -20, // sitting at the origin, the bug's signature
+        y: -10,
+        width: 40,
+        height: 20,
+        containerId: "a1",
+      },
+    ];
+
+    reanchorArrows(elements);
+
+    const arrow = elements.find((e) => e.id === "a1")!;
+    const label = elements.find((e) => e.id === "t1")!;
+    const midX = arrow.x + (arrow.points!.at(-1)![0] as number) / 2;
+    const midY = arrow.y + (arrow.points!.at(-1)![1] as number) / 2;
+    // Label top-left = midpoint minus half its size (i.e. centered on midpoint).
+    expect(label.x + label.width! / 2).toBeCloseTo(midX, 5);
+    expect(label.y + label.height! / 2).toBeCloseTo(midY, 5);
+  });
+
   it("leaves free-floating arrows (no bindings) untouched", () => {
     const arrow = {
       id: "a",
