@@ -88,6 +88,30 @@ const STROKE_STYLE = {
   dotted: "dotted",
 } as const;
 
+// Content-derived, order-independent arrow ids. `arrow-${i}` made every arrow
+// id depend on edge position, so adding/removing one edge reshuffled all the
+// downstream ids — defeating clean diffs and stable bindings. We derive the id
+// from the endpoints (`arrow-<from>-<to>`) and append a LOCAL `-2`/`-3`… only
+// when a base collides (legitimate parallel edges, or hyphen ambiguity like
+// `a-b`→`c` vs `a`→`b-c`). The suffix is scoped to the colliding base, so an
+// unrelated edge change never shifts any other arrow's id. `arrow-` stays a
+// reserved prefix (spec.ts), so these can't collide with user node ids, and
+// canonicalizeBoundTextIds derives the label id (`text-<arrowId>`) from this.
+const makeArrowIdFactory = (): ((from: string, to: string) => string) => {
+  const used = new Set<string>();
+  return (from, to) => {
+    const base = `arrow-${from}-${to}`;
+    let candidate = base;
+    let n = 1;
+    while (used.has(candidate)) {
+      n += 1;
+      candidate = `${base}-${n}`;
+    }
+    used.add(candidate);
+    return candidate;
+  };
+};
+
 const toSkeleton = (
   placed: PlacedNode[],
   spec: NormalizedSpec,
@@ -115,10 +139,11 @@ const toSkeleton = (
     });
   }
 
-  spec.edges.forEach((edge, i) => {
+  const arrowId = makeArrowIdFactory();
+  spec.edges.forEach((edge) => {
     skeleton.push({
       type: "arrow",
-      id: `arrow-${i}`,
+      id: arrowId(edge.from, edge.to),
       x: 0,
       y: 0,
       start: { id: edge.from },

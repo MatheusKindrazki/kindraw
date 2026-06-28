@@ -281,6 +281,120 @@ describe("buildScene", () => {
   });
 });
 
+describe("stable arrow ids", () => {
+  // Arrow ids must be content-derived (`arrow-<from>-<to>`), not positional, so
+  // adding/removing one edge never reshuffles every other arrow's id — the
+  // precondition for diffable, regenerable scenes (round-trip + sync).
+  const arrowIds = (content: string): string[] =>
+    (JSON.parse(content).elements as Array<{ type: string; id: string }>)
+      .filter((e) => e.type === "arrow")
+      .map((e) => e.id);
+
+  it("derives arrow ids from endpoints (arrow-<from>-<to>)", async () => {
+    const { content } = await buildScene({
+      nodes: [
+        { id: "a", label: "A" },
+        { id: "b", label: "B" },
+        { id: "c", label: "C" },
+      ],
+      edges: [
+        { from: "a", to: "b" },
+        { from: "b", to: "c" },
+      ],
+    });
+    expect(arrowIds(content).sort()).toEqual(["arrow-a-b", "arrow-b-c"]);
+  });
+
+  it("keeps arrow ids stable when an unrelated edge is removed", async () => {
+    const nodes = [
+      { id: "a", label: "A" },
+      { id: "b", label: "B" },
+      { id: "c", label: "C" },
+    ];
+    const full = await buildScene({
+      nodes,
+      edges: [
+        { from: "a", to: "b" },
+        { from: "b", to: "c" },
+        { from: "c", to: "a" },
+      ],
+    });
+    const less = await buildScene({
+      nodes,
+      // dropped the MIDDLE edge (b→c); positional ids would shift c→a from
+      // arrow-2 to arrow-1. Content-derived ids stay put.
+      edges: [
+        { from: "a", to: "b" },
+        { from: "c", to: "a" },
+      ],
+    });
+    expect(arrowIds(less.content).sort()).toEqual(["arrow-a-b", "arrow-c-a"]);
+    const idsFull = new Set(arrowIds(full.content));
+    expect(idsFull.has("arrow-a-b")).toBe(true);
+    expect(idsFull.has("arrow-c-a")).toBe(true);
+  });
+
+  it("disambiguates parallel edges deterministically", async () => {
+    // Same endpoints, distinct label/style survive spec dedup and need
+    // distinct ids; the second collides on the base and gets a -2 suffix.
+    const { content } = await buildScene({
+      nodes: [
+        { id: "a", label: "A" },
+        { id: "b", label: "B" },
+      ],
+      edges: [
+        { from: "a", to: "b", label: "one" },
+        { from: "a", to: "b", label: "two", style: "dashed" },
+      ],
+    });
+    expect(arrowIds(content).sort()).toEqual(["arrow-a-b", "arrow-a-b-2"]);
+  });
+
+  it("disambiguates hyphen-ambiguous endpoint ids", async () => {
+    // 'a-b'→'c' and 'a'→'b-c' both base to arrow-a-b-c; the factory makes the
+    // second unique. (node ids have no charset restriction, so this is real.)
+    const { content } = await buildScene({
+      nodes: [
+        { id: "a-b", label: "AB" },
+        { id: "c", label: "C" },
+        { id: "a", label: "A" },
+        { id: "b-c", label: "BC" },
+      ],
+      edges: [
+        { from: "a-b", to: "c" },
+        { from: "a", to: "b-c" },
+      ],
+    });
+    expect(arrowIds(content).sort()).toEqual([
+      "arrow-a-b-c",
+      "arrow-a-b-c-2",
+    ]);
+  });
+
+  it("derives the bound-label id from the stable arrow id", async () => {
+    // Golden: canonicalizeBoundTextIds renames the edge label to
+    // `text-<containerId>`, so it must track the new content-derived arrow id.
+    const { content } = await buildScene({
+      nodes: [
+        { id: "a", label: "A" },
+        { id: "b", label: "B" },
+      ],
+      edges: [{ from: "a", to: "b", label: "calls" }],
+    });
+    const els = JSON.parse(content).elements as Array<{
+      type: string;
+      id: string;
+      containerId?: string;
+    }>;
+    const arrow = els.find((e) => e.type === "arrow");
+    expect(arrow?.id).toBe("arrow-a-b");
+    const label = els.find(
+      (e) => e.type === "text" && e.containerId === "arrow-a-b",
+    );
+    expect(label?.id).toBe("text-arrow-a-b");
+  });
+});
+
 describe("buildScene additive inputs (templateElements + files + iconImages)", () => {
   it("prepends templateElements and merges files + iconImages into the envelope", async () => {
     const { content } = await buildScene(
