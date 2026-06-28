@@ -42,7 +42,9 @@ describe("extractDiagramSpec", () => {
       "Client",
       "Database",
     ]);
-    expect(out.nodes.find((n) => n.label === "Database")?.shape).toBe("ellipse");
+    expect(out.nodes.find((n) => n.label === "Database")?.shape).toBe(
+      "ellipse",
+    );
     expect(out.edges.length).toBe(2);
     expect(out.edges.some((e) => e.label === "HTTP")).toBe(true);
     expect(out.edges.some((e) => e.style === "dashed")).toBe(true);
@@ -111,7 +113,9 @@ describe("extractDiagramSpec", () => {
     expect(spec.groups?.length).toBe(1);
     expect(spec.groups?.[0].label).toBe("Boundary");
     const gid = spec.groups![0].id;
-    const grouped = spec.nodes.filter((n) => n.group === gid).map((n) => n.label);
+    const grouped = spec.nodes
+      .filter((n) => n.group === gid)
+      .map((n) => n.label);
     expect(grouped.sort()).toEqual(["A", "B"]);
     // ungrouped node carries no group ref.
     expect(spec.nodes.find((n) => n.label === "C")?.group).toBeUndefined();

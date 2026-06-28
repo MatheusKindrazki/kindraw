@@ -157,7 +157,11 @@ const main = async () => {
         z.object({
           from: z.string().max(200).describe("Source node id"),
           to: z.string().max(200).describe("Target node id"),
-          label: z.string().max(2000).optional().describe("Optional edge label"),
+          label: z
+            .string()
+            .max(2000)
+            .optional()
+            .describe("Optional edge label"),
           style: z
             .enum(["solid", "dashed", "dotted"])
             .optional()

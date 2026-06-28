@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
 
+import { parseHybridMarkdownSections } from "../sections/index";
+import { validateDiagramSpec } from "../scene/spec";
+
 import {
   BOARD_RECIPES,
   DocBuilder,
@@ -7,8 +10,6 @@ import {
   listBoards,
   type BoardType,
 } from "./index";
-import { parseHybridMarkdownSections } from "../sections/index";
-import { validateDiagramSpec } from "../scene/spec";
 
 const RESERVED_PREFIX = /^(text|arrow|tpl|icon|meta)-/;
 
@@ -91,7 +92,9 @@ describe("board recipes", () => {
   }
 
   it("c4-context emits a labeled boundary group (→ frame)", () => {
-    const out = BOARD_RECIPES["c4-context"].build(SAMPLES["c4-context"] as never);
+    const out = BOARD_RECIPES["c4-context"].build(
+      SAMPLES["c4-context"] as never,
+    );
     expect(out.diagram.groups?.length).toBe(1);
     expect(
       out.diagram.nodes.some((n) => n.group === out.diagram.groups![0].id),
@@ -99,11 +102,11 @@ describe("board recipes", () => {
   });
 
   it("lists the available board types", () => {
-    expect(listBoards().map((b) => b.type).sort()).toEqual([
-      "adr",
-      "c4-context",
-      "sequence",
-    ]);
+    expect(
+      listBoards()
+        .map((b) => b.type)
+        .sort(),
+    ).toEqual(["adr", "c4-context", "sequence"]);
   });
 });
 

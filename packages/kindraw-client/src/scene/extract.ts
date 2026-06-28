@@ -172,7 +172,8 @@ export const extractDiagramSpec = (
         badColor += 1;
       }
     }
-    const stickyBgDefault = isSticky && el.backgroundColor === STICKY_BACKGROUND;
+    const stickyBgDefault =
+      isSticky && el.backgroundColor === STICKY_BACKGROUND;
     if (
       typeof el.backgroundColor === "string" &&
       el.backgroundColor !== DEFAULT_BACKGROUND &&
@@ -232,11 +233,7 @@ export const extractDiagramSpec = (
   // embeddables/iframes, and standalone text (text with no container).
   let omitted = 0;
   for (const el of live) {
-    if (
-      NODE_TYPES.has(el.type) ||
-      el.type === "frame" ||
-      el.type === "arrow"
-    ) {
+    if (NODE_TYPES.has(el.type) || el.type === "frame" || el.type === "arrow") {
       continue;
     }
     if (el.type === "text" && typeof el.containerId === "string") {

@@ -29,7 +29,10 @@ const getNodeCanvasCtx = () => {
     // `canvas` is a dependency of this package. require() keeps this synchronous
     // so the provider can satisfy the synchronous getLineWidth contract.
     const { createCanvas } = require("canvas") as {
-      createCanvas: (w: number, h: number) => {
+      createCanvas: (
+        w: number,
+        h: number,
+      ) => {
         getContext: (t: "2d") => {
           measureText: (t: string) => { width: number };
           font: string;

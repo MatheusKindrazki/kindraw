@@ -246,7 +246,10 @@ describe("engineering link-card embeds (GitHub/GitLab/Linear/Jira)", () => {
       ),
     ).toBe(true);
     expect(
-      embeddableURLValidator("https://acme.atlassian.net/browse/PROJ-5", undefined),
+      embeddableURLValidator(
+        "https://acme.atlassian.net/browse/PROJ-5",
+        undefined,
+      ),
     ).toBe(true);
   });
 
@@ -277,17 +280,15 @@ describe("engineering link-card embeds (GitHub/GitLab/Linear/Jira)", () => {
   });
 
   it("escapes HTML so a hostile path cannot inject markup", () => {
-    const html = srcdocOf(
-      'https://github.com/a/b/blob/main/x"><img>evil.ts',
-    );
+    const html = srcdocOf('https://github.com/a/b/blob/main/x"><img>evil.ts');
     expect(html).not.toContain("<img>");
     expect(html).toContain("&lt;img&gt;");
   });
 
   it("renders GitLab, Linear, and Jira cards", () => {
-    expect(srcdocOf("https://gitlab.com/group/proj/-/merge_requests/9")).toContain(
-      "Merge Request !9",
-    );
+    expect(
+      srcdocOf("https://gitlab.com/group/proj/-/merge_requests/9"),
+    ).toContain("Merge Request !9");
     expect(srcdocOf("https://linear.app/acme/issue/ENG-123")).toContain(
       "ENG-123",
     );

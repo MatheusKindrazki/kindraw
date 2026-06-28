@@ -123,4 +123,6 @@ execSync(
 );
 
 // eslint-disable-next-line no-console
-console.log("@kindraw/client built → dist/index.js, dist/generate.js (+ .d.ts)");
+console.log(
+  "@kindraw/client built → dist/index.js, dist/generate.js (+ .d.ts)",
+);

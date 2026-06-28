@@ -5,6 +5,7 @@
 import dagre from "dagre";
 
 import { measureLabel, measureSticky } from "./textMetrics.js";
+
 import type { NormalizedSpec } from "./spec.js";
 
 export type PlacedNode = {
@@ -121,7 +122,7 @@ export const layoutWithDagre = (spec: NormalizedSpec): PlacedNode[] => {
     dagre.layout(g);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    throw new Error("Layout failed: " + msg);
+    throw new Error(`Layout failed: ${msg}`);
   }
 
   const placed = spec.nodes.map((node) => {
@@ -204,7 +205,7 @@ export const layoutWithElk = async (
     };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    throw new Error("Layout failed: " + msg);
+    throw new Error(`Layout failed: ${msg}`);
   }
 
   const posById = new Map(

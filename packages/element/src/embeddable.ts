@@ -557,7 +557,13 @@ export const getEmbedLink = (
   }
   const linear = link.match(RE_LINEAR);
   if (linear) {
-    return cardResult(originalLink, "Linear", linear[1], "Issue", allowSameOrigin);
+    return cardResult(
+      originalLink,
+      "Linear",
+      linear[1],
+      "Issue",
+      allowSameOrigin,
+    );
   }
   if (RE_LINEAR_GENERIC.test(link)) {
     return cardResult(

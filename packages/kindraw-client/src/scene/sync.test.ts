@@ -15,7 +15,9 @@ const SPEC = {
 const fakeClient = (item: {
   kind: string;
   content: string;
-}): SceneSyncClient & { writes: Array<{ itemId: string; content: string }> } => {
+}): SceneSyncClient & {
+  writes: Array<{ itemId: string; content: string }>;
+} => {
   const writes: Array<{ itemId: string; content: string }> = [];
   return {
     writes,
@@ -51,7 +53,11 @@ describe("syncScene", () => {
 
   it("check mode never writes, even on drift", async () => {
     const client = fakeClient({ kind: "drawing", content: "stale-content" });
-    const res = await syncScene(client, { itemId: "d1", spec: SPEC, check: true });
+    const res = await syncScene(client, {
+      itemId: "d1",
+      spec: SPEC,
+      check: true,
+    });
     expect(res.unchanged).toBe(false); // drift detected
     expect(res.wrote).toBe(false);
     expect(client.updateContent).not.toHaveBeenCalled();

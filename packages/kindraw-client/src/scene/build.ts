@@ -17,6 +17,7 @@ import {
 } from "@excalidraw/element";
 
 import { reanchorArrows } from "../reanchor.js";
+
 import { layoutNodesAsync, type PlacedNode } from "./layout.js";
 import {
   NodeTextMetricsProvider,

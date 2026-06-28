@@ -365,10 +365,7 @@ describe("stable arrow ids", () => {
         { from: "a", to: "b-c" },
       ],
     });
-    expect(arrowIds(content).sort()).toEqual([
-      "arrow-a-b-c",
-      "arrow-a-b-c-2",
-    ]);
+    expect(arrowIds(content).sort()).toEqual(["arrow-a-b-c", "arrow-a-b-c-2"]);
   });
 
   it("derives the bound-label id from the stable arrow id", async () => {
@@ -420,8 +417,9 @@ describe("group frames", () => {
     expect(frame.id).toBe("g1");
     expect(frame.name).toBe("Boundary");
     // Bounds enclose every member node box.
-    const members = (JSON.parse(content).elements as Array<Record<string, any>>)
-      .filter((e) => e.id === "a" || e.id === "b");
+    const members = (
+      JSON.parse(content).elements as Array<Record<string, any>>
+    ).filter((e) => e.id === "a" || e.id === "b");
     expect(members.length).toBe(2);
     for (const n of members) {
       expect(frame.x).toBeLessThanOrEqual(n.x);

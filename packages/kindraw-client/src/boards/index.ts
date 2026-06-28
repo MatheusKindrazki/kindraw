@@ -13,6 +13,7 @@
 // surfaces for the LLM to self-correct.
 
 import { composeHybrid } from "../hybrid.js";
+
 import type {
   ComposeHybridResult,
   HybridDiagram,
@@ -47,7 +48,10 @@ export type ComposeBoardResult = ComposeHybridResult & { boardType: BoardType };
 // `#`/CR/LF (so the parser sees one heading) and collapses runs of whitespace,
 // so the heading text the recipe links to exactly matches what the parser keys.
 const sanitizeHeading = (title: string): string =>
-  title.replace(/[#\r\n]+/g, " ").replace(/\s+/g, " ").trim();
+  title
+    .replace(/[#\r\n]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 
 /**
  * Single source of truth for a board's doc sections. `section()` returns the
@@ -176,7 +180,12 @@ const c4Context: BoardRecipe<C4ContextPayload> = {
     (p.externalSystems ?? []).forEach((s, i) => {
       const sec = doc.section(s.name, s.note ?? "An external system.");
       nodes.push({ id: `ext-${i}`, label: s.name, linkToHeading: sec });
-      edges.push({ from: "sys", to: `ext-${i}`, label: "calls", style: "dashed" });
+      edges.push({
+        from: "sys",
+        to: `ext-${i}`,
+        label: "calls",
+        style: "dashed",
+      });
     });
 
     return {
@@ -239,11 +248,11 @@ const sequence: BoardRecipe<SequencePayload> = {
   },
 };
 
-export const BOARD_RECIPES = {
+export const BOARD_RECIPES: Record<BoardType, BoardRecipe<never>> = {
   adr,
   "c4-context": c4Context,
   sequence,
-} satisfies Record<BoardType, BoardRecipe<never>>;
+};
 
 export const listBoards = (): Array<{
   type: BoardType;

@@ -9,14 +9,13 @@
 // real KindrawClient satisfies it), mirroring how composeHybrid takes a client.
 
 import { buildScene } from "./build.js";
+
 import type { DiagramSpec } from "./spec.js";
 
 // Minimal structural surface syncScene needs — KindrawClient satisfies it
 // (getItem → { item: { kind }, content }; updateContent(itemId, content)).
 export type SceneSyncClient = {
-  getItem(
-    itemId: string,
-  ): Promise<{ item: { kind: string }; content: string }>;
+  getItem(itemId: string): Promise<{ item: { kind: string }; content: string }>;
   updateContent(itemId: string, content: string): Promise<void>;
 };
 

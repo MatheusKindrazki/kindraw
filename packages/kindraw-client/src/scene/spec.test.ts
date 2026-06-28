@@ -185,7 +185,7 @@ describe("validateDiagramSpec", () => {
       ).toThrow(/reserved/i);
     });
 
-    it('rejects a group id starting with a reserved prefix', () => {
+    it("rejects a group id starting with a reserved prefix", () => {
       expect(() =>
         validateDiagramSpec({
           nodes: [{ id: "a", label: "A" }],
