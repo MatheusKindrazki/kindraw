@@ -1,8 +1,6 @@
 # Diagram-as-code com kindraw
 
-O kindraw fecha o loop que um whiteboard não consegue: o diagrama de arquitetura
-mora ao lado do código como um **spec tipado commitável**, dá diff num PR, e
-**regenera em CI** — então para de apodrecer.
+O kindraw fecha o loop que um whiteboard não consegue: o diagrama de arquitetura mora ao lado do código como um **spec tipado commitável**, dá diff num PR, e **regenera em CI** — então para de apodrecer.
 
 ```
   DiagramSpec (JSON, no git)  ──build──►  canvas .excalidraw
@@ -16,7 +14,7 @@ mora ao lado do código como um **spec tipado commitável**, dá diff num PR, e
 ## As peças
 
 | Peça | O quê |
-|---|---|
+| --- | --- |
 | `buildScene(spec)` | spec → canvas determinístico (mesmo spec = bytes idênticos) |
 | `extractDiagramSpec(elements)` | canvas → `DiagramSpec` tipado (inverso, com warnings de perda) |
 | `kindraw_sync_scene` (MCP) | um agente regenera o canvas a partir do spec, idempotente |
@@ -55,15 +53,10 @@ jobs:
           KINDRAW_TOKEN: ${{ secrets.KINDRAW_TOKEN }}
 ```
 
-Se alguém mudar a arquitetura no código mas esquecer de atualizar `docs/arch.json`
-(ou vice-versa), o `--check` quebra o PR. O diagrama nunca mais mente.
+Se alguém mudar a arquitetura no código mas esquecer de atualizar `docs/arch.json` (ou vice-versa), o `--check` quebra o PR. O diagrama nunca mais mente.
 
 ## Política de overwrite
 
-Um `sync` **sem** `--check` sobrescreve o canvas vivo — **o spec é a fonte da
-verdade**. Edições feitas à mão no editor são perdidas no próximo sync. Use
-`--check` pra detectar drift sem risco; trate o spec versionado como o source.
+Um `sync` **sem** `--check` sobrescreve o canvas vivo — **o spec é a fonte da verdade**. Edições feitas à mão no editor são perdidas no próximo sync. Use `--check` pra detectar drift sem risco; trate o spec versionado como o source.
 
-> Antes de promover o `sync` (modo write) pra CI de produção, considere o
-> follow-up de **snapshots de versão server-side** (M4 do plano) como rede de
-> segurança contra uma run ruim do agente.
+> Antes de promover o `sync` (modo write) pra CI de produção, considere o follow-up de **snapshots de versão server-side** (M4 do plano) como rede de segurança contra uma run ruim do agente.
