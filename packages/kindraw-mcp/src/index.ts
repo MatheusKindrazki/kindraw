@@ -121,7 +121,10 @@ const main = async () => {
         "borders cleanly — no cramped or mis-anchored canvases. Provide nodes " +
         "with ids + labels, edges referencing those ids, optional shape per node " +
         "(rectangle/diamond/ellipse), optional hex colors, direction (TB/LR/...), " +
-        "and engine (dagre, or elk for orthogonal routing). Returns the drawing URL.",
+        "and engine (dagre, or elk for orthogonal routing). Group nodes (give each " +
+        "a `group` id + a matching entry in `groups`) to draw labeled frame " +
+        "boundaries around them — ideal for C4 context/container diagrams, bounded " +
+        "contexts, and swimlanes. Returns the drawing URL.",
       inputSchema: {
         title: z
           .string()
@@ -147,7 +150,11 @@ const main = async () => {
                 .string()
                 .max(200)
                 .optional()
-                .describe("Optional group id (reserved for grouping)"),
+                .describe(
+                  "Optional id of a group this node belongs to; the group renders " +
+                    "as a labeled frame boundary around its members (C4 boundary / " +
+                    "swimlane). Must match an entry in `groups`.",
+                ),
               strokeColor: z
                 .string()
                 .max(64)
@@ -189,12 +196,16 @@ const main = async () => {
                 .string()
                 .max(2000)
                 .optional()
-                .describe("Optional group label"),
+                .describe("Optional group label, shown as the frame title"),
             }),
           )
           .max(200)
           .optional()
-          .describe("Optional node groups (up to 200)"),
+          .describe(
+            "Optional groups: each renders as a labeled frame (boundary/container) " +
+              "wrapping the nodes that reference its id via `group` — use for C4 " +
+              "boundaries, bounded contexts, or swimlanes (up to 200).",
+          ),
         direction: z
           .enum(["TB", "BT", "LR", "RL"])
           .optional()
@@ -298,7 +309,14 @@ const main = async () => {
                   id: z.string().max(200),
                   label: z.string().max(2000),
                   shape: z.enum(["rectangle", "diamond", "ellipse"]).optional(),
-                  group: z.string().max(200).optional(),
+                  group: z
+                    .string()
+                    .max(200)
+                    .optional()
+                    .describe(
+                      "Optional group id; renders as a labeled frame boundary " +
+                        "around members. Must match a `groups` entry.",
+                    ),
                   strokeColor: z.string().max(64).optional(),
                   backgroundColor: z.string().max(64).optional(),
                   linkToHeading: z
@@ -334,7 +352,11 @@ const main = async () => {
                 }),
               )
               .max(200)
-              .optional(),
+              .optional()
+              .describe(
+                "Optional groups: each renders as a labeled frame wrapping its " +
+                  "member nodes (C4 boundary / swimlane).",
+              ),
             direction: z.enum(["TB", "BT", "LR", "RL"]).optional(),
             engine: z.enum(["dagre", "elk"]).optional(),
           })
