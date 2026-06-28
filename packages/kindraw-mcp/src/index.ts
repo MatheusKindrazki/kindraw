@@ -110,6 +110,92 @@ const main = async () => {
     },
   );
 
+  // Shared DiagramSpec input shape (mirrors create_scene's inline schema), reused
+  // by kindraw_sync_scene so create + regenerate stay in lockstep.
+  const sceneSpecShape = {
+    nodes: z
+      .array(
+        z.object({
+          id: z
+            .string()
+            .max(200)
+            .describe("Unique node id, referenced by edges"),
+          label: z.string().max(2000).describe("Text shown inside the node"),
+          shape: z
+            .enum(["rectangle", "diamond", "ellipse", "sticky"])
+            .optional()
+            .describe(
+              "Node shape (default rectangle). `sticky` = a whiteboard post-it " +
+                "(yellow with a drop shadow) — for brainstorm/board-style nodes.",
+            ),
+          group: z
+            .string()
+            .max(200)
+            .optional()
+            .describe(
+              "Optional id of a group this node belongs to; the group renders as " +
+                "a labeled frame boundary (C4 boundary / swimlane). Must match an " +
+                "entry in `groups`.",
+            ),
+          strokeColor: z
+            .string()
+            .max(64)
+            .optional()
+            .describe("Stroke color hex, e.g. #1971c2"),
+          backgroundColor: z
+            .string()
+            .max(64)
+            .optional()
+            .describe("Fill color hex, e.g. #a5d8ff"),
+        }),
+      )
+      .min(1)
+      .max(500)
+      .describe("The diagram nodes (1-500)"),
+    edges: z
+      .array(
+        z.object({
+          from: z.string().max(200).describe("Source node id"),
+          to: z.string().max(200).describe("Target node id"),
+          label: z.string().max(2000).optional().describe("Optional edge label"),
+          style: z
+            .enum(["solid", "dashed", "dotted"])
+            .optional()
+            .describe("Connector style (default solid)"),
+        }),
+      )
+      .max(2000)
+      .describe("The directed edges between nodes (up to 2000)"),
+    groups: z
+      .array(
+        z.object({
+          id: z.string().max(200).describe("Unique group id"),
+          label: z
+            .string()
+            .max(2000)
+            .optional()
+            .describe("Optional group label, shown as the frame title"),
+        }),
+      )
+      .max(200)
+      .optional()
+      .describe(
+        "Optional groups: each renders as a labeled frame (boundary/container) " +
+          "wrapping the nodes that reference its id via `group` — for C4 " +
+          "boundaries, bounded contexts, or swimlanes (up to 200).",
+      ),
+    direction: z
+      .enum(["TB", "BT", "LR", "RL"])
+      .optional()
+      .describe("Layout direction (default TB, top-to-bottom)"),
+    engine: z
+      .enum(["dagre", "elk"])
+      .optional()
+      .describe(
+        "Layout engine: dagre (default, fast) or elk (orthogonal routing)",
+      ),
+  };
+
   server.registerTool(
     "kindraw_create_scene",
     {
@@ -240,6 +326,60 @@ const main = async () => {
           `Created diagram "${
             title || "Untitled diagram"
           }" (${elementCount} elements).\n${result.url}`,
+        );
+      } catch (error) {
+        return { ...text(formatError(error)), isError: true };
+      }
+    },
+  );
+
+  server.registerTool(
+    "kindraw_sync_scene",
+    {
+      description:
+        "Regenerate an EXISTING drawing canvas from a structured DiagramSpec — " +
+        "the docs-as-code primitive for diagrams. Deterministic layout makes the " +
+        "result byte-stable, so an agent (or CI) keeps an architecture diagram in " +
+        "lockstep with the code and it stops rotting. Pass `check: true` to DETECT " +
+        "drift (a stale diagram) WITHOUT writing — the CI gate. WARNING: a " +
+        "non-check sync OVERWRITES the live canvas (the spec is the source of " +
+        "truth), including manual edits. Same node/edge/group/direction/engine " +
+        "shape as kindraw_create_scene.",
+      inputSchema: {
+        itemId: z
+          .string()
+          .max(200)
+          .describe(
+            "Id of the existing drawing to regenerate (for a hybrid, its drawing " +
+              "item id)",
+          ),
+        check: z
+          .boolean()
+          .optional()
+          .describe("Detect drift only — never writes (use as a CI gate)"),
+        ...sceneSpecShape,
+      },
+    },
+    async ({ itemId, check, nodes, edges, groups, direction, engine }) => {
+      try {
+        const { syncScene } = await import("@kindraw/client/scene");
+        const res = await syncScene(client, {
+          itemId,
+          spec: { nodes, edges, groups, direction, engine },
+          check,
+        });
+        if (check) {
+          return text(
+            res.unchanged
+              ? `In sync: "${itemId}" already matches the spec (${res.elementCount} elements).`
+              : `DRIFT: "${itemId}" differs from the spec (would regenerate ` +
+                  `${res.elementCount} elements). Run without check to update.`,
+          );
+        }
+        return text(
+          res.unchanged
+            ? `No change: "${itemId}" already matches the spec (${res.elementCount} elements).`
+            : `Regenerated "${itemId}" from the spec (${res.elementCount} elements).`,
         );
       } catch (error) {
         return { ...text(formatError(error)), isError: true };
