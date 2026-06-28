@@ -163,4 +163,42 @@ describe("extractDiagramSpec", () => {
       JSON.stringify(extractDiagramSpec(els)),
     );
   });
+
+  it("counts text bound to unsupported elements as omitted", () => {
+    const els: RawSceneElement[] = [
+      { id: "a", type: "rectangle" },
+      { id: "img", type: "image" },
+      { id: "line", type: "line" },
+      // Text bound to a supported node → should NOT be counted as omitted
+      { id: "txt1", type: "text", containerId: "a", text: "Label A" },
+      // Text bound to an unsupported image → should be counted as omitted
+      { id: "txt2", type: "text", containerId: "img", text: "Image Label" },
+      // Text bound to an unsupported line → should be counted as omitted
+      { id: "txt3", type: "text", containerId: "line", text: "Line Label" },
+    ];
+    const { warnings } = extractDiagramSpec(els)!;
+    const omitted = warnings.find((w) => w.code === "omitted-elements");
+    // Image + line + 2 texts bound to unsupported elements = 4 omitted
+    expect(omitted?.count).toBe(4);
+  });
+
+  it("does not count text bound to valid arrows as omitted", () => {
+    const els: RawSceneElement[] = [
+      { id: "a", type: "rectangle" },
+      { id: "b", type: "rectangle" },
+      // Valid arrow bound to two nodes
+      {
+        id: "ar",
+        type: "arrow",
+        startBinding: { elementId: "a" },
+        endBinding: { elementId: "b" },
+      },
+      // Text bound to valid arrow → should NOT be counted as omitted
+      { id: "txt", type: "text", containerId: "ar", text: "Edge Label" },
+    ];
+    const { warnings } = extractDiagramSpec(els)!;
+    const omitted = warnings.find((w) => w.code === "omitted-elements");
+    // No omitted elements
+    expect(omitted).toBeUndefined();
+  });
 });

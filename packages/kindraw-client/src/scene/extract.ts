@@ -201,6 +201,7 @@ export const extractDiagramSpec = (
   // arrow (v1 doesn't infer endpoints by proximity) → dropped with a warning.
   const edges: DiagramEdge[] = [];
   let freeArrows = 0;
+  const validArrowIds = new Set<string>();
   for (const el of live) {
     if (el.type !== "arrow") {
       continue;
@@ -211,6 +212,7 @@ export const extractDiagramSpec = (
       freeArrows += 1;
       continue;
     }
+    validArrowIds.add(el.id);
     const edge: DiagramEdge = {
       from: nodeIdMap.get(from)!,
       to: nodeIdMap.get(to)!,
@@ -237,7 +239,12 @@ export const extractDiagramSpec = (
       continue;
     }
     if (el.type === "text" && typeof el.containerId === "string") {
-      continue; // a bound label — consumed above (or its container was dropped)
+      // Only skip this text if its container is a supported element that was
+      // actually extracted (node or valid arrow). Otherwise, the text is bound
+      // to an unsupported element (image/line/etc.) and should be counted as omitted.
+      if (nodeIdMap.has(el.containerId) || validArrowIds.has(el.containerId)) {
+        continue;
+      }
     }
     omitted += 1;
   }
