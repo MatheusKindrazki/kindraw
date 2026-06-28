@@ -395,6 +395,121 @@ describe("stable arrow ids", () => {
   });
 });
 
+describe("group frames", () => {
+  // DiagramGroups (validated today but visually dropped) must materialize as
+  // native Excalidraw frame elements wrapping their member nodes — the
+  // structural backbone for C4 boundaries / swimlanes / boards.
+  const byType = (content: string, type: string): Array<Record<string, any>> =>
+    (JSON.parse(content).elements as Array<Record<string, any>>).filter(
+      (e) => e.type === type,
+    );
+
+  it("emits a frame per non-empty group, sized to wrap its members", async () => {
+    const { content } = await buildScene({
+      nodes: [
+        { id: "a", label: "A", group: "g1" },
+        { id: "b", label: "B", group: "g1" },
+        { id: "c", label: "C" },
+      ],
+      edges: [{ from: "a", to: "b" }],
+      groups: [{ id: "g1", label: "Boundary" }],
+    });
+    const frames = byType(content, "frame");
+    expect(frames.length).toBe(1);
+    const frame = frames[0];
+    expect(frame.id).toBe("g1");
+    expect(frame.name).toBe("Boundary");
+    // Bounds enclose every member node box.
+    const members = (JSON.parse(content).elements as Array<Record<string, any>>)
+      .filter((e) => e.id === "a" || e.id === "b");
+    expect(members.length).toBe(2);
+    for (const n of members) {
+      expect(frame.x).toBeLessThanOrEqual(n.x);
+      expect(frame.y).toBeLessThanOrEqual(n.y);
+      expect(frame.x + frame.width).toBeGreaterThanOrEqual(n.x + n.width);
+      expect(frame.y + frame.height).toBeGreaterThanOrEqual(n.y + n.height);
+    }
+  });
+
+  it("wires frameId onto member nodes only", async () => {
+    const { content } = await buildScene({
+      nodes: [
+        { id: "a", label: "A", group: "g1" },
+        { id: "b", label: "B", group: "g1" },
+        { id: "c", label: "C" },
+      ],
+      edges: [],
+      groups: [{ id: "g1" }],
+    });
+    const els = JSON.parse(content).elements as Array<Record<string, any>>;
+    expect(els.find((e) => e.id === "a")?.frameId).toBe("g1");
+    expect(els.find((e) => e.id === "b")?.frameId).toBe("g1");
+    expect(els.find((e) => e.id === "c")?.frameId ?? null).toBeNull();
+  });
+
+  it("places frame elements LAST (after their children)", async () => {
+    const { content } = await buildScene({
+      nodes: [
+        { id: "a", label: "A", group: "g1" },
+        { id: "b", label: "B", group: "g1" },
+      ],
+      edges: [],
+      groups: [{ id: "g1" }],
+    });
+    const els = JSON.parse(content).elements as Array<Record<string, any>>;
+    const frameIdx = els.findIndex((e) => e.type === "frame");
+    expect(frameIdx).toBeGreaterThan(els.findIndex((e) => e.id === "a"));
+    expect(frameIdx).toBeGreaterThan(els.findIndex((e) => e.id === "b"));
+  });
+
+  it("skips a declared-but-unused group (no empty frame)", async () => {
+    const { content } = await buildScene({
+      nodes: [{ id: "a", label: "A" }],
+      edges: [],
+      groups: [{ id: "empty", label: "Nobody" }],
+    });
+    expect(byType(content, "frame").length).toBe(0);
+  });
+
+  it("omits the frame name when the group has no label", async () => {
+    const { content } = await buildScene({
+      nodes: [{ id: "a", label: "A", group: "g1" }],
+      edges: [],
+      groups: [{ id: "g1" }],
+    });
+    expect(byType(content, "frame")[0]?.name ?? null).toBeNull();
+  });
+
+  it("appends no frame element for a group-less spec (back-compat)", async () => {
+    const { content } = await buildScene({
+      nodes: [
+        { id: "a", label: "A" },
+        { id: "b", label: "B" },
+      ],
+      edges: [{ from: "a", to: "b" }],
+    });
+    expect(byType(content, "frame").length).toBe(0);
+  });
+
+  it("is deterministic with groups", async () => {
+    const spec = {
+      nodes: [
+        { id: "a", label: "A", group: "g1" },
+        { id: "b", label: "B", group: "g1" },
+        { id: "c", label: "C", group: "g2" },
+      ],
+      edges: [{ from: "a", to: "c" }],
+      groups: [
+        { id: "g1", label: "One" },
+        { id: "g2", label: "Two" },
+      ],
+    };
+    const first = await buildScene(spec);
+    const second = await buildScene(spec);
+    expect(first.content).toBe(second.content);
+  });
+});
+
 describe("buildScene additive inputs (templateElements + files + iconImages)", () => {
   it("prepends templateElements and merges files + iconImages into the envelope", async () => {
     const { content } = await buildScene(

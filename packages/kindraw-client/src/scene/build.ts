@@ -80,6 +80,12 @@ export const ensureWindowShim = (): void => {
 
 const LABEL_FONT_SIZE = 20;
 
+// Breathing room between a frame's edge and the member nodes it wraps.
+// INVARIANT: FRAME_PADDING < ORIGIN_MARGIN (layout.ts, =20) so a frame's
+// top-left stays strictly positive — convertToExcalidrawElements uses a
+// truthiness fallback (`frame?.x || minX`) that would clobber a 0 coordinate.
+const FRAME_PADDING = 16;
+
 // Map our edge style to Excalidraw strokeStyle (identity for the values we
 // accept; "solid" is Excalidraw's default so we omit it).
 const STROKE_STYLE = {
@@ -154,6 +160,41 @@ const toSkeleton = (
         : {}),
     });
   });
+
+  // Emit one frame per NON-EMPTY group, sized to wrap its members. The layout is
+  // group-blind (dagre/elk don't cluster by group), so members can be scattered
+  // and a frame may be large — but it always encloses its nodes. Frame element
+  // id = group.id (guaranteed disjoint from node ids by validateDiagramSpec);
+  // convertToExcalidrawElements wires frameId onto each child (and its bound
+  // text) from `children`. Deterministic: groups in spec order, members in
+  // placed order. Skipping empty groups avoids a meaningless frame (and the
+  // getCommonBounds([]) → Infinity path inside convert).
+  for (const group of spec.groups) {
+    const members = placed.filter((n) => n.group === group.id);
+    if (members.length === 0) {
+      continue;
+    }
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+    for (const m of members) {
+      minX = Math.min(minX, m.x);
+      minY = Math.min(minY, m.y);
+      maxX = Math.max(maxX, m.x + m.width);
+      maxY = Math.max(maxY, m.y + m.height);
+    }
+    skeleton.push({
+      type: "frame",
+      id: group.id,
+      x: minX - FRAME_PADDING,
+      y: minY - FRAME_PADDING,
+      width: maxX - minX + FRAME_PADDING * 2,
+      height: maxY - minY + FRAME_PADDING * 2,
+      children: members.map((m) => m.id),
+      ...(group.label ? { name: group.label } : {}),
+    });
+  }
 
   return skeleton;
 };
@@ -259,7 +300,15 @@ export const buildScene = async (
   // Deterministically connect arrows border-to-border using real positions.
   reanchorArrows(elements as unknown as Parameters<typeof reanchorArrows>[0]);
 
-  const visible = elements.filter((el) => !el.isDeleted);
+  const visibleRaw = elements.filter((el) => !el.isDeleted);
+  // Frames must sit LAST among the scene elements (after their children) to
+  // match Excalidraw's own invariant (actionFrame wraps as `[...elements,
+  // frame]`); convertToExcalidrawElements can otherwise leave a frame before
+  // some of its bound-text children. Stable partition: keep relative order.
+  const visible = [
+    ...visibleRaw.filter((el) => el.type !== "frame"),
+    ...visibleRaw.filter((el) => el.type === "frame"),
+  ];
   stabilize(visible as unknown as ExEl[]);
 
   // Convert icon image skeletons SEPARATELY (no layout, no reanchor) and

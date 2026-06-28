@@ -250,6 +250,16 @@ export const validateDiagramSpec = (raw: unknown): NormalizedSpec => {
           `"tpl-" or "icon-" (reserved for generated elements).`,
       );
     }
+    // Group ids become frame element ids, sharing the node id namespace. A
+    // collision would make the frame and the node fight for the same element id
+    // (convertToExcalidrawElements only console.errors a dup id, then silently
+    // drops one). Reject it up front so frame emission is always safe.
+    if (groupIds.has(node.id)) {
+      throw new Error(
+        `Node id "${node.id}" collides with a group id ` +
+          `(group ids become frame element ids).`,
+      );
+    }
     if (ids.has(node.id)) {
       throw new Error(`Duplicate node id: "${node.id}".`);
     }
