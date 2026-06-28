@@ -29,3 +29,10 @@ export type {
   ExtractWarning,
   ExtractDiagramSpecResult,
 } from "./extract.js";
+
+export { syncScene } from "./sync.js";
+export type {
+  SceneSyncClient,
+  SyncSceneInput,
+  SyncSceneResult,
+} from "./sync.js";
