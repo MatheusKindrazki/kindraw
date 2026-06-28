@@ -586,6 +586,142 @@ const main = async () => {
   );
 
   server.registerTool(
+    "kindraw_create_board",
+    {
+      description:
+        "Generate a complete ENGINEERING board (doc + linked canvas) from a typed " +
+        "payload — the 'describe a board, it materializes' tool. Pick a `type` and " +
+        "fill its fields; Kindraw emits a hybrid where every diagram node deep-links " +
+        "to its doc section (no doc↔canvas drift, by construction). Types: `adr` " +
+        "(Architecture Decision Record: context→decision→consequences + " +
+        "alternatives), `c4-context` (a system, its users and external systems in a " +
+        "labeled boundary frame), `sequence` (participants + ordered interactions). " +
+        "Use kindraw_list_boards to see them. Returns the hybrid URL.",
+      inputSchema: {
+        board: z.discriminatedUnion("type", [
+          z.object({
+            type: z.literal("adr"),
+            title: z.string().max(500).describe("ADR title"),
+            status: z
+              .string()
+              .max(100)
+              .optional()
+              .describe("e.g. Proposed / Accepted / Superseded"),
+            context: z.string().max(20000).describe("The forces at play"),
+            decision: z.string().max(20000).describe("What was decided"),
+            consequences: z
+              .string()
+              .max(20000)
+              .describe("Resulting trade-offs"),
+            alternatives: z
+              .array(
+                z.object({
+                  name: z.string().max(200),
+                  note: z.string().max(5000).optional(),
+                }),
+              )
+              .max(20)
+              .optional()
+              .describe("Options considered but not chosen"),
+          }),
+          z.object({
+            type: z.literal("c4-context"),
+            title: z.string().max(500),
+            system: z.object({
+              name: z.string().max(200),
+              description: z.string().max(5000).optional(),
+            }),
+            users: z
+              .array(
+                z.object({
+                  name: z.string().max(200),
+                  note: z.string().max(2000).optional(),
+                }),
+              )
+              .max(50)
+              .optional(),
+            externalSystems: z
+              .array(
+                z.object({
+                  name: z.string().max(200),
+                  note: z.string().max(2000).optional(),
+                }),
+              )
+              .max(50)
+              .optional(),
+          }),
+          z.object({
+            type: z.literal("sequence"),
+            title: z.string().max(500),
+            summary: z.string().max(5000).optional(),
+            participants: z
+              .array(
+                z.object({
+                  name: z.string().max(200),
+                  note: z.string().max(2000).optional(),
+                }),
+              )
+              .min(1)
+              .max(50),
+            steps: z
+              .array(
+                z.object({
+                  from: z.string().max(200),
+                  to: z.string().max(200),
+                  label: z.string().max(500),
+                }),
+              )
+              .max(200),
+          }),
+        ]),
+        folderId: z
+          .string()
+          .max(200)
+          .nullish()
+          .describe("Optional folder id to place the board in"),
+      },
+    },
+    async ({ board, folderId }) => {
+      try {
+        const { composeBoard } = await import("@kindraw/client/boards");
+        const { type, ...payload } = board;
+        const res = await composeBoard(client, { type, payload, folderId });
+        const drift = res.unmatchedHeadings.length
+          ? `\n⚠ Unmatched headings: ${res.unmatchedHeadings.join(", ")} ` +
+            `(linkable: ${res.linkableHeadings.join(", ")})`
+          : "";
+        return text(
+          `Created ${type} board "${board.title}" (${res.elementCount} elements, ` +
+            `${res.linksWired} section links wired).\n${res.url}${drift}`,
+        );
+      } catch (error) {
+        return { ...text(formatError(error)), isError: true };
+      }
+    },
+  );
+
+  server.registerTool(
+    "kindraw_list_boards",
+    {
+      description:
+        "List the available engineering board recipes for kindraw_create_board " +
+        "(type, title, and what each produces).",
+      inputSchema: {},
+    },
+    async () => {
+      try {
+        const { listBoards } = await import("@kindraw/client/boards");
+        const lines = listBoards()
+          .map((b) => `- ${b.type}: ${b.title} — ${b.summary}`)
+          .join("\n");
+        return text(`Available boards:\n${lines}`);
+      } catch (error) {
+        return { ...text(formatError(error)), isError: true };
+      }
+    },
+  );
+
+  server.registerTool(
     "kindraw_list_templates",
     {
       description:

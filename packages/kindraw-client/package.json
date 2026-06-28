@@ -27,6 +27,10 @@
     "./sections": {
       "types": "./dist/sections/index.d.ts",
       "default": "./dist/sections/index.js"
+    },
+    "./boards": {
+      "types": "./dist/boards/index.d.ts",
+      "default": "./dist/boards/index.js"
     }
   },
   "files": [
