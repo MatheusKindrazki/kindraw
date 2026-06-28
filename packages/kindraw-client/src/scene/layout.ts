@@ -97,7 +97,18 @@ const normalizeOrigin = (nodes: PlacedNode[]): PlacedNode[] => {
  * gives centers; we convert). Deterministic for a given spec.
  */
 export const layoutWithDagre = (spec: NormalizedSpec): PlacedNode[] => {
-  const g = new dagre.graphlib.Graph({ multigraph: true });
+  // When the spec has populated groups, lay out as a COMPOUND graph: a cluster
+  // node per group, with member nodes parented into it. dagre then keeps each
+  // group's nodes spatially together, so the frames we draw (build.ts, from the
+  // member union) are tight and non-overlapping instead of sprawling across a
+  // group-blind layout. Gated on hasGroups so group-less specs take the exact
+  // same code path as before (byte-identical output).
+  const hasGroups =
+    spec.groups.length > 0 && spec.nodes.some((n) => n.group != null);
+  const g = new dagre.graphlib.Graph({
+    compound: hasGroups,
+    multigraph: true,
+  });
   g.setGraph({
     rankdir: spec.direction,
     ranksep: RANK_SEP,
@@ -112,6 +123,27 @@ export const layoutWithDagre = (spec: NormalizedSpec): PlacedNode[] => {
   for (const node of spec.nodes) {
     const size = sized.get(node.id)!;
     g.setNode(node.id, { width: size.width, height: size.height });
+  }
+  if (hasGroups) {
+    // Cluster node id = group.id (guaranteed disjoint from node ids by
+    // validateDiagramSpec). dagre sizes the cluster from its children; we never
+    // emit it — only real nodes are read back below. Iterate in spec order for
+    // determinism, and only materialize groups that actually have members.
+    const usedGroups = new Set(
+      spec.nodes
+        .map((n) => n.group)
+        .filter((gid): gid is string => gid != null),
+    );
+    for (const group of spec.groups) {
+      if (usedGroups.has(group.id)) {
+        g.setNode(group.id, {});
+      }
+    }
+    for (const node of spec.nodes) {
+      if (node.group != null && usedGroups.has(node.group)) {
+        g.setParent(node.id, node.group);
+      }
+    }
   }
   spec.edges.forEach((edge, i) => {
     // Unique name keeps multigraph edges distinct & deterministic.

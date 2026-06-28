@@ -506,6 +506,45 @@ describe("group frames", () => {
     const second = await buildScene(spec);
     expect(first.content).toBe(second.content);
   });
+
+  it("clusters group members so their frames do not overlap", async () => {
+    // Two groups, each an internal chain, joined by a single cross-link. With a
+    // group-blind layout the members interleave and the frames overlap; with
+    // compound-graph clustering each group stays together and the frames are
+    // disjoint.
+    const { content } = await buildScene({
+      nodes: [
+        { id: "a1", label: "Alpha 1", group: "ga" },
+        { id: "a2", label: "Alpha 2", group: "ga" },
+        { id: "a3", label: "Alpha 3", group: "ga" },
+        { id: "b1", label: "Beta 1", group: "gb" },
+        { id: "b2", label: "Beta 2", group: "gb" },
+        { id: "b3", label: "Beta 3", group: "gb" },
+      ],
+      edges: [
+        { from: "a1", to: "a2" },
+        { from: "a2", to: "a3" },
+        { from: "b1", to: "b2" },
+        { from: "b2", to: "b3" },
+        { from: "a1", to: "b1" },
+      ],
+      groups: [
+        { id: "ga", label: "Alpha" },
+        { id: "gb", label: "Beta" },
+      ],
+    });
+    const frames = (
+      JSON.parse(content).elements as Array<Record<string, any>>
+    ).filter((e) => e.type === "frame");
+    expect(frames.length).toBe(2);
+    const [f1, f2] = frames;
+    const overlap =
+      f1.x < f2.x + f2.width &&
+      f1.x + f1.width > f2.x &&
+      f1.y < f2.y + f2.height &&
+      f1.y + f1.height > f2.y;
+    expect(overlap).toBe(false);
+  });
 });
 
 describe("sticky shape", () => {
