@@ -22,3 +22,17 @@ export type {
 
 export { layoutNodes, layoutNodesAsync } from "./layout.js";
 export type { PlacedNode } from "./layout.js";
+
+export { extractDiagramSpec } from "./extract.js";
+export type {
+  RawSceneElement,
+  ExtractWarning,
+  ExtractDiagramSpecResult,
+} from "./extract.js";
+
+export { syncScene } from "./sync.js";
+export type {
+  SceneSyncClient,
+  SyncSceneInput,
+  SyncSceneResult,
+} from "./sync.js";

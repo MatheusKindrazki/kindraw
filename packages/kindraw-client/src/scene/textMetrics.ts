@@ -29,7 +29,10 @@ const getNodeCanvasCtx = () => {
     // `canvas` is a dependency of this package. require() keeps this synchronous
     // so the provider can satisfy the synchronous getLineWidth contract.
     const { createCanvas } = require("canvas") as {
-      createCanvas: (w: number, h: number) => {
+      createCanvas: (
+        w: number,
+        h: number,
+      ) => {
         getContext: (t: "2d") => {
           measureText: (t: string) => { width: number };
           font: string;
@@ -78,6 +81,13 @@ const MIN_NODE_WIDTH = 60;
 const MIN_NODE_HEIGHT = 40;
 const LINE_HEIGHT_RATIO = 1.25;
 
+// Sticky-note defaults, mirroring the editor's createStickyNoteOnPointerDown
+// (STICKY_NOTE_BACKGROUND in App.tsx) so a generated sticky is indistinguishable
+// from a hand-placed one. Floored to a note-like minimum so a short label still
+// reads as a piece of paper rather than a tiny box.
+export const STICKY_NOTE_BACKGROUND = "#ffec99";
+const STICKY_MIN_SIZE = 120;
+
 const sharedProvider = new NodeTextMetricsProvider();
 
 /**
@@ -103,4 +113,19 @@ export const measureLabel = (
     Math.ceil(lines.length * fontSize * LINE_HEIGHT_RATIO) + LABEL_PADDING_Y,
   );
   return { width, height };
+};
+
+/**
+ * Measure a sticky note: a label box floored to a note-like minimum square so a
+ * short note still reads as paper. Auto-grows for long text. DOM-free.
+ */
+export const measureSticky = (
+  label: string,
+  fontSize: number,
+): { width: number; height: number } => {
+  const { width, height } = measureLabel(label, fontSize);
+  return {
+    width: Math.max(STICKY_MIN_SIZE, width),
+    height: Math.max(STICKY_MIN_SIZE, height),
+  };
 };

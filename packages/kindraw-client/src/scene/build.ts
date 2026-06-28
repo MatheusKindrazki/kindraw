@@ -17,8 +17,12 @@ import {
 } from "@excalidraw/element";
 
 import { reanchorArrows } from "../reanchor.js";
+
 import { layoutNodesAsync, type PlacedNode } from "./layout.js";
-import { NodeTextMetricsProvider } from "./textMetrics.js";
+import {
+  NodeTextMetricsProvider,
+  STICKY_NOTE_BACKGROUND,
+} from "./textMetrics.js";
 import {
   validateDiagramSpec,
   type DiagramSpec,
@@ -80,6 +84,12 @@ export const ensureWindowShim = (): void => {
 
 const LABEL_FONT_SIZE = 20;
 
+// Breathing room between a frame's edge and the member nodes it wraps.
+// INVARIANT: FRAME_PADDING < ORIGIN_MARGIN (layout.ts, =20) so a frame's
+// top-left stays strictly positive — convertToExcalidrawElements uses a
+// truthiness fallback (`frame?.x || minX`) that would clobber a 0 coordinate.
+const FRAME_PADDING = 16;
+
 // Map our edge style to Excalidraw strokeStyle (identity for the values we
 // accept; "solid" is Excalidraw's default so we omit it).
 const STROKE_STYLE = {
@@ -88,6 +98,30 @@ const STROKE_STYLE = {
   dotted: "dotted",
 } as const;
 
+// Content-derived, order-independent arrow ids. `arrow-${i}` made every arrow
+// id depend on edge position, so adding/removing one edge reshuffled all the
+// downstream ids — defeating clean diffs and stable bindings. We derive the id
+// from the endpoints (`arrow-<from>-<to>`) and append a LOCAL `-2`/`-3`… only
+// when a base collides (legitimate parallel edges, or hyphen ambiguity like
+// `a-b`→`c` vs `a`→`b-c`). The suffix is scoped to the colliding base, so an
+// unrelated edge change never shifts any other arrow's id. `arrow-` stays a
+// reserved prefix (spec.ts), so these can't collide with user node ids, and
+// canonicalizeBoundTextIds derives the label id (`text-<arrowId>`) from this.
+const makeArrowIdFactory = (): ((from: string, to: string) => string) => {
+  const used = new Set<string>();
+  return (from, to) => {
+    const base = `arrow-${from}-${to}`;
+    let candidate = base;
+    let n = 1;
+    while (used.has(candidate)) {
+      n += 1;
+      candidate = `${base}-${n}`;
+    }
+    used.add(candidate);
+    return candidate;
+  };
+};
+
 const toSkeleton = (
   placed: PlacedNode[],
   spec: NormalizedSpec,
@@ -95,6 +129,28 @@ const toSkeleton = (
   const skeleton: Array<Record<string, unknown>> = [];
 
   for (const node of placed) {
+    // Sticky notes are rectangles tagged customData.kindrawStickyNote — the
+    // exact shape the editor's createStickyNoteOnPointerDown emits, so
+    // renderElement paints the post-it shadow and stock Excalidraw still sees a
+    // normal rectangle. Defaults match the editor; user colors override (??).
+    if (node.shape === "sticky") {
+      skeleton.push({
+        type: "rectangle",
+        id: node.id,
+        x: node.x,
+        y: node.y,
+        width: node.width,
+        height: node.height,
+        label: { text: node.label, fontSize: LABEL_FONT_SIZE },
+        strokeColor: node.strokeColor ?? "transparent",
+        backgroundColor: node.backgroundColor ?? STICKY_NOTE_BACKGROUND,
+        fillStyle: "solid",
+        roundness: { type: 3 },
+        customData: { kindrawStickyNote: true },
+        ...(node.link ? { link: node.link } : {}),
+      });
+      continue;
+    }
     skeleton.push({
       type: node.shape,
       id: node.id, // stable id → deterministic, and arrows bind by id
@@ -115,10 +171,11 @@ const toSkeleton = (
     });
   }
 
-  spec.edges.forEach((edge, i) => {
+  const arrowId = makeArrowIdFactory();
+  spec.edges.forEach((edge) => {
     skeleton.push({
       type: "arrow",
-      id: `arrow-${i}`,
+      id: arrowId(edge.from, edge.to),
       x: 0,
       y: 0,
       start: { id: edge.from },
@@ -129,6 +186,41 @@ const toSkeleton = (
         : {}),
     });
   });
+
+  // Emit one frame per NON-EMPTY group, sized to wrap its members. The layout is
+  // group-blind (dagre/elk don't cluster by group), so members can be scattered
+  // and a frame may be large — but it always encloses its nodes. Frame element
+  // id = group.id (guaranteed disjoint from node ids by validateDiagramSpec);
+  // convertToExcalidrawElements wires frameId onto each child (and its bound
+  // text) from `children`. Deterministic: groups in spec order, members in
+  // placed order. Skipping empty groups avoids a meaningless frame (and the
+  // getCommonBounds([]) → Infinity path inside convert).
+  for (const group of spec.groups) {
+    const members = placed.filter((n) => n.group === group.id);
+    if (members.length === 0) {
+      continue;
+    }
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+    for (const m of members) {
+      minX = Math.min(minX, m.x);
+      minY = Math.min(minY, m.y);
+      maxX = Math.max(maxX, m.x + m.width);
+      maxY = Math.max(maxY, m.y + m.height);
+    }
+    skeleton.push({
+      type: "frame",
+      id: group.id,
+      x: minX - FRAME_PADDING,
+      y: minY - FRAME_PADDING,
+      width: maxX - minX + FRAME_PADDING * 2,
+      height: maxY - minY + FRAME_PADDING * 2,
+      children: members.map((m) => m.id),
+      ...(group.label ? { name: group.label } : {}),
+    });
+  }
 
   return skeleton;
 };
@@ -234,7 +326,15 @@ export const buildScene = async (
   // Deterministically connect arrows border-to-border using real positions.
   reanchorArrows(elements as unknown as Parameters<typeof reanchorArrows>[0]);
 
-  const visible = elements.filter((el) => !el.isDeleted);
+  const visibleRaw = elements.filter((el) => !el.isDeleted);
+  // Frames must sit LAST among the scene elements (after their children) to
+  // match Excalidraw's own invariant (actionFrame wraps as `[...elements,
+  // frame]`); convertToExcalidrawElements can otherwise leave a frame before
+  // some of its bound-text children. Stable partition: keep relative order.
+  const visible = [
+    ...visibleRaw.filter((el) => el.type !== "frame"),
+    ...visibleRaw.filter((el) => el.type === "frame"),
+  ];
   stabilize(visible as unknown as ExEl[]);
 
   // Convert icon image skeletons SEPARATELY (no layout, no reanchor) and

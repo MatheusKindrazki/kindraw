@@ -50,6 +50,31 @@ describe("validateDiagramSpec", () => {
     ).toThrow(/shape/i);
   });
 
+  it("rejects a node id that collides with a group id", () => {
+    // Group ids become frame element ids, sharing the node id namespace. A
+    // collision would make the frame and the node fight for the same id (convert
+    // only console.errors a dup id and silently drops one). Reject up front.
+    expect(() =>
+      validateDiagramSpec({
+        nodes: [
+          { id: "boundary", label: "X" },
+          { id: "b", label: "B", group: "boundary" },
+        ],
+        edges: [],
+        groups: [{ id: "boundary", label: "Boundary" }],
+      }),
+    ).toThrow(/collides with a group id/i);
+  });
+
+  it("accepts the sticky shape", () => {
+    expect(() =>
+      validateDiagramSpec({
+        nodes: [{ id: "a", label: "A", shape: "sticky" }],
+        edges: [],
+      }),
+    ).not.toThrow();
+  });
+
   it("returns a normalized spec with defaults applied", () => {
     const out = validateDiagramSpec({
       nodes: [{ id: "a", label: "A" }],
@@ -160,7 +185,7 @@ describe("validateDiagramSpec", () => {
       ).toThrow(/reserved/i);
     });
 
-    it('rejects a group id starting with a reserved prefix', () => {
+    it("rejects a group id starting with a reserved prefix", () => {
       expect(() =>
         validateDiagramSpec({
           nodes: [{ id: "a", label: "A" }],

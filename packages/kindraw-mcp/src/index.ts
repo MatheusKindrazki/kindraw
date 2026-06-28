@@ -110,6 +110,96 @@ const main = async () => {
     },
   );
 
+  // Shared DiagramSpec input shape (mirrors create_scene's inline schema), reused
+  // by kindraw_sync_scene so create + regenerate stay in lockstep.
+  const sceneSpecShape = {
+    nodes: z
+      .array(
+        z.object({
+          id: z
+            .string()
+            .max(200)
+            .describe("Unique node id, referenced by edges"),
+          label: z.string().max(2000).describe("Text shown inside the node"),
+          shape: z
+            .enum(["rectangle", "diamond", "ellipse", "sticky"])
+            .optional()
+            .describe(
+              "Node shape (default rectangle). `sticky` = a whiteboard post-it " +
+                "(yellow with a drop shadow) — for brainstorm/board-style nodes.",
+            ),
+          group: z
+            .string()
+            .max(200)
+            .optional()
+            .describe(
+              "Optional id of a group this node belongs to; the group renders as " +
+                "a labeled frame boundary (C4 boundary / swimlane). Must match an " +
+                "entry in `groups`.",
+            ),
+          strokeColor: z
+            .string()
+            .max(64)
+            .optional()
+            .describe("Stroke color hex, e.g. #1971c2"),
+          backgroundColor: z
+            .string()
+            .max(64)
+            .optional()
+            .describe("Fill color hex, e.g. #a5d8ff"),
+        }),
+      )
+      .min(1)
+      .max(500)
+      .describe("The diagram nodes (1-500)"),
+    edges: z
+      .array(
+        z.object({
+          from: z.string().max(200).describe("Source node id"),
+          to: z.string().max(200).describe("Target node id"),
+          label: z
+            .string()
+            .max(2000)
+            .optional()
+            .describe("Optional edge label"),
+          style: z
+            .enum(["solid", "dashed", "dotted"])
+            .optional()
+            .describe("Connector style (default solid)"),
+        }),
+      )
+      .max(2000)
+      .describe("The directed edges between nodes (up to 2000)"),
+    groups: z
+      .array(
+        z.object({
+          id: z.string().max(200).describe("Unique group id"),
+          label: z
+            .string()
+            .max(2000)
+            .optional()
+            .describe("Optional group label, shown as the frame title"),
+        }),
+      )
+      .max(200)
+      .optional()
+      .describe(
+        "Optional groups: each renders as a labeled frame (boundary/container) " +
+          "wrapping the nodes that reference its id via `group` — for C4 " +
+          "boundaries, bounded contexts, or swimlanes (up to 200).",
+      ),
+    direction: z
+      .enum(["TB", "BT", "LR", "RL"])
+      .optional()
+      .describe("Layout direction (default TB, top-to-bottom)"),
+    engine: z
+      .enum(["dagre", "elk"])
+      .optional()
+      .describe(
+        "Layout engine: dagre (default, fast) or elk (orthogonal routing)",
+      ),
+  };
+
   server.registerTool(
     "kindraw_create_scene",
     {
@@ -121,7 +211,10 @@ const main = async () => {
         "borders cleanly — no cramped or mis-anchored canvases. Provide nodes " +
         "with ids + labels, edges referencing those ids, optional shape per node " +
         "(rectangle/diamond/ellipse), optional hex colors, direction (TB/LR/...), " +
-        "and engine (dagre, or elk for orthogonal routing). Returns the drawing URL.",
+        "and engine (dagre, or elk for orthogonal routing). Group nodes (give each " +
+        "a `group` id + a matching entry in `groups`) to draw labeled frame " +
+        "boundaries around them — ideal for C4 context/container diagrams, bounded " +
+        "contexts, and swimlanes. Returns the drawing URL.",
       inputSchema: {
         title: z
           .string()
@@ -140,14 +233,22 @@ const main = async () => {
                 .max(2000)
                 .describe("Text shown inside the node"),
               shape: z
-                .enum(["rectangle", "diamond", "ellipse"])
+                .enum(["rectangle", "diamond", "ellipse", "sticky"])
                 .optional()
-                .describe("Node shape (default rectangle)"),
+                .describe(
+                  "Node shape (default rectangle). `sticky` = a whiteboard " +
+                    "post-it (yellow with a drop shadow) — use for brainstorm/" +
+                    "board-style nodes.",
+                ),
               group: z
                 .string()
                 .max(200)
                 .optional()
-                .describe("Optional group id (reserved for grouping)"),
+                .describe(
+                  "Optional id of a group this node belongs to; the group renders " +
+                    "as a labeled frame boundary around its members (C4 boundary / " +
+                    "swimlane). Must match an entry in `groups`.",
+                ),
               strokeColor: z
                 .string()
                 .max(64)
@@ -189,12 +290,16 @@ const main = async () => {
                 .string()
                 .max(2000)
                 .optional()
-                .describe("Optional group label"),
+                .describe("Optional group label, shown as the frame title"),
             }),
           )
           .max(200)
           .optional()
-          .describe("Optional node groups (up to 200)"),
+          .describe(
+            "Optional groups: each renders as a labeled frame (boundary/container) " +
+              "wrapping the nodes that reference its id via `group` — use for C4 " +
+              "boundaries, bounded contexts, or swimlanes (up to 200).",
+          ),
         direction: z
           .enum(["TB", "BT", "LR", "RL"])
           .optional()
@@ -225,6 +330,60 @@ const main = async () => {
           `Created diagram "${
             title || "Untitled diagram"
           }" (${elementCount} elements).\n${result.url}`,
+        );
+      } catch (error) {
+        return { ...text(formatError(error)), isError: true };
+      }
+    },
+  );
+
+  server.registerTool(
+    "kindraw_sync_scene",
+    {
+      description:
+        "Regenerate an EXISTING drawing canvas from a structured DiagramSpec — " +
+        "the docs-as-code primitive for diagrams. Deterministic layout makes the " +
+        "result byte-stable, so an agent (or CI) keeps an architecture diagram in " +
+        "lockstep with the code and it stops rotting. Pass `check: true` to DETECT " +
+        "drift (a stale diagram) WITHOUT writing — the CI gate. WARNING: a " +
+        "non-check sync OVERWRITES the live canvas (the spec is the source of " +
+        "truth), including manual edits. Same node/edge/group/direction/engine " +
+        "shape as kindraw_create_scene.",
+      inputSchema: {
+        itemId: z
+          .string()
+          .max(200)
+          .describe(
+            "Id of the existing drawing to regenerate (for a hybrid, its drawing " +
+              "item id)",
+          ),
+        check: z
+          .boolean()
+          .optional()
+          .describe("Detect drift only — never writes (use as a CI gate)"),
+        ...sceneSpecShape,
+      },
+    },
+    async ({ itemId, check, nodes, edges, groups, direction, engine }) => {
+      try {
+        const { syncScene } = await import("@kindraw/client/scene");
+        const res = await syncScene(client, {
+          itemId,
+          spec: { nodes, edges, groups, direction, engine },
+          check,
+        });
+        if (check) {
+          return text(
+            res.unchanged
+              ? `In sync: "${itemId}" already matches the spec (${res.elementCount} elements).`
+              : `DRIFT: "${itemId}" differs from the spec (would regenerate ` +
+                  `${res.elementCount} elements). Run without check to update.`,
+          );
+        }
+        return text(
+          res.unchanged
+            ? `No change: "${itemId}" already matches the spec (${res.elementCount} elements).`
+            : `Regenerated "${itemId}" from the spec (${res.elementCount} elements).`,
         );
       } catch (error) {
         return { ...text(formatError(error)), isError: true };
@@ -297,8 +456,17 @@ const main = async () => {
                 z.object({
                   id: z.string().max(200),
                   label: z.string().max(2000),
-                  shape: z.enum(["rectangle", "diamond", "ellipse"]).optional(),
-                  group: z.string().max(200).optional(),
+                  shape: z
+                    .enum(["rectangle", "diamond", "ellipse", "sticky"])
+                    .optional(),
+                  group: z
+                    .string()
+                    .max(200)
+                    .optional()
+                    .describe(
+                      "Optional group id; renders as a labeled frame boundary " +
+                        "around members. Must match a `groups` entry.",
+                    ),
                   strokeColor: z.string().max(64).optional(),
                   backgroundColor: z.string().max(64).optional(),
                   linkToHeading: z
@@ -334,7 +502,11 @@ const main = async () => {
                 }),
               )
               .max(200)
-              .optional(),
+              .optional()
+              .describe(
+                "Optional groups: each renders as a labeled frame wrapping its " +
+                  "member nodes (C4 boundary / swimlane).",
+              ),
             direction: z.enum(["TB", "BT", "LR", "RL"]).optional(),
             engine: z.enum(["dagre", "elk"]).optional(),
           })
@@ -418,6 +590,142 @@ const main = async () => {
   );
 
   server.registerTool(
+    "kindraw_create_board",
+    {
+      description:
+        "Generate a complete ENGINEERING board (doc + linked canvas) from a typed " +
+        "payload — the 'describe a board, it materializes' tool. Pick a `type` and " +
+        "fill its fields; Kindraw emits a hybrid where every diagram node deep-links " +
+        "to its doc section (no doc↔canvas drift, by construction). Types: `adr` " +
+        "(Architecture Decision Record: context→decision→consequences + " +
+        "alternatives), `c4-context` (a system, its users and external systems in a " +
+        "labeled boundary frame), `sequence` (participants + ordered interactions). " +
+        "Use kindraw_list_boards to see them. Returns the hybrid URL.",
+      inputSchema: {
+        board: z.discriminatedUnion("type", [
+          z.object({
+            type: z.literal("adr"),
+            title: z.string().max(500).describe("ADR title"),
+            status: z
+              .string()
+              .max(100)
+              .optional()
+              .describe("e.g. Proposed / Accepted / Superseded"),
+            context: z.string().max(20000).describe("The forces at play"),
+            decision: z.string().max(20000).describe("What was decided"),
+            consequences: z
+              .string()
+              .max(20000)
+              .describe("Resulting trade-offs"),
+            alternatives: z
+              .array(
+                z.object({
+                  name: z.string().max(200),
+                  note: z.string().max(5000).optional(),
+                }),
+              )
+              .max(20)
+              .optional()
+              .describe("Options considered but not chosen"),
+          }),
+          z.object({
+            type: z.literal("c4-context"),
+            title: z.string().max(500),
+            system: z.object({
+              name: z.string().max(200),
+              description: z.string().max(5000).optional(),
+            }),
+            users: z
+              .array(
+                z.object({
+                  name: z.string().max(200),
+                  note: z.string().max(2000).optional(),
+                }),
+              )
+              .max(50)
+              .optional(),
+            externalSystems: z
+              .array(
+                z.object({
+                  name: z.string().max(200),
+                  note: z.string().max(2000).optional(),
+                }),
+              )
+              .max(50)
+              .optional(),
+          }),
+          z.object({
+            type: z.literal("sequence"),
+            title: z.string().max(500),
+            summary: z.string().max(5000).optional(),
+            participants: z
+              .array(
+                z.object({
+                  name: z.string().max(200),
+                  note: z.string().max(2000).optional(),
+                }),
+              )
+              .min(1)
+              .max(50),
+            steps: z
+              .array(
+                z.object({
+                  from: z.string().max(200),
+                  to: z.string().max(200),
+                  label: z.string().max(500),
+                }),
+              )
+              .max(200),
+          }),
+        ]),
+        folderId: z
+          .string()
+          .max(200)
+          .nullish()
+          .describe("Optional folder id to place the board in"),
+      },
+    },
+    async ({ board, folderId }) => {
+      try {
+        const { composeBoard } = await import("@kindraw/client/boards");
+        const { type, ...payload } = board;
+        const res = await composeBoard(client, { type, payload, folderId });
+        const drift = res.unmatchedHeadings.length
+          ? `\n⚠ Unmatched headings: ${res.unmatchedHeadings.join(", ")} ` +
+            `(linkable: ${res.linkableHeadings.join(", ")})`
+          : "";
+        return text(
+          `Created ${type} board "${board.title}" (${res.elementCount} elements, ` +
+            `${res.linksWired} section links wired).\n${res.url}${drift}`,
+        );
+      } catch (error) {
+        return { ...text(formatError(error)), isError: true };
+      }
+    },
+  );
+
+  server.registerTool(
+    "kindraw_list_boards",
+    {
+      description:
+        "List the available engineering board recipes for kindraw_create_board " +
+        "(type, title, and what each produces).",
+      inputSchema: {},
+    },
+    async () => {
+      try {
+        const { listBoards } = await import("@kindraw/client/boards");
+        const lines = listBoards()
+          .map((b) => `- ${b.type}: ${b.title} — ${b.summary}`)
+          .join("\n");
+        return text(`Available boards:\n${lines}`);
+      } catch (error) {
+        return { ...text(formatError(error)), isError: true };
+      }
+    },
+  );
+
+  server.registerTool(
     "kindraw_list_templates",
     {
       description:
@@ -484,7 +792,9 @@ const main = async () => {
             z.object({
               id: z.string().max(200),
               label: z.string().max(2000),
-              shape: z.enum(["rectangle", "diamond", "ellipse"]).optional(),
+              shape: z
+                .enum(["rectangle", "diamond", "ellipse", "sticky"])
+                .optional(),
             }),
           )
           .max(500)

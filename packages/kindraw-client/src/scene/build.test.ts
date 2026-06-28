@@ -281,6 +281,305 @@ describe("buildScene", () => {
   });
 });
 
+describe("stable arrow ids", () => {
+  // Arrow ids must be content-derived (`arrow-<from>-<to>`), not positional, so
+  // adding/removing one edge never reshuffles every other arrow's id — the
+  // precondition for diffable, regenerable scenes (round-trip + sync).
+  const arrowIds = (content: string): string[] =>
+    (JSON.parse(content).elements as Array<{ type: string; id: string }>)
+      .filter((e) => e.type === "arrow")
+      .map((e) => e.id);
+
+  it("derives arrow ids from endpoints (arrow-<from>-<to>)", async () => {
+    const { content } = await buildScene({
+      nodes: [
+        { id: "a", label: "A" },
+        { id: "b", label: "B" },
+        { id: "c", label: "C" },
+      ],
+      edges: [
+        { from: "a", to: "b" },
+        { from: "b", to: "c" },
+      ],
+    });
+    expect(arrowIds(content).sort()).toEqual(["arrow-a-b", "arrow-b-c"]);
+  });
+
+  it("keeps arrow ids stable when an unrelated edge is removed", async () => {
+    const nodes = [
+      { id: "a", label: "A" },
+      { id: "b", label: "B" },
+      { id: "c", label: "C" },
+    ];
+    const full = await buildScene({
+      nodes,
+      edges: [
+        { from: "a", to: "b" },
+        { from: "b", to: "c" },
+        { from: "c", to: "a" },
+      ],
+    });
+    const less = await buildScene({
+      nodes,
+      // dropped the MIDDLE edge (b→c); positional ids would shift c→a from
+      // arrow-2 to arrow-1. Content-derived ids stay put.
+      edges: [
+        { from: "a", to: "b" },
+        { from: "c", to: "a" },
+      ],
+    });
+    expect(arrowIds(less.content).sort()).toEqual(["arrow-a-b", "arrow-c-a"]);
+    const idsFull = new Set(arrowIds(full.content));
+    expect(idsFull.has("arrow-a-b")).toBe(true);
+    expect(idsFull.has("arrow-c-a")).toBe(true);
+  });
+
+  it("disambiguates parallel edges deterministically", async () => {
+    // Same endpoints, distinct label/style survive spec dedup and need
+    // distinct ids; the second collides on the base and gets a -2 suffix.
+    const { content } = await buildScene({
+      nodes: [
+        { id: "a", label: "A" },
+        { id: "b", label: "B" },
+      ],
+      edges: [
+        { from: "a", to: "b", label: "one" },
+        { from: "a", to: "b", label: "two", style: "dashed" },
+      ],
+    });
+    expect(arrowIds(content).sort()).toEqual(["arrow-a-b", "arrow-a-b-2"]);
+  });
+
+  it("disambiguates hyphen-ambiguous endpoint ids", async () => {
+    // 'a-b'→'c' and 'a'→'b-c' both base to arrow-a-b-c; the factory makes the
+    // second unique. (node ids have no charset restriction, so this is real.)
+    const { content } = await buildScene({
+      nodes: [
+        { id: "a-b", label: "AB" },
+        { id: "c", label: "C" },
+        { id: "a", label: "A" },
+        { id: "b-c", label: "BC" },
+      ],
+      edges: [
+        { from: "a-b", to: "c" },
+        { from: "a", to: "b-c" },
+      ],
+    });
+    expect(arrowIds(content).sort()).toEqual(["arrow-a-b-c", "arrow-a-b-c-2"]);
+  });
+
+  it("derives the bound-label id from the stable arrow id", async () => {
+    // Golden: canonicalizeBoundTextIds renames the edge label to
+    // `text-<containerId>`, so it must track the new content-derived arrow id.
+    const { content } = await buildScene({
+      nodes: [
+        { id: "a", label: "A" },
+        { id: "b", label: "B" },
+      ],
+      edges: [{ from: "a", to: "b", label: "calls" }],
+    });
+    const els = JSON.parse(content).elements as Array<{
+      type: string;
+      id: string;
+      containerId?: string;
+    }>;
+    const arrow = els.find((e) => e.type === "arrow");
+    expect(arrow?.id).toBe("arrow-a-b");
+    const label = els.find(
+      (e) => e.type === "text" && e.containerId === "arrow-a-b",
+    );
+    expect(label?.id).toBe("text-arrow-a-b");
+  });
+});
+
+describe("group frames", () => {
+  // DiagramGroups (validated today but visually dropped) must materialize as
+  // native Excalidraw frame elements wrapping their member nodes — the
+  // structural backbone for C4 boundaries / swimlanes / boards.
+  const byType = (content: string, type: string): Array<Record<string, any>> =>
+    (JSON.parse(content).elements as Array<Record<string, any>>).filter(
+      (e) => e.type === type,
+    );
+
+  it("emits a frame per non-empty group, sized to wrap its members", async () => {
+    const { content } = await buildScene({
+      nodes: [
+        { id: "a", label: "A", group: "g1" },
+        { id: "b", label: "B", group: "g1" },
+        { id: "c", label: "C" },
+      ],
+      edges: [{ from: "a", to: "b" }],
+      groups: [{ id: "g1", label: "Boundary" }],
+    });
+    const frames = byType(content, "frame");
+    expect(frames.length).toBe(1);
+    const frame = frames[0];
+    expect(frame.id).toBe("g1");
+    expect(frame.name).toBe("Boundary");
+    // Bounds enclose every member node box.
+    const members = (
+      JSON.parse(content).elements as Array<Record<string, any>>
+    ).filter((e) => e.id === "a" || e.id === "b");
+    expect(members.length).toBe(2);
+    for (const n of members) {
+      expect(frame.x).toBeLessThanOrEqual(n.x);
+      expect(frame.y).toBeLessThanOrEqual(n.y);
+      expect(frame.x + frame.width).toBeGreaterThanOrEqual(n.x + n.width);
+      expect(frame.y + frame.height).toBeGreaterThanOrEqual(n.y + n.height);
+    }
+  });
+
+  it("wires frameId onto member nodes only", async () => {
+    const { content } = await buildScene({
+      nodes: [
+        { id: "a", label: "A", group: "g1" },
+        { id: "b", label: "B", group: "g1" },
+        { id: "c", label: "C" },
+      ],
+      edges: [],
+      groups: [{ id: "g1" }],
+    });
+    const els = JSON.parse(content).elements as Array<Record<string, any>>;
+    expect(els.find((e) => e.id === "a")?.frameId).toBe("g1");
+    expect(els.find((e) => e.id === "b")?.frameId).toBe("g1");
+    expect(els.find((e) => e.id === "c")?.frameId ?? null).toBeNull();
+  });
+
+  it("places frame elements LAST (after their children)", async () => {
+    const { content } = await buildScene({
+      nodes: [
+        { id: "a", label: "A", group: "g1" },
+        { id: "b", label: "B", group: "g1" },
+      ],
+      edges: [],
+      groups: [{ id: "g1" }],
+    });
+    const els = JSON.parse(content).elements as Array<Record<string, any>>;
+    const frameIdx = els.findIndex((e) => e.type === "frame");
+    expect(frameIdx).toBeGreaterThan(els.findIndex((e) => e.id === "a"));
+    expect(frameIdx).toBeGreaterThan(els.findIndex((e) => e.id === "b"));
+  });
+
+  it("skips a declared-but-unused group (no empty frame)", async () => {
+    const { content } = await buildScene({
+      nodes: [{ id: "a", label: "A" }],
+      edges: [],
+      groups: [{ id: "empty", label: "Nobody" }],
+    });
+    expect(byType(content, "frame").length).toBe(0);
+  });
+
+  it("omits the frame name when the group has no label", async () => {
+    const { content } = await buildScene({
+      nodes: [{ id: "a", label: "A", group: "g1" }],
+      edges: [],
+      groups: [{ id: "g1" }],
+    });
+    expect(byType(content, "frame")[0]?.name ?? null).toBeNull();
+  });
+
+  it("appends no frame element for a group-less spec (back-compat)", async () => {
+    const { content } = await buildScene({
+      nodes: [
+        { id: "a", label: "A" },
+        { id: "b", label: "B" },
+      ],
+      edges: [{ from: "a", to: "b" }],
+    });
+    expect(byType(content, "frame").length).toBe(0);
+  });
+
+  it("is deterministic with groups", async () => {
+    const spec = {
+      nodes: [
+        { id: "a", label: "A", group: "g1" },
+        { id: "b", label: "B", group: "g1" },
+        { id: "c", label: "C", group: "g2" },
+      ],
+      edges: [{ from: "a", to: "c" }],
+      groups: [
+        { id: "g1", label: "One" },
+        { id: "g2", label: "Two" },
+      ],
+    };
+    const first = await buildScene(spec);
+    const second = await buildScene(spec);
+    expect(first.content).toBe(second.content);
+  });
+});
+
+describe("sticky shape", () => {
+  // A `sticky` node maps to a rectangle tagged customData.kindrawStickyNote —
+  // the exact convention the editor's createStickyNoteOnPointerDown uses, so
+  // renderElement.ts paints a post-it drop shadow and it round-trips through the
+  // real editor. Generated boards read as whiteboards, not flowcharts.
+  const find = (content: string, id: string): Record<string, any> | undefined =>
+    (JSON.parse(content).elements as Array<Record<string, any>>).find(
+      (e) => e.id === id,
+    );
+
+  it("emits a sticky as a rectangle tagged for the post-it renderer", async () => {
+    const { content } = await buildScene({
+      nodes: [
+        { id: "s", label: "Idea", shape: "sticky" },
+        { id: "b", label: "B" },
+      ],
+      edges: [],
+    });
+    const s = find(content, "s")!;
+    expect(s.type).toBe("rectangle");
+    expect(s.customData?.kindrawStickyNote).toBe(true);
+    expect(s.backgroundColor).toBe("#ffec99");
+    expect(s.strokeColor).toBe("transparent");
+    expect(s.fillStyle).toBe("solid");
+  });
+
+  it("lets a user color override the sticky defaults", async () => {
+    const { content } = await buildScene({
+      nodes: [
+        {
+          id: "s",
+          label: "Idea",
+          shape: "sticky",
+          backgroundColor: "#a5d8ff",
+          strokeColor: "#1971c2",
+        },
+      ],
+      edges: [],
+    });
+    const s = find(content, "s")!;
+    expect(s.backgroundColor).toBe("#a5d8ff");
+    expect(s.strokeColor).toBe("#1971c2");
+    expect(s.customData?.kindrawStickyNote).toBe(true);
+  });
+
+  it("binds an arrow to a sticky border-to-border", async () => {
+    const { content } = await buildScene({
+      nodes: [
+        { id: "s", label: "Note", shape: "sticky" },
+        { id: "b", label: "B" },
+      ],
+      edges: [{ from: "s", to: "b" }],
+    });
+    const els = JSON.parse(content).elements as Array<Record<string, any>>;
+    const arrow = els.find((e) => e.type === "arrow")!;
+    const ids = new Set(els.map((e) => e.id));
+    expect(ids.has(arrow.startBinding.elementId)).toBe(true);
+    expect(ids.has(arrow.endBinding.elementId)).toBe(true);
+    expect(arrow.points.length).toBe(2);
+  });
+
+  it("floors a sticky to a note-like minimum size", async () => {
+    const { content } = await buildScene({
+      nodes: [{ id: "s", label: "x", shape: "sticky" }],
+      edges: [],
+    });
+    const s = find(content, "s")!;
+    expect(s.width).toBeGreaterThanOrEqual(120);
+    expect(s.height).toBeGreaterThanOrEqual(120);
+  });
+});
+
 describe("buildScene additive inputs (templateElements + files + iconImages)", () => {
   it("prepends templateElements and merges files + iconImages into the envelope", async () => {
     const { content } = await buildScene(

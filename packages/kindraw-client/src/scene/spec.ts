@@ -3,7 +3,10 @@
 // Excalidraw's internal element shape. Claude (the MCP client) composes one of
 // these; the builder turns it into a laid-out Excalidraw scene.
 
-export type NodeShape = "rectangle" | "diamond" | "ellipse";
+// "sticky" is a whiteboard-native post-it: a rectangle tagged
+// customData.kindrawStickyNote so the editor paints a drop shadow (and it
+// round-trips through stock Excalidraw as a normal rectangle).
+export type NodeShape = "rectangle" | "diamond" | "ellipse" | "sticky";
 
 export type Direction = "TB" | "BT" | "LR" | "RL";
 
@@ -64,6 +67,7 @@ const VALID_SHAPES: ReadonlySet<string> = new Set([
   "rectangle",
   "diamond",
   "ellipse",
+  "sticky",
 ]);
 const VALID_DIRECTIONS: ReadonlySet<string> = new Set(["TB", "BT", "LR", "RL"]);
 const VALID_EDGE_STYLES: ReadonlySet<string> = new Set([
@@ -250,6 +254,16 @@ export const validateDiagramSpec = (raw: unknown): NormalizedSpec => {
           `"tpl-" or "icon-" (reserved for generated elements).`,
       );
     }
+    // Group ids become frame element ids, sharing the node id namespace. A
+    // collision would make the frame and the node fight for the same element id
+    // (convertToExcalidrawElements only console.errors a dup id, then silently
+    // drops one). Reject it up front so frame emission is always safe.
+    if (groupIds.has(node.id)) {
+      throw new Error(
+        `Node id "${node.id}" collides with a group id ` +
+          `(group ids become frame element ids).`,
+      );
+    }
     if (ids.has(node.id)) {
       throw new Error(`Duplicate node id: "${node.id}".`);
     }
@@ -266,7 +280,7 @@ export const validateDiagramSpec = (raw: unknown): NormalizedSpec => {
     if (node.shape !== undefined && !VALID_SHAPES.has(node.shape)) {
       throw new Error(
         `Node "${node.id}" has invalid shape "${node.shape}". ` +
-          `Allowed: rectangle, diamond, ellipse.`,
+          `Allowed: rectangle, diamond, ellipse, sticky.`,
       );
     }
     if (node.group !== undefined) {

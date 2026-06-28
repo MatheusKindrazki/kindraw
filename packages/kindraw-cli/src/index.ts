@@ -2,6 +2,7 @@ import { KindrawApiError } from "@kindraw/client";
 
 import { login, logout } from "./commands/login.js";
 import { generate } from "./commands/generate.js";
+import { sync } from "./commands/sync.js";
 import { docCreate } from "./commands/doc.js";
 import { hybridCreate } from "./commands/hybrid.js";
 import { templatesList, templatesApply } from "./commands/templates.js";
@@ -17,6 +18,8 @@ Usage:
   kindraw generate --mermaid <file|->   Create a drawing from a Mermaid diagram
                    --spec <file|->      ...or from a structured node/edge spec
                   [--title <title>]
+  kindraw sync <id> --spec <file|->     Regenerate a drawing from a spec
+                  [--check] [--json]    (--check: detect drift, exit 1, no write)
   kindraw doc create --md <file|->      Create a markdown doc
                     --title <title>
                    [--folder <id>]
@@ -84,6 +87,13 @@ const main = async () => {
         mermaid: str(flags.mermaid),
         spec: str(flags.spec),
         title: str(flags.title),
+      });
+    case "sync":
+      return sync({
+        itemId: sub,
+        spec: str(flags.spec),
+        check: flags.check === true,
+        json: flags.json === true,
       });
     case "doc": {
       if (sub === "create") {
