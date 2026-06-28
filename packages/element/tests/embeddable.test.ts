@@ -231,3 +231,68 @@ describe("Google Drive video embedding", () => {
     ).toBe(true);
   });
 });
+
+describe("engineering link-card embeds (GitHub/GitLab/Linear/Jira)", () => {
+  const srcdocOf = (url: string): string => {
+    const r = getEmbedLink(url);
+    return r?.type === "document" ? r.srcdoc("light") : "";
+  };
+
+  it("validates the new card hosts as embeds", () => {
+    expect(
+      embeddableURLValidator(
+        "https://github.com/excalidraw/excalidraw/pull/42",
+        undefined,
+      ),
+    ).toBe(true);
+    expect(
+      embeddableURLValidator("https://acme.atlassian.net/browse/PROJ-5", undefined),
+    ).toBe(true);
+  });
+
+  it("renders a GitHub PR as a strictly-sandboxed, inert link card", () => {
+    const r = getEmbedLink("https://github.com/excalidraw/excalidraw/pull/42");
+    expect(r?.type).toBe("document");
+    expect(r?.sandbox?.allowSameOrigin).toBe(false);
+    const html = srcdocOf("https://github.com/excalidraw/excalidraw/pull/42");
+    expect(html).toContain("excalidraw/excalidraw");
+    expect(html).toContain("Pull Request #42");
+    // No remote content — the card is inert.
+    expect(html).not.toContain("<script");
+    expect(html).not.toContain("<iframe");
+  });
+
+  it("renders GitHub issue and blob (with line range) cards", () => {
+    expect(srcdocOf("https://github.com/a/b/issues/7")).toContain("Issue #7");
+    const blob = srcdocOf(
+      "https://github.com/a/b/blob/main/src/scene/build.ts#L10-L20",
+    );
+    expect(blob).toContain("build.ts");
+    expect(blob).toContain("L10-L20");
+  });
+
+  it("routes any other github.com URL to a card, not a dead iframe", () => {
+    const r = getEmbedLink("https://github.com/excalidraw/excalidraw");
+    expect(r?.type).toBe("document"); // NOT "generic"
+  });
+
+  it("escapes HTML so a hostile path cannot inject markup", () => {
+    const html = srcdocOf(
+      'https://github.com/a/b/blob/main/x"><img>evil.ts',
+    );
+    expect(html).not.toContain("<img>");
+    expect(html).toContain("&lt;img&gt;");
+  });
+
+  it("renders GitLab, Linear, and Jira cards", () => {
+    expect(srcdocOf("https://gitlab.com/group/proj/-/merge_requests/9")).toContain(
+      "Merge Request !9",
+    );
+    expect(srcdocOf("https://linear.app/acme/issue/ENG-123")).toContain(
+      "ENG-123",
+    );
+    expect(srcdocOf("https://acme.atlassian.net/browse/PROJ-5")).toContain(
+      "PROJ-5",
+    );
+  });
+});
