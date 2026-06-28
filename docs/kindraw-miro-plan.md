@@ -150,7 +150,7 @@ Pequenos primeiro, dependências respeitadas. `risk` = chance de regressão.
 - **Hoje:** `embeddable.ts:133` ALLOWED_DOMAINS só tem gist/stackblitz entre fontes de código.
 - **Abordagem:** tudo dentro de `embeddable.ts` — sem novo element type, sem render, sem fetch. Adicionar domínios a ALLOWED*DOMAINS (NÃO a ALLOW_SAME_ORIGIN = a garantia de sandbox estrito). Patterns RE* pra GitHub PR/issue/blob, GitLab MR/issue/snippet, Linear, Jira. Snippets GitLab = embed script gist-style; resto = **link card** estático (`type:"document"` srcdoc, theme-aware, sem remoto) que no SVG export degrada pra `<a>`. Metadata derivada de parsing de URL (zero rede); tudo escapado com `escapeHtml`.
 - **Edge case crítico:** URL github.com que não casa nenhum RE\_ → fall-through pra iframe genérico que o GitHub bloqueia (X-Frame-Options) → **embed morto**. _Mitigação:_ catch-all `RE_GH_GENERIC` roteando todo github.com restante pra link card.
-- **Risco:** med — broadening de ALLOWED_DOMAINS. _Mitigação:_ catch-all cards por host; cards sem script e fora de ALLOW_SAME_ORIGIN.
+- **Risco:** med — broadening de ALLOWED*DOMAINS. \_Mitigação:* catch-all cards por host; cards sem script e fora de ALLOW_SAME_ORIGIN.
 
 ### 7.3 Ids de seta estáveis · S · PR 2
 
@@ -163,7 +163,7 @@ Pequenos primeiro, dependências respeitadas. `risk` = chance de regressão.
 
 - **Hoje:** `/v1/ai/text-to-diagram` (ai.ts:34) cospe Mermaid cru → mermaid-to-excalidraw (layout não-determinístico), enquanto o caminho MCP usa o builder.
 - **Abordagem:** rodar `buildScene` **client-side** (browser já bundla @excalidraw/element + tem canvas DOM real). 3 peças: (1) worker troca prompt p/ envelope discriminado `{kind:"flow",spec}` ou `{kind:...,mermaid}` (worker continua fino, sem build); (2) **buildScene browser-safe** — tirar `node:module`/canvas do grafo de import, novo entry `@kindraw/client/scene/browser` que injeta provider DOM-canvas ou Fallback puro-JS; (3) client parseia envelope, `kind:flow` → validateDiagramSpec + buildScene browser, senão caminho Mermaid intacto.
-- **Decisão de paridade (ver §10):** node-canvas (MCP/CLI) vs DOM-canvas (web) → layouts **não** byte-idênticos, só "ambos parecem desenhados". Pra byte-idêntico, forçar `FallbackTextMetricsProvider` (puro-JS, AVG_CHAR_RATIO) em todas as superfícies. _Recomendado:_ fallback-everywhere, já que o WHY é "unificar".
+- **Decisão de paridade (ver §10):** node-canvas (MCP/CLI) vs DOM-canvas (web) → layouts **não** byte-idênticos, só "ambos parecem desenhados". Pra byte-idêntico, forçar `FallbackTextMetricsProvider` (puro-JS, AVG*CHAR_RATIO) em todas as superfícies. \_Recomendado:* fallback-everywhere, já que o WHY é "unificar".
 - **Riscos high:** (a) regressão na aba Mermaid publicada (vive em @excalidraw/excalidraw) → _só ADICIONAR branch flow, nunca tocar paths Mermaid, atrás de flag_; (b) import transitivo `node:module` no grafo browser quebra build Vite → _mover provider Node + lazy-import + teste jsdom asserta no-throw_.
 
 ### 7.5 Round-trip canvas → DiagramSpec commitável · M · PRs 9,10
