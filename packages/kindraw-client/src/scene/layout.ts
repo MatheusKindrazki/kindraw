@@ -4,7 +4,7 @@
 
 import dagre from "dagre";
 
-import { measureLabel } from "./textMetrics.js";
+import { measureLabel, measureSticky } from "./textMetrics.js";
 import type { NormalizedSpec } from "./spec.js";
 
 export type PlacedNode = {
@@ -42,7 +42,12 @@ const ORIGIN_MARGIN = 20;
 const measureAll = (spec: NormalizedSpec): Map<string, Size> => {
   const sized = new Map<string, Size>();
   for (const node of spec.nodes) {
-    sized.set(node.id, measureLabel(node.label, LABEL_FONT_SIZE));
+    sized.set(
+      node.id,
+      node.shape === "sticky"
+        ? measureSticky(node.label, LABEL_FONT_SIZE)
+        : measureLabel(node.label, LABEL_FONT_SIZE),
+    );
   }
   return sized;
 };

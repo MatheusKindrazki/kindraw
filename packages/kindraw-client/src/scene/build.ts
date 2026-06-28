@@ -18,7 +18,10 @@ import {
 
 import { reanchorArrows } from "../reanchor.js";
 import { layoutNodesAsync, type PlacedNode } from "./layout.js";
-import { NodeTextMetricsProvider } from "./textMetrics.js";
+import {
+  NodeTextMetricsProvider,
+  STICKY_NOTE_BACKGROUND,
+} from "./textMetrics.js";
 import {
   validateDiagramSpec,
   type DiagramSpec,
@@ -95,6 +98,28 @@ const toSkeleton = (
   const skeleton: Array<Record<string, unknown>> = [];
 
   for (const node of placed) {
+    // Sticky notes are rectangles tagged customData.kindrawStickyNote — the
+    // exact shape the editor's createStickyNoteOnPointerDown emits, so
+    // renderElement paints the post-it shadow and stock Excalidraw still sees a
+    // normal rectangle. Defaults match the editor; user colors override (??).
+    if (node.shape === "sticky") {
+      skeleton.push({
+        type: "rectangle",
+        id: node.id,
+        x: node.x,
+        y: node.y,
+        width: node.width,
+        height: node.height,
+        label: { text: node.label, fontSize: LABEL_FONT_SIZE },
+        strokeColor: node.strokeColor ?? "transparent",
+        backgroundColor: node.backgroundColor ?? STICKY_NOTE_BACKGROUND,
+        fillStyle: "solid",
+        roundness: { type: 3 },
+        customData: { kindrawStickyNote: true },
+        ...(node.link ? { link: node.link } : {}),
+      });
+      continue;
+    }
     skeleton.push({
       type: node.shape,
       id: node.id, // stable id → deterministic, and arrows bind by id

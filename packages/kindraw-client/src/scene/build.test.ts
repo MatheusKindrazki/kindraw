@@ -281,6 +281,78 @@ describe("buildScene", () => {
   });
 });
 
+describe("sticky shape", () => {
+  // A `sticky` node maps to a rectangle tagged customData.kindrawStickyNote —
+  // the exact convention the editor's createStickyNoteOnPointerDown uses, so
+  // renderElement.ts paints a post-it drop shadow and it round-trips through the
+  // real editor. Generated boards read as whiteboards, not flowcharts.
+  const find = (content: string, id: string): Record<string, any> | undefined =>
+    (JSON.parse(content).elements as Array<Record<string, any>>).find(
+      (e) => e.id === id,
+    );
+
+  it("emits a sticky as a rectangle tagged for the post-it renderer", async () => {
+    const { content } = await buildScene({
+      nodes: [
+        { id: "s", label: "Idea", shape: "sticky" },
+        { id: "b", label: "B" },
+      ],
+      edges: [],
+    });
+    const s = find(content, "s")!;
+    expect(s.type).toBe("rectangle");
+    expect(s.customData?.kindrawStickyNote).toBe(true);
+    expect(s.backgroundColor).toBe("#ffec99");
+    expect(s.strokeColor).toBe("transparent");
+    expect(s.fillStyle).toBe("solid");
+  });
+
+  it("lets a user color override the sticky defaults", async () => {
+    const { content } = await buildScene({
+      nodes: [
+        {
+          id: "s",
+          label: "Idea",
+          shape: "sticky",
+          backgroundColor: "#a5d8ff",
+          strokeColor: "#1971c2",
+        },
+      ],
+      edges: [],
+    });
+    const s = find(content, "s")!;
+    expect(s.backgroundColor).toBe("#a5d8ff");
+    expect(s.strokeColor).toBe("#1971c2");
+    expect(s.customData?.kindrawStickyNote).toBe(true);
+  });
+
+  it("binds an arrow to a sticky border-to-border", async () => {
+    const { content } = await buildScene({
+      nodes: [
+        { id: "s", label: "Note", shape: "sticky" },
+        { id: "b", label: "B" },
+      ],
+      edges: [{ from: "s", to: "b" }],
+    });
+    const els = JSON.parse(content).elements as Array<Record<string, any>>;
+    const arrow = els.find((e) => e.type === "arrow")!;
+    const ids = new Set(els.map((e) => e.id));
+    expect(ids.has(arrow.startBinding.elementId)).toBe(true);
+    expect(ids.has(arrow.endBinding.elementId)).toBe(true);
+    expect(arrow.points.length).toBe(2);
+  });
+
+  it("floors a sticky to a note-like minimum size", async () => {
+    const { content } = await buildScene({
+      nodes: [{ id: "s", label: "x", shape: "sticky" }],
+      edges: [],
+    });
+    const s = find(content, "s")!;
+    expect(s.width).toBeGreaterThanOrEqual(120);
+    expect(s.height).toBeGreaterThanOrEqual(120);
+  });
+});
+
 describe("buildScene additive inputs (templateElements + files + iconImages)", () => {
   it("prepends templateElements and merges files + iconImages into the envelope", async () => {
     const { content } = await buildScene(
