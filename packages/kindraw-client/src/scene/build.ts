@@ -107,16 +107,44 @@ const STROKE_STYLE = {
 // unrelated edge change never shifts any other arrow's id. `arrow-` stays a
 // reserved prefix (spec.ts), so these can't collide with user node ids, and
 // canonicalizeBoundTextIds derives the label id (`text-<arrowId>`) from this.
-const makeArrowIdFactory = (): ((from: string, to: string) => string) => {
+//
+// For parallel edges (same from/to), we use CONTENT-BASED disambiguation:
+// the suffix is derived from a stable signature of the edge (label, style)
+// rather than iteration order, so reordering parallel edges doesn't change ids.
+type Edge = { from: string; to: string; label?: string; style?: string };
+const makeArrowIdFactory = (): ((edge: Edge) => string) => {
   const used = new Set<string>();
-  return (from, to) => {
-    const base = `arrow-${from}-${to}`;
-    let candidate = base;
-    let n = 1;
-    while (used.has(candidate)) {
-      n += 1;
-      candidate = `${base}-${n}`;
+  const baseToCount = new Map<string, Map<string, number>>();
+
+  return (edge: Edge) => {
+    const base = `arrow-${edge.from}-${edge.to}`;
+
+    // Build a stable signature from edge content for parallel edge disambiguation
+    // This ensures that reordering edges with the same endpoints doesn't change ids
+    const signatureParts: string[] = [];
+    if (edge.label !== undefined) signatureParts.push(`label:${edge.label}`);
+    if (edge.style !== undefined && edge.style !== "solid") signatureParts.push(`style:${edge.style}`);
+    const signature = signatureParts.length > 0 ? signatureParts.join("|") : "";
+
+    // Get or create the counter map for this base
+    let counterMap = baseToCount.get(base);
+    if (!counterMap) {
+      counterMap = new Map<string, number>();
+      baseToCount.set(base, counterMap);
     }
+
+    // Check if we've seen this exact signature before for this base
+    let suffix = counterMap.get(signature);
+    if (suffix === undefined) {
+      // First time seeing this signature: assign next available number
+      // For empty signature (no label/style), we use 1 (no suffix in id)
+      // For non-empty signatures, we use 2, 3, etc. to avoid colliding with empty
+      const maxExisting = counterMap.size > 0 ? Math.max(...counterMap.values()) : 0;
+      suffix = signature.length === 0 ? 1 : maxExisting + 1;
+      counterMap.set(signature, suffix);
+    }
+
+    const candidate = suffix === 1 ? base : `${base}-${suffix}`;
     used.add(candidate);
     return candidate;
   };
@@ -175,7 +203,7 @@ const toSkeleton = (
   spec.edges.forEach((edge) => {
     skeleton.push({
       type: "arrow",
-      id: arrowId(edge.from, edge.to),
+      id: arrowId(edge),
       x: 0,
       y: 0,
       start: { id: edge.from },
