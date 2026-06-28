@@ -143,9 +143,13 @@ const main = async () => {
                 .max(2000)
                 .describe("Text shown inside the node"),
               shape: z
-                .enum(["rectangle", "diamond", "ellipse"])
+                .enum(["rectangle", "diamond", "ellipse", "sticky"])
                 .optional()
-                .describe("Node shape (default rectangle)"),
+                .describe(
+                  "Node shape (default rectangle). `sticky` = a whiteboard " +
+                    "post-it (yellow with a drop shadow) — use for brainstorm/" +
+                    "board-style nodes.",
+                ),
               group: z
                 .string()
                 .max(200)
@@ -308,7 +312,9 @@ const main = async () => {
                 z.object({
                   id: z.string().max(200),
                   label: z.string().max(2000),
-                  shape: z.enum(["rectangle", "diamond", "ellipse"]).optional(),
+                  shape: z
+                    .enum(["rectangle", "diamond", "ellipse", "sticky"])
+                    .optional(),
                   group: z
                     .string()
                     .max(200)
@@ -506,7 +512,9 @@ const main = async () => {
             z.object({
               id: z.string().max(200),
               label: z.string().max(2000),
-              shape: z.enum(["rectangle", "diamond", "ellipse"]).optional(),
+              shape: z
+                .enum(["rectangle", "diamond", "ellipse", "sticky"])
+                .optional(),
             }),
           )
           .max(500)

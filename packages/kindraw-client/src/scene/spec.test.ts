@@ -66,6 +66,15 @@ describe("validateDiagramSpec", () => {
     ).toThrow(/collides with a group id/i);
   });
 
+  it("accepts the sticky shape", () => {
+    expect(() =>
+      validateDiagramSpec({
+        nodes: [{ id: "a", label: "A", shape: "sticky" }],
+        edges: [],
+      }),
+    ).not.toThrow();
+  });
+
   it("returns a normalized spec with defaults applied", () => {
     const out = validateDiagramSpec({
       nodes: [{ id: "a", label: "A" }],
