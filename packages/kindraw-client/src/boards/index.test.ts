@@ -42,6 +42,41 @@ const SAMPLES: Record<BoardType, unknown> = {
       { from: "API", to: "Stripe", label: "charge" },
     ],
   },
+  runbook: {
+    title: "API 5xx spike",
+    alert: "5xx rate > 2% for 5 min.",
+    steps: [
+      { name: "Check dashboards", detail: "Latency + error panels." },
+      {
+        name: "Recent deploy?",
+        detail: "Look at the last hour.",
+        decision: true,
+      },
+      { name: "Roll back", detail: "Revert to the previous release." },
+      { name: "Verify recovery", detail: "Error rate back under 0.5%." },
+    ],
+  },
+  rfc: {
+    title: "Adopt feature flags",
+    summary: "Introduce a flag service.",
+    motivation: "We need safe progressive rollouts.",
+    proposal: "Use OpenFeature with a Cloudflare KV provider.",
+    alternatives: [{ name: "LaunchDarkly", note: "Cost." }],
+    risks: "Flag debt if not cleaned up.",
+    rollout: "Pilot one team, then expand.",
+  },
+  "data-model": {
+    title: "Billing schema",
+    entities: [
+      { name: "Customer", fields: ["id", "email"] },
+      { name: "Invoice", fields: ["id", "customer_id", "total"] },
+      { name: "LineItem", fields: ["id", "invoice_id", "amount"] },
+    ],
+    relationships: [
+      { from: "Customer", to: "Invoice", label: "1:N" },
+      { from: "Invoice", to: "LineItem", label: "1:N" },
+    ],
+  },
 };
 
 // The TOP-LEVEL, linkable heading set the SHARED parser would resolve against.
@@ -106,7 +141,14 @@ describe("board recipes", () => {
       listBoards()
         .map((b) => b.type)
         .sort(),
-    ).toEqual(["adr", "c4-context", "sequence"]);
+    ).toEqual([
+      "adr",
+      "c4-context",
+      "data-model",
+      "rfc",
+      "runbook",
+      "sequence",
+    ]);
   });
 });
 

@@ -21,7 +21,13 @@ import type {
 } from "../hybrid.js";
 import type { KindrawClient } from "../client.js";
 
-export type BoardType = "adr" | "c4-context" | "sequence";
+export type BoardType =
+  | "adr"
+  | "c4-context"
+  | "sequence"
+  | "runbook"
+  | "rfc"
+  | "data-model";
 
 export type BoardRecipeOutput = {
   title: string;
@@ -248,10 +254,164 @@ const sequence: BoardRecipe<SequencePayload> = {
   },
 };
 
+export type RunbookPayload = {
+  title: string;
+  alert: string;
+  steps: Array<{ name: string; detail?: string; decision?: boolean }>;
+};
+
+const runbook: BoardRecipe<RunbookPayload> = {
+  type: "runbook",
+  title: "On-call Runbook",
+  summary:
+    "An incident flow from the alert through ordered triage/mitigation steps (decisions as diamonds), each step deep-linked to its doc section.",
+  build: (p) => {
+    const doc = new DocBuilder();
+    const alertSec = doc.section("Alert", p.alert);
+    const nodes: HybridDiagramNode[] = [
+      {
+        id: "alert",
+        label: "Alert",
+        shape: "ellipse",
+        linkToHeading: alertSec,
+      },
+    ];
+    const edges: HybridDiagram["edges"] = [];
+    let prev = "alert";
+    p.steps.forEach((s, i) => {
+      const sec = doc.section(s.name, s.detail ?? "—");
+      const id = `step-${i}`;
+      nodes.push({
+        id,
+        label: s.name,
+        shape: s.decision ? "diamond" : "rectangle",
+        linkToHeading: sec,
+      });
+      edges.push({ from: prev, to: id });
+      prev = id;
+    });
+
+    return {
+      title: p.title,
+      markdown: doc.markdown(),
+      diagram: { nodes, edges, direction: "TB" },
+    };
+  },
+};
+
+export type RfcPayload = {
+  title: string;
+  summary: string;
+  motivation: string;
+  proposal: string;
+  alternatives?: Array<{ name: string; note?: string }>;
+  risks?: string;
+  rollout?: string;
+};
+
+const rfc: BoardRecipe<RfcPayload> = {
+  type: "rfc",
+  title: "RFC",
+  summary:
+    "Summary/Motivation/Proposal/Risks/Rollout doc with a proposal flow on the canvas and alternatives branching off, each node deep-linked.",
+  build: (p) => {
+    const doc = new DocBuilder();
+    doc.section("Summary", p.summary);
+    const mot = doc.section("Motivation", p.motivation);
+    const prop = doc.section("Proposal", p.proposal);
+    const nodes: HybridDiagramNode[] = [
+      { id: "mot", label: "Motivation", linkToHeading: mot },
+      { id: "prop", label: "Proposal", linkToHeading: prop },
+    ];
+    const edges: HybridDiagram["edges"] = [{ from: "mot", to: "prop" }];
+    let tail = "prop";
+    if (p.risks) {
+      const sec = doc.section("Risks", p.risks);
+      nodes.push({
+        id: "risk",
+        label: "Risks",
+        shape: "diamond",
+        linkToHeading: sec,
+      });
+      edges.push({ from: "prop", to: "risk" });
+      tail = "risk";
+    }
+    if (p.rollout) {
+      const sec = doc.section("Rollout", p.rollout);
+      nodes.push({ id: "rollout", label: "Rollout", linkToHeading: sec });
+      edges.push({ from: tail, to: "rollout" });
+    }
+    (p.alternatives ?? []).forEach((alt, i) => {
+      const sec = doc.section(`Alternative: ${alt.name}`, alt.note ?? "—");
+      nodes.push({
+        id: `alt-${i}`,
+        label: alt.name,
+        shape: "diamond",
+        linkToHeading: sec,
+      });
+      edges.push({ from: "prop", to: `alt-${i}`, style: "dashed" });
+    });
+
+    return {
+      title: p.title,
+      markdown: doc.markdown(),
+      diagram: { nodes, edges, direction: "TB" },
+    };
+  },
+};
+
+export type DataModelPayload = {
+  title: string;
+  entities: Array<{ name: string; fields?: string[]; note?: string }>;
+  relationships?: Array<{ from: string; to: string; label?: string }>;
+};
+
+const dataModel: BoardRecipe<DataModelPayload> = {
+  type: "data-model",
+  title: "Data Model / ERD",
+  summary:
+    "Entities as boxes with their fields documented per section, connected by cardinality-labeled relationship edges (LR).",
+  build: (p) => {
+    const doc = new DocBuilder();
+    const idByName = new Map<string, string>();
+    const nodes: HybridDiagramNode[] = p.entities.map((e, i) => {
+      const id = `ent-${i}`;
+      idByName.set(e.name, id);
+      const fields = e.fields?.length
+        ? e.fields.map((f) => `- ${f}`).join("\n")
+        : "";
+      const body = [fields, e.note].filter(Boolean).join("\n\n") || "—";
+      const sec = doc.section(e.name, body);
+      return { id, label: e.name, linkToHeading: sec };
+    });
+    const resolve = (name: string): string => {
+      const id = idByName.get(name);
+      if (!id) {
+        throw new Error(`Relationship references unknown entity "${name}".`);
+      }
+      return id;
+    };
+    const edges = (p.relationships ?? []).map((r) => ({
+      from: resolve(r.from),
+      to: resolve(r.to),
+      ...(r.label ? { label: r.label } : {}),
+    }));
+
+    return {
+      title: p.title,
+      markdown: doc.markdown(),
+      diagram: { nodes, edges, direction: "LR" },
+    };
+  },
+};
+
 export const BOARD_RECIPES: Record<BoardType, BoardRecipe<never>> = {
   adr,
   "c4-context": c4Context,
   sequence,
+  runbook,
+  rfc,
+  "data-model": dataModel,
 };
 
 export const listBoards = (): Array<{
