@@ -599,7 +599,10 @@ const main = async () => {
         "to its doc section (no doc↔canvas drift, by construction). Types: `adr` " +
         "(Architecture Decision Record: context→decision→consequences + " +
         "alternatives), `c4-context` (a system, its users and external systems in a " +
-        "labeled boundary frame), `sequence` (participants + ordered interactions). " +
+        "labeled boundary frame), `sequence` (participants + ordered interactions), " +
+        "`runbook` (incident flow: alert → triage/mitigation steps, decisions as " +
+        "diamonds), `rfc` (summary/motivation/proposal/risks/rollout + proposal " +
+        "flow), `data-model` (entities with fields + cardinality-labeled relations). " +
         "Use kindraw_list_boards to see them. Returns the hybrid URL.",
       inputSchema: {
         board: z.discriminatedUnion("type", [
@@ -676,6 +679,66 @@ const main = async () => {
                 }),
               )
               .max(200),
+          }),
+          z.object({
+            type: z.literal("runbook"),
+            title: z.string().max(500),
+            alert: z.string().max(5000).describe("The alerting condition"),
+            steps: z
+              .array(
+                z.object({
+                  name: z.string().max(200),
+                  detail: z.string().max(5000).optional(),
+                  decision: z
+                    .boolean()
+                    .optional()
+                    .describe("Render as a decision diamond"),
+                }),
+              )
+              .min(1)
+              .max(50),
+          }),
+          z.object({
+            type: z.literal("rfc"),
+            title: z.string().max(500),
+            summary: z.string().max(20000),
+            motivation: z.string().max(20000),
+            proposal: z.string().max(20000),
+            alternatives: z
+              .array(
+                z.object({
+                  name: z.string().max(200),
+                  note: z.string().max(5000).optional(),
+                }),
+              )
+              .max(20)
+              .optional(),
+            risks: z.string().max(20000).optional(),
+            rollout: z.string().max(20000).optional(),
+          }),
+          z.object({
+            type: z.literal("data-model"),
+            title: z.string().max(500),
+            entities: z
+              .array(
+                z.object({
+                  name: z.string().max(200),
+                  fields: z.array(z.string().max(200)).max(100).optional(),
+                  note: z.string().max(5000).optional(),
+                }),
+              )
+              .min(1)
+              .max(100),
+            relationships: z
+              .array(
+                z.object({
+                  from: z.string().max(200),
+                  to: z.string().max(200),
+                  label: z.string().max(500).optional(),
+                }),
+              )
+              .max(400)
+              .optional(),
           }),
         ]),
         folderId: z
