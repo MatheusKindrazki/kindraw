@@ -31,6 +31,44 @@ const ACTIONS: ReadonlyArray<{
   },
 ];
 
+type MarkdownSerializerLike = { serialize: (node: unknown) => string };
+
+// Serializa a SELEÇÃO como Markdown (preservando negrito, títulos, listas,
+// links…), não como texto puro. Sem isso a I.A nunca vê a formatação e devolve
+// texto cru, achatando o estilo. Embrulha conteúdo inline (seleção parcial de um
+// bloco) num parágrafo para o doc node ser válido no schema.
+const getSelectionMarkdown = (editor: Editor): string => {
+  const { state } = editor;
+  const { from, to } = state.selection;
+  if (from === to) {
+    return "";
+  }
+
+  const fallback = () => state.doc.textBetween(from, to, "\n").trim();
+
+  const serializer = (
+    editor.storage as { markdown?: { serializer?: MarkdownSerializerLike } }
+  ).markdown?.serializer;
+  if (!serializer) {
+    return fallback();
+  }
+
+  try {
+    const { schema } = state;
+    const slice = state.doc.slice(from, to);
+    const first = slice.content.firstChild;
+    const docNode =
+      first && first.isInline
+        ? schema.node("doc", null, [
+            schema.node("paragraph", null, slice.content),
+          ])
+        : schema.node("doc", null, slice.content);
+    return serializer.serialize(docNode).trim() || fallback();
+  } catch {
+    return fallback();
+  }
+};
+
 // Botão "✨ AI" do BubbleMenu: reescreve o trecho selecionado no lugar,
 // via o endpoint de writing-assistant (GLM-4.7). Captura a seleção ANTES de
 // qualquer prompt/await, então a substituição usa posições estáveis mesmo que
@@ -46,7 +84,7 @@ export const RichTextAiMenu = ({ editor }: { editor: Editor }) => {
     promptKey?: "kindraw.docAI.tonePrompt" | "kindraw.docAI.translatePrompt",
   ) => {
     const { from, to } = editor.state.selection;
-    const text = editor.state.doc.textBetween(from, to, "\n").trim();
+    const text = getSelectionMarkdown(editor);
     if (!text) {
       setOpen(false);
       return;

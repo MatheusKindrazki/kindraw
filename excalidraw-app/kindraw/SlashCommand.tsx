@@ -128,8 +128,14 @@ export const getSlashCommands = (): SlashCommandItem[] => [
         editor.chain().focus().deleteRange(range).run();
         return;
       }
-      // Contexto: documento até aqui (limitado), para "continuar" com coerência.
-      const context = editor.state.doc.textContent.slice(0, 4000);
+      // Contexto: documento até aqui em Markdown (limitado), para "continuar"
+      // com coerência de conteúdo E de formatação.
+      const markdownStorage = (
+        editor.storage as { markdown?: { getMarkdown?: () => string } }
+      ).markdown;
+      const context = (
+        markdownStorage?.getMarkdown?.() ?? editor.state.doc.textContent
+      ).slice(0, 4000);
       const placeholder = t("kindraw.docAI.generating");
       editor.chain().focus().deleteRange(range).insertContent(placeholder).run();
       // Fim do placeholder = cursor atual após a inserção.
