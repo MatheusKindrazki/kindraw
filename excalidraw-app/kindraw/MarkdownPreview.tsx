@@ -148,6 +148,41 @@ const InlineLink = ({
   );
 };
 
+// IDs únicos e estáveis para o mermaid.render (evita Math.random).
+let mermaidRenderSeq = 0;
+
+// Fallback para diagramas que o mermaid-to-excalidraw NÃO converte em elementos
+// nativos (stateDiagram, gantt, pie, erDiagram, journey, mindmap…): renderiza o
+// SVG do próprio mermaid inline. Diferente do caminho excalidraw (que rasteriza
+// pra <canvas> e QUEBRA quando o SVG usa <foreignObject> de labels HTML), o SVG
+// inline no DOM renderiza qualquer tipo. `<br/>` vira espaço porque com
+// htmlLabels desligado (securityLevel strict) o mermaid não interpreta HTML.
+const renderMermaidInlineSvg = async (
+  container: HTMLElement,
+  definition: string,
+) => {
+  const mermaid = (await import("mermaid")).default;
+  mermaid.initialize({
+    startOnLoad: false,
+    securityLevel: "strict",
+    theme: "neutral",
+    suppressErrorRendering: true,
+  });
+  mermaidRenderSeq += 1;
+  const normalized = definition.replace(/<br\s*\/?>/gi, " ");
+  const { svg } = await mermaid.render(
+    `kindraw-mermaid-${mermaidRenderSeq}`,
+    normalized,
+  );
+  container.innerHTML = svg;
+  const svgEl = container.querySelector("svg");
+  if (svgEl) {
+    svgEl.removeAttribute("height");
+    svgEl.style.maxWidth = "100%";
+    svgEl.style.height = "auto";
+  }
+};
+
 const MermaidBlock = ({ definition }: { definition: string }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const [error, setError] = useState<string | null>(null);
@@ -182,6 +217,18 @@ const MermaidBlock = ({ definition }: { definition: string }) => {
           );
         }
 
+        // Tipos não suportados pelo mermaid-to-excalidraw (stateDiagram, gantt,
+        // pie, erDiagram…) voltam como um elemento de IMAGEM (SVG rasterizado),
+        // que quebra ao virar <canvas> quando usa <foreignObject>. Nesses casos
+        // renderizamos o SVG do mermaid inline, que suporta qualquer tipo.
+        const isGraphImage = parsed.elements.some(
+          (element) => (element as { type?: string }).type === "image",
+        );
+        if (isGraphImage) {
+          await renderMermaidInlineSvg(container, definition);
+          return;
+        }
+
         const canvas = await exportToCanvas({
           elements: convertToExcalidrawElements(parsed.elements, {
             regenerateIds: true,
@@ -203,6 +250,18 @@ const MermaidBlock = ({ definition }: { definition: string }) => {
       } catch (error) {
         if (cancelled) {
           return;
+        }
+
+        // Última tentativa: SVG inline do mermaid (cobre parse-ok mas
+        // rasterização ruim, e parte dos erros do caminho excalidraw).
+        try {
+          await renderMermaidInlineSvg(container, definition);
+          if (!cancelled) {
+            setError(null);
+          }
+          return;
+        } catch {
+          // cai para a mensagem de erro abaixo
         }
 
         setError(
