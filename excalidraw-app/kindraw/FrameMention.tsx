@@ -1,5 +1,6 @@
 import { Extension } from "@tiptap/core";
 import { ReactRenderer } from "@tiptap/react";
+import { PluginKey } from "@tiptap/pm/state";
 import Suggestion from "@tiptap/suggestion";
 
 import { t } from "@excalidraw/excalidraw/i18n";
@@ -91,6 +92,11 @@ export type FrameMentionOptions = {
   getFrames: () => FrameRef[];
 };
 
+// pluginKey PRÓPRIA: sem isso o @tiptap/suggestion registra o plugin com a key
+// default ("suggestion$"), colidindo com o SlashCommand ("/") e derrubando o
+// editor ("Adding different instances of a keyed plugin").
+const frameMentionPluginKey = new PluginKey("frameMention");
+
 // Suggestion "@" que lista os frames do canvas. Espelha a mecânica do
 // SlashCommand ("/"), reusando o popup (SlashCommandMenu) e o posicionamento.
 export const FrameMention = Extension.create<FrameMentionOptions>({
@@ -107,6 +113,7 @@ export const FrameMention = Extension.create<FrameMentionOptions>({
 
     return [
       Suggestion<SlashCommandItem>({
+        pluginKey: frameMentionPluginKey,
         editor: this.editor,
         char: "@",
         startOfLine: false,
