@@ -1,5 +1,7 @@
 GITHUB_CLIENT_ID="replace-me"
 GITHUB_CLIENT_SECRET="replace-me"
+# Text-to-diagram: GLM Coding Plan (Z.ai). Base URL + model are set in wrangler.toml [vars].
+AI_TEXT_API_KEY="replace-me"
+# Vision (diagram-to-code) stays on OpenRouter.
 OPENROUTER_API_KEY="replace-me"
-OPENROUTER_TEXT_MODEL="minimax/minimax-m2.5"
 OPENROUTER_VISION_MODEL="minimax/minimax-01"

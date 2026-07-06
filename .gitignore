@@ -27,3 +27,7 @@ dev-dist
 html
 meta*.json
 .claude
+
+# Wrangler local secrets — never commit
+.dev.vars
+workers/api/.dev.vars

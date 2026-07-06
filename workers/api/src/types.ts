@@ -356,6 +356,15 @@ export type Env = {
   OPENROUTER_VISION_MODEL?: string;
   OPENROUTER_HTTP_REFERER?: string;
   OPENROUTER_APP_TITLE?: string;
+  // Per-role AI provider overrides. Text (text-to-diagram) and vision
+  // (diagram-to-code) can target different OpenAI-compatible providers; each
+  // falls back to the shared OPENROUTER_* config when unset.
+  AI_TEXT_API_KEY?: string;
+  AI_TEXT_BASE_URL?: string;
+  AI_TEXT_MODEL?: string;
+  AI_VISION_API_KEY?: string;
+  AI_VISION_BASE_URL?: string;
+  AI_VISION_MODEL?: string;
 };
 
 export type ApiTokenRecord = {

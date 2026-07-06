@@ -79,15 +79,47 @@ const getOpenRouterHeaders = (env: Env) => {
   return headers;
 };
 
-const createOpenRouterClient = (env: Env) => {
-  const apiKey = env.OPENROUTER_API_KEY?.trim();
-  if (!apiKey) {
-    throw new HttpError(503, "OpenRouter is not configured.");
+// Text and vision can point at independent OpenAI-compatible providers. Each
+// role resolves its own base URL / key / model, falling back to the shared
+// OPENROUTER_* config so existing single-provider deployments keep working.
+type AiProviderConfig = {
+  apiKey: string | undefined;
+  baseURL: string;
+  model: string;
+};
+
+const resolveTextProvider = (env: Env): AiProviderConfig => ({
+  apiKey: env.AI_TEXT_API_KEY?.trim() || env.OPENROUTER_API_KEY?.trim(),
+  baseURL:
+    env.AI_TEXT_BASE_URL?.trim() ||
+    env.OPENROUTER_BASE_URL?.trim() ||
+    DEFAULT_OPENROUTER_BASE_URL,
+  model:
+    env.AI_TEXT_MODEL?.trim() ||
+    env.OPENROUTER_TEXT_MODEL?.trim() ||
+    DEFAULT_TEXT_MODEL,
+});
+
+const resolveVisionProvider = (env: Env): AiProviderConfig => ({
+  apiKey: env.AI_VISION_API_KEY?.trim() || env.OPENROUTER_API_KEY?.trim(),
+  baseURL:
+    env.AI_VISION_BASE_URL?.trim() ||
+    env.OPENROUTER_BASE_URL?.trim() ||
+    DEFAULT_OPENROUTER_BASE_URL,
+  model:
+    env.AI_VISION_MODEL?.trim() ||
+    env.OPENROUTER_VISION_MODEL?.trim() ||
+    DEFAULT_VISION_MODEL,
+});
+
+const createProviderClient = (env: Env, provider: AiProviderConfig) => {
+  if (!provider.apiKey) {
+    throw new HttpError(503, "AI provider is not configured.");
   }
 
   return new OpenAI({
-    apiKey,
-    baseURL: env.OPENROUTER_BASE_URL?.trim() || DEFAULT_OPENROUTER_BASE_URL,
+    apiKey: provider.apiKey,
+    baseURL: provider.baseURL,
     defaultHeaders: getOpenRouterHeaders(env),
   });
 };
@@ -257,9 +289,10 @@ export const handleTextToDiagramChatStreaming = async (
   userId: string,
 ) => {
   const input = await readJson<TextToDiagramInput>(request);
-  const client = createOpenRouterClient(env);
+  const provider = resolveTextProvider(env);
+  const client = createProviderClient(env, provider);
   const stream = await client.chat.completions.create({
-    model: env.OPENROUTER_TEXT_MODEL?.trim() || DEFAULT_TEXT_MODEL,
+    model: provider.model,
     stream: true,
     temperature: 0.2,
     messages: buildTextToDiagramMessages(input),
@@ -324,9 +357,10 @@ export const handleDiagramToCodeGenerate = async (
   userId: string,
 ) => {
   const input = await readJson<DiagramToCodeInput>(request);
-  const client = createOpenRouterClient(env);
+  const provider = resolveVisionProvider(env);
+  const client = createProviderClient(env, provider);
   const completion = await client.chat.completions.create({
-    model: env.OPENROUTER_VISION_MODEL?.trim() || DEFAULT_VISION_MODEL,
+    model: provider.model,
     temperature: 0.2,
     messages: buildDiagramToCodeMessages(input),
     user: userId,

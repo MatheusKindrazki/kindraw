@@ -539,7 +539,7 @@ describe("routeRequest", () => {
     );
   });
 
-  it("returns 503 when OpenRouter is not configured", async () => {
+  it("returns 503 when the AI provider is not configured", async () => {
     mockStore.resolveSession.mockResolvedValue(authenticatedSession());
 
     const response = await worker.fetch(
@@ -565,7 +565,7 @@ describe("routeRequest", () => {
 
     expect(response.status).toBe(503);
     expect(await response.json()).toEqual({
-      error: "OpenRouter is not configured.",
+      error: "AI provider is not configured.",
       status: 503,
     });
   });

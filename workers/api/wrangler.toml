@@ -20,6 +20,11 @@ class_name = "KindrawCollaborationRoom"
 
 [vars]
 KINDRAW_APP_ORIGIN = "https://kindraw.dev"
+# Text-to-diagram uses the GLM Coding Plan (Z.ai, OpenAI-compatible). The API
+# key is a secret: `wrangler secret put AI_TEXT_API_KEY`. Vision (diagram-to-code)
+# stays on OpenRouter via the OPENROUTER_* secret.
+AI_TEXT_BASE_URL = "https://api.z.ai/api/coding/paas/v4"
+AI_TEXT_MODEL = "glm-4.7"
 
 [[routes]]
 pattern = "api.kindraw.dev"
