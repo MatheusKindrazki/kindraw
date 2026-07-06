@@ -5,6 +5,7 @@ import { convertToExcalidrawElements } from "@excalidraw/element";
 import { exportToCanvas } from "@excalidraw/utils";
 
 import { buildHybridPath } from "./router";
+import { parseFrameLink } from "./FrameMention";
 import { parseKindrawSectionLink } from "./hybridSections";
 
 import type { KindrawItem } from "./types";
@@ -35,6 +36,8 @@ type MarkdownPreviewProps = {
     href: string,
     resolvedHref: string | null,
   ) => string | null;
+  // Clicar numa menção de frame (chip kindraw://frame/<id>) foca o frame no canvas.
+  onFrameClick?: (id: string) => void;
 };
 
 export const parseMarkdownBlocks = (markdown: string) =>
@@ -116,6 +119,22 @@ const InlineLink = ({
   ) => string | null;
   children: React.ReactNode;
 }) => {
+  // Menção a frame do canvas: chip clicável. O clique é tratado pelo container
+  // (lê data-frame-id) para não precisar passar o callback por toda a recursão.
+  const frameId = parseFrameLink(href);
+  if (frameId) {
+    return (
+      <a
+        href="#"
+        className="kindraw-frame-mention"
+        data-frame-id={frameId}
+        title={title || undefined}
+      >
+        {children}
+      </a>
+    );
+  }
+
   const resolvedKindrawHref = resolveKindrawHref(href, itemsById);
   const internalHref = resolveInternalHref
     ? resolveInternalHref(href, resolvedKindrawHref)
@@ -550,6 +569,7 @@ export const MarkdownPreview = ({
   onNavigate,
   emptyMessage,
   resolveInternalHref,
+  onFrameClick,
 }: MarkdownPreviewProps) => {
   const tokens = useMemo(() => parseMarkdownBlocks(markdown), [markdown]);
 
@@ -561,8 +581,21 @@ export const MarkdownPreview = ({
     );
   }
 
+  const handleClick = onFrameClick
+    ? (event: React.MouseEvent<HTMLDivElement>) => {
+        const anchor = (event.target as HTMLElement | null)?.closest?.(
+          "[data-frame-id]",
+        );
+        const frameId = anchor?.getAttribute("data-frame-id");
+        if (frameId) {
+          event.preventDefault();
+          onFrameClick(frameId);
+        }
+      }
+    : undefined;
+
   return (
-    <div className="kindraw-markdown-preview">
+    <div className="kindraw-markdown-preview" onClick={handleClick}>
       {renderBlockTokens(tokens, itemsById, onNavigate, resolveInternalHref)}
     </div>
   );

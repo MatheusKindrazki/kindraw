@@ -35,6 +35,7 @@ import { LibraryIcon } from "@excalidraw/excalidraw/components/icons";
 
 import { AIComponents } from "../components/AI";
 import { AppSidebar } from "../components/AppSidebar";
+import { type FrameRef } from "./FrameMention";
 
 import { parseDrawingContent } from "./content";
 import { colorForUser, userHandle } from "./identity";
@@ -906,6 +907,66 @@ export const HybridEditorPage = ({
     [hybridId, sceneElements, setView],
   );
 
+  // Ponte para as menções "@" de frame no documento: lista os frames do canvas
+  // e dá foco (zoom + seleção) num frame ao clicar na menção. Objeto estável
+  // (lê excalidrawAPIRef no momento da chamada), então o editor pode capturá-lo
+  // uma vez sem ficar stale.
+  const frameMention = useMemo(
+    () => ({
+      getFrames: (): FrameRef[] => {
+        const api = excalidrawAPIRef.current;
+        if (!api) {
+          return [];
+        }
+        let counter = 0;
+        return api
+          .getSceneElements()
+          .filter(
+            (element: ExcalidrawElement) =>
+              element.type === "frame" && !element.isDeleted,
+          )
+          .map((element: ExcalidrawElement) => {
+            counter += 1;
+            const rawName =
+              "name" in element && typeof element.name === "string"
+                ? element.name.trim()
+                : "";
+            return { id: element.id, name: rawName || `Frame ${counter}` };
+          });
+      },
+      focusFrame: (id: string) => {
+        if (!excalidrawAPIRef.current) {
+          return;
+        }
+        // Garante o canvas visível (o layout pode estar em "doc").
+        void setView("both");
+        window.setTimeout(() => {
+          const api = excalidrawAPIRef.current;
+          if (!api) {
+            return;
+          }
+          const target = api
+            .getSceneElements()
+            .find((element: ExcalidrawElement) => element.id === id);
+          if (!target) {
+            return;
+          }
+          api.updateScene({
+            appState: { selectedElementIds: { [id]: true } },
+          });
+          window.setTimeout(() => {
+            api.scrollToContent(target, {
+              fitToContent: true,
+              animate: true,
+              duration: 500,
+            });
+          }, 60);
+        }, 80);
+      },
+    }),
+    [setView],
+  );
+
   // Esc cancela o modo vincular.
   useEffect(() => {
     if (!linkingSectionId) {
@@ -1110,6 +1171,7 @@ export const HybridEditorPage = ({
           void setView("canvas", sectionId);
         }}
         onStatusMessage={setStatusMessage}
+        frameMention={frameMention}
       />
     </section>
   );

@@ -9,12 +9,14 @@ import Collaboration from "@tiptap/extension-collaboration";
 import CollaborationCaret from "@tiptap/extension-collaboration-caret";
 import { Markdown } from "tiptap-markdown";
 
+import { FrameMention, parseFrameLink } from "./FrameMention";
 import { KindrawIcon } from "./icons";
 import { RichTextAiMenu } from "./RichTextAiMenu";
 import { SlashCommand } from "./SlashCommand";
 import { useKindrawI18n } from "./i18n";
 import { shouldSeed } from "./seedDecision";
 
+import type { FrameRef } from "./FrameMention";
 import type { Editor } from "@tiptap/react";
 import type { KindrawYjsProvider } from "./yjsProvider";
 
@@ -71,6 +73,12 @@ type RichTextEditorProps = {
   // ainda vazio; se o guest semeasse aqui, plantaria o snapshot REST estável
   // (ex.: só "# Payment Method") e colidiria com o conteúdo bom do dono.
   canSeed?: boolean;
+  // Ponte com o canvas (só no hybrid): habilita menções "@" a frames e o clique
+  // que dá foco no frame. Ausente = sem menção de frame (doc puro).
+  frameMention?: {
+    getFrames: () => FrameRef[];
+    focusFrame: (id: string) => void;
+  };
 };
 
 const MenuButton = ({
@@ -107,6 +115,7 @@ export const RichTextEditor = ({
   collab,
   seedMarkdown,
   canSeed = false,
+  frameMention,
 }: RichTextEditorProps) => {
   const { t } = useKindrawI18n();
   const effectivePlaceholder =
@@ -124,6 +133,9 @@ export const RichTextEditor = ({
       StarterKit.configure({
         link: {
           openOnClick: false,
+          // Permite os links internos kindraw:// (menções a frame, links de
+          // seção) sem serem descartados pelo sanitizador de protocolo.
+          protocols: ["kindraw"],
         },
         ...(isCollab ? { undoRedo: false } : {}),
       }),
@@ -133,6 +145,9 @@ export const RichTextEditor = ({
       TaskList,
       TaskItem.configure({ nested: true }),
       SlashCommand,
+      ...(frameMention
+        ? [FrameMention.configure({ getFrames: frameMention.getFrames })]
+        : []),
       Markdown.configure({
         html: false,
         linkify: true,
@@ -181,6 +196,19 @@ export const RichTextEditor = ({
       attributes: {
         class: "kindraw-rte__content",
         "aria-label": effectivePlaceholder,
+      },
+      // Clique numa menção de frame (link kindraw://frame/<id>) NÃO navega —
+      // dá foco no frame do canvas.
+      handleClick: (_view, _pos, event) => {
+        const anchor = (event.target as HTMLElement | null)?.closest?.("a");
+        const href = anchor?.getAttribute("href");
+        const frameId = href ? parseFrameLink(href) : null;
+        if (frameId && frameMention) {
+          event.preventDefault();
+          frameMention.focusFrame(frameId);
+          return true;
+        }
+        return false;
       },
       // Colar texto puro = interpretar como Markdown e inserir já formatado.
       handlePaste: (view, event) => {

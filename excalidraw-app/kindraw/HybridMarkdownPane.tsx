@@ -11,6 +11,7 @@ import {
   replaceHybridMarkdownSection,
 } from "./hybridSections";
 
+import type { FrameRef } from "./FrameMention";
 import type { KindrawItem } from "./types";
 import type { KindrawYjsProvider } from "./yjsProvider";
 
@@ -45,6 +46,11 @@ type HybridMarkdownPaneProps = {
   onAddSection: () => string | null;
   onFocusSectionOnCanvas: (sectionId: string) => void;
   onStatusMessage: (message: string) => void;
+  // Ponte com o canvas: menção "@" a frames + foco ao clicar. Ver HybridEditorPage.
+  frameMention?: {
+    getFrames: () => FrameRef[];
+    focusFrame: (id: string) => void;
+  };
 };
 
 const formatSectionNumber = (value: number) => String(value).padStart(2, "0");
@@ -67,6 +73,7 @@ export const HybridMarkdownPane = ({
   onAddSection,
   onFocusSectionOnCanvas,
   onStatusMessage,
+  frameMention,
 }: HybridMarkdownPaneProps) => {
   const { t } = useKindrawI18n();
   const sections = useMemo(
@@ -166,6 +173,7 @@ export const HybridMarkdownPane = ({
             canSeed={canSeed}
             seedMarkdown={markdown}
             value={markdown}
+            frameMention={frameMention}
           />
         </div>
       </div>
@@ -304,6 +312,7 @@ export const HybridMarkdownPane = ({
                   onChange={setDraftMarkdown}
                   placeholder={t("kindraw.hybrid.sectionEditorPlaceholder")}
                   value={draftMarkdown}
+                  frameMention={frameMention}
                 />
                 <div className="kindraw-hybrid-doc__editor-actions">
                   <button
@@ -335,6 +344,7 @@ export const HybridMarkdownPane = ({
                   itemsById={itemsById}
                   markdown={section.markdown}
                   onNavigate={onNavigate}
+                  onFrameClick={frameMention?.focusFrame}
                 />
               </div>
             )}

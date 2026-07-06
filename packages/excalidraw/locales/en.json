@@ -1313,6 +1313,9 @@
       "generating": "Writing…",
       "error": "AI request failed. Please try again."
     },
+    "frameMention": {
+      "hint": "Canvas frame"
+    },
     "invite": {
       "role": {
         "viewer": "viewer",

@@ -268,7 +268,7 @@ const filterCommands = (query: string): SlashCommandItem[] => {
 // Posiciona o popup ancorado ao cursor, flipando para cima se não couber
 // embaixo e grudando dentro da viewport. position: fixed = relativo à viewport,
 // então usamos rect.bottom/left diretamente.
-const positionPopup = (el: HTMLElement, rect: DOMRect | null) => {
+export const positionPopup = (el: HTMLElement, rect: DOMRect | null) => {
   if (!rect) {
     return;
   }

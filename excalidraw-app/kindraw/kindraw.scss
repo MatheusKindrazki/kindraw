@@ -2105,6 +2105,30 @@
   }
 }
 
+/* Menção a frame do canvas — chip clicável no editor (TipTap) e no preview */
+.kindraw-rte__content a[href^="kindraw://frame/"],
+.kindraw-frame-mention {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 3px;
+  padding: 0 6px;
+  border-radius: 6px;
+  background: var(--kd-amber-soft);
+  color: var(--kd-amber-deep);
+  font-weight: 600;
+  font-size: 0.92em;
+  text-decoration: none;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.12s ease, box-shadow 0.12s ease;
+}
+
+.kindraw-rte__content a[href^="kindraw://frame/"]:hover,
+.kindraw-frame-mention:hover {
+  background: var(--kd-amber-chip, var(--kd-amber-soft));
+  box-shadow: inset 0 0 0 1px var(--kd-amber-deep);
+}
+
 .kindraw-rte__surface {
   flex: 1;
   min-height: 0;
