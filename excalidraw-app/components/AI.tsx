@@ -4,6 +4,7 @@ import {
   getTextFromElements,
   MIME_TYPES,
   TTDDialog,
+  TTDDialogTrigger,
   TTDStreamFetch,
 } from "@excalidraw/excalidraw";
 import { getDataURL } from "@excalidraw/excalidraw/data/blob";
@@ -35,6 +36,11 @@ export const AIComponents = ({
 }) => {
   return (
     <>
+      {/* Injects the "Text to diagram" entry into the toolbar's Generate menu
+          (via the TTDDialogTrigger tunnel). The custom AppMainMenu dropped the
+          stock trigger, so without this the AI button never renders. */}
+      <TTDDialogTrigger />
+
       <DiagramToCodePlugin
         generate={async ({ frame, children }) => {
           const appState = excalidrawAPI.getAppState();
