@@ -1092,6 +1092,24 @@ const main = async () => {
         const { item, content } = await client.getItem(id);
         return text(`${item.title} (${item.kind}, ${item.id})\n\n${content}`);
       } catch (error) {
+        // A hybrid CONTAINER 404s here (it's not a plain item). Detect that and
+        // point the caller at the right tool instead of a bare 404.
+        if (error instanceof KindrawApiError && error.status === 404) {
+          try {
+            const { hybrid } = await client.getHybrid(id);
+            return {
+              ...text(
+                `"${id}" is a HYBRID ("${hybrid.title}"), not a plain item. ` +
+                  `Use kindraw_get_hybrid to resolve it, then kindraw_read_doc / ` +
+                  `kindraw_read_scene on docItemId=${hybrid.docItemId} / ` +
+                  `drawingItemId=${hybrid.drawingItemId}.`,
+              ),
+              isError: true,
+            };
+          } catch {
+            // Not a hybrid either — fall through to the original 404.
+          }
+        }
         return { ...text(formatError(error)), isError: true };
       }
     },
