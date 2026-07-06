@@ -50,15 +50,16 @@ SKILL.md unless the Kindraw MCP is configured in `~/.codex/config.toml`.
 
 ## Hermes
 
-Point Hermes' skill/knowledge loader at `skills/kindraw/SKILL.md` (canonical) —
-copy or symlink it into whatever directory Hermes scans for skills, e.g.:
+Hermes uses the **same skill format** as Claude Code — a `skills/<name>/SKILL.md`
+directory under `~/.hermes/skills/`. Symlink it:
 
 ```bash
-# adjust the target to Hermes' actual skills path
-ln -s "$(pwd)/skills/kindraw" <hermes-skills-dir>/kindraw
+ln -sfn "$(pwd)/skills/kindraw" ~/.hermes/skills/kindraw
 ```
 
-The content is runtime-agnostic markdown; only the *loading* mechanism differs.
+Verify with `ls ~/.hermes/skills/` (kindraw should appear alongside your other
+skills). The content is runtime-agnostic markdown; only the *loading* mechanism
+differs.
 
 ## Keeping it accurate
 
