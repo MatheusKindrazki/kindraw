@@ -60,6 +60,102 @@ const text = (value: string) => ({
   content: [{ type: "text" as const, text: value }],
 });
 
+type SceneElement = {
+  id: string;
+  type: string;
+  isDeleted?: boolean;
+  name?: string | null;
+  text?: string;
+  containerId?: string | null;
+  frameId?: string | null;
+  x?: number;
+  y?: number;
+  width?: number;
+  height?: number;
+  startBinding?: { elementId?: string } | null;
+  endBinding?: { elementId?: string } | null;
+};
+
+const NODE_TYPES = new Set(["rectangle", "ellipse", "diamond"]);
+
+// Turn a raw Excalidraw scene (the drawing item's content JSON, often multiple
+// MB) into a compact graph: frames, nodes ({id,label,frame}), edges
+// ({from,to,label}). This is what an agent needs to "see" the canvas without
+// parsing hundreds of elements by hand.
+const summarizeScene = (content: string, detail: "summary" | "full") => {
+  let scene: { elements?: SceneElement[] };
+  try {
+    scene = JSON.parse(content) as { elements?: SceneElement[] };
+  } catch {
+    throw new Error("Drawing content is not valid Excalidraw JSON.");
+  }
+  const elements = (scene.elements ?? []).filter(
+    (element) => element && !element.isDeleted,
+  );
+
+  // Labels are bound text elements: a text node whose containerId points at its
+  // shape/arrow. Build the container→text map once.
+  const textByContainer = new Map<string, string>();
+  for (const element of elements) {
+    if (
+      element.type === "text" &&
+      typeof element.containerId === "string" &&
+      element.containerId
+    ) {
+      textByContainer.set(element.containerId, element.text ?? "");
+    }
+  }
+  const labelFor = (element: SceneElement) =>
+    textByContainer.get(element.id) ?? "";
+
+  const frames = elements
+    .filter((element) => element.type === "frame")
+    .map((element) => ({
+      frameId: element.id,
+      name: element.name ?? null,
+    }));
+
+  const nodes = elements
+    .filter((element) => NODE_TYPES.has(element.type))
+    .map((element) => {
+      const node: Record<string, unknown> = {
+        id: element.id,
+        label: labelFor(element),
+        frame: element.frameId ?? null,
+      };
+      if (detail === "full") {
+        node.type = element.type;
+        node.x = element.x;
+        node.y = element.y;
+        node.width = element.width;
+        node.height = element.height;
+      }
+      return node;
+    });
+
+  const edges = elements
+    .filter((element) => element.type === "arrow")
+    .map((element) => {
+      const label = labelFor(element);
+      const edge: Record<string, unknown> = {
+        id: element.id,
+        from: element.startBinding?.elementId ?? null,
+        to: element.endBinding?.elementId ?? null,
+      };
+      if (label) {
+        edge.label = label;
+      }
+      return edge;
+    });
+
+  const counts: Record<string, number> = {};
+  for (const element of elements) {
+    counts[element.type] = (counts[element.type] ?? 0) + 1;
+  }
+
+  return { counts, frames, nodes, edges };
+};
+
 const main = async () => {
   const { token, baseUrl, appOrigin } = resolveCredentials();
   const client = new KindrawClient({ token, baseUrl, appOrigin });
@@ -1151,6 +1247,20 @@ const main = async () => {
     }
   };
 
+  // Same, for the canvas side: a hybrid id resolves to its drawing item; a 404
+  // means the id is already a drawing item id.
+  const resolveDrawingItemId = async (id: string): Promise<string> => {
+    try {
+      const { hybrid } = await client.getHybrid(id);
+      return hybrid.drawingItemId;
+    } catch (error) {
+      if (error instanceof KindrawApiError && error.status === 404) {
+        return id;
+      }
+      throw error;
+    }
+  };
+
   server.registerTool(
     "kindraw_get_hybrid",
     {
@@ -1258,6 +1368,59 @@ const main = async () => {
             2,
           ),
         );
+      } catch (error) {
+        return { ...text(formatError(error)), isError: true };
+      }
+    },
+  );
+
+  server.registerTool(
+    "kindraw_read_scene",
+    {
+      description:
+        "Read a hybrid's canvas (or a drawing item) as a STRUCTURED graph — " +
+        "frames, nodes ([{id,label,frame}]) and edges ([{from,to,label}]) — " +
+        "WITHOUT the raw multi-MB element JSON. Accepts a hybrid id (resolves " +
+        "the drawing automatically) or a drawing item id. detail 'summary' " +
+        "(default) or 'full' (adds node geometry x/y/width/height).",
+      inputSchema: {
+        id: z.string().describe("A hybrid id or a drawing item id"),
+        detail: z
+          .enum(["summary", "full"])
+          .optional()
+          .describe("summary (default) or full (adds node geometry)"),
+      },
+    },
+    async ({ id, detail }) => {
+      try {
+        const drawingItemId = await resolveDrawingItemId(id);
+        const { content } = await client.getItem(drawingItemId);
+        const scene = summarizeScene(content, detail ?? "summary");
+        return text(JSON.stringify({ drawingItemId, ...scene }, null, 2));
+      } catch (error) {
+        return { ...text(formatError(error)), isError: true };
+      }
+    },
+  );
+
+  server.registerTool(
+    "kindraw_list_frames",
+    {
+      description:
+        "List the frames on a hybrid's canvas as [{frameId, name}] — needed to " +
+        "write kindraw://frame/<frameId> mentions into the doc. Accepts a hybrid " +
+        "id (resolves the drawing) or a drawing item id. Empty list = the canvas " +
+        "has no frames yet.",
+      inputSchema: {
+        id: z.string().describe("A hybrid id or a drawing item id"),
+      },
+    },
+    async ({ id }) => {
+      try {
+        const drawingItemId = await resolveDrawingItemId(id);
+        const { content } = await client.getItem(drawingItemId);
+        const { frames } = summarizeScene(content, "summary");
+        return text(JSON.stringify({ drawingItemId, frames }, null, 2));
       } catch (error) {
         return { ...text(formatError(error)), isError: true };
       }
