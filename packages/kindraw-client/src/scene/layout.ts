@@ -193,7 +193,15 @@ export const layoutWithElk = async (
   spec: NormalizedSpec,
 ): Promise<PlacedNode[]> => {
   // elkjs is heavy; import it lazily so dagre-only callers don't pay for it.
-  const ELK = (await import("elkjs")).default;
+  // Use the SELF-CONTAINED bundle (elk.bundled.js), NOT the default "elkjs"
+  // entry: the default entry runs ELK in a Web Worker (via `web-worker`), whose
+  // GWT runtime crashes under Node with "Cannot set properties of undefined
+  // (setting 'stackTraceLimit')" on non-trivial graphs. The bundled build runs
+  // synchronously in-process and has no worker dependency. Typed as the main
+  // module (no d.ts ships for the subpath).
+  const ELK = (
+    (await import("elkjs/lib/elk.bundled.js")) as unknown as typeof import("elkjs")
+  ).default;
   const elk = new ELK();
 
   const sized = measureAll(spec);
@@ -261,7 +269,21 @@ export const layoutNodesAsync = async (
   spec: NormalizedSpec,
 ): Promise<PlacedNode[]> => {
   if (spec.engine === "elk") {
-    return layoutWithElk(spec);
+    try {
+      // `await` inside the try so a rejection is caught HERE (a bare `return`
+      // of the promise would escape this handler).
+      return await layoutWithElk(spec);
+    } catch (error) {
+      // elkjs ships a GWT-compiled runtime that can crash under Node on some
+      // graphs — e.g. "Cannot set properties of undefined (setting
+      // 'stackTraceLimit')", where GWT's own stack-trace capture blows up and
+      // MASKS the real layout error. Never let that take down the caller:
+      // surface the cause and fall back to dagre so the diagram still builds.
+      const msg = error instanceof Error ? error.message : String(error);
+      // eslint-disable-next-line no-console
+      console.warn(`elk layout failed (${msg}); falling back to dagre.`);
+      return layoutWithDagre(spec);
+    }
   }
   return layoutWithDagre(spec);
 };

@@ -81,6 +81,7 @@ const shared = {
     "@excalidraw/mermaid-to-excalidraw",
     "dagre",
     "elkjs",
+    "elkjs/*",
   ],
   define: {
     "import.meta.env.DEV": "false",
