@@ -33,6 +33,7 @@ import {
 } from "./api";
 import { LibraryIcon } from "@excalidraw/excalidraw/components/icons";
 
+import { AIComponents } from "../components/AI";
 import { AppSidebar } from "../components/AppSidebar";
 
 import { parseDrawingContent } from "./content";
@@ -1188,6 +1189,9 @@ export const HybridEditorPage = ({
             sectionId: activeSectionId,
           }}
         />
+        {/* AI no canvas do hybrid: Text-to-diagram (menu Generate) +
+            diagram-to-code (magic frame). Mesmo wiring do editor /draw. */}
+        {excalidrawAPI && <AIComponents excalidrawAPI={excalidrawAPI} />}
       </Excalidraw>
     </section>
   );
