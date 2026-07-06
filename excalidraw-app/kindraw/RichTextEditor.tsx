@@ -10,6 +10,7 @@ import CollaborationCaret from "@tiptap/extension-collaboration-caret";
 import { Markdown } from "tiptap-markdown";
 
 import { KindrawIcon } from "./icons";
+import { RichTextAiMenu } from "./RichTextAiMenu";
 import { SlashCommand } from "./SlashCommand";
 import { useKindrawI18n } from "./i18n";
 import { shouldSeed } from "./seedDecision";
@@ -286,6 +287,8 @@ export const RichTextEditor = ({
             className="kindraw-rte__bubble"
             options={{ placement: "top" }}
           >
+            <RichTextAiMenu editor={editor} />
+            <span className="kindraw-rte__menu-sep" />
             <MenuButton
               active={editor.isActive("bold")}
               label={t("kindraw.hybrid.format.bold")}

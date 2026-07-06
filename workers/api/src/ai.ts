@@ -351,6 +351,162 @@ const buildDiagramToCodeMessages = (
   ];
 };
 
+type DocAssistAction =
+  | "improve"
+  | "expand"
+  | "shorten"
+  | "fix"
+  | "tone"
+  | "translate"
+  | "continue"
+  | "custom";
+
+type DocAssistInput = {
+  action?: DocAssistAction;
+  // Selected text for rewrite actions (improve/expand/shorten/fix/tone/translate).
+  text?: string;
+  // Surrounding document text, used as context for continue/custom generation.
+  context?: string;
+  // Free-form parameter: tone name, target language, or a custom instruction.
+  instruction?: string;
+  title?: string;
+};
+
+const DOC_ASSIST_SYSTEM_PROMPT = `You are a writing assistant embedded in a Kindraw document editor.
+
+Return ONLY the resulting Markdown text — no code fences, no preamble, no explanations, and no surrounding quotes.
+Preserve the author's voice, meaning, and Markdown formatting conventions.
+Unless the task is explicitly a translation, always respond in the SAME language as the input text.
+Keep formatting clean and minimal; do not invent headings, lists, or sections that were not present or requested.
+When rewriting a passage, return a drop-in replacement for it — nothing more.`;
+
+const DOC_ASSIST_ACTIONS = new Set<DocAssistAction>([
+  "improve",
+  "expand",
+  "shorten",
+  "fix",
+  "tone",
+  "translate",
+  "continue",
+  "custom",
+]);
+
+const buildDocAssistMessages = (
+  input: DocAssistInput,
+): ChatCompletionMessageParam[] => {
+  const action = input.action;
+  if (!action || !DOC_ASSIST_ACTIONS.has(action)) {
+    throw new HttpError(400, "A valid writing action is required.");
+  }
+
+  const text = input.text?.trim() ?? "";
+  const context = input.context?.trim() ?? "";
+  const instruction = input.instruction?.trim() ?? "";
+  const title = input.title?.trim();
+
+  const rewriteActions: DocAssistAction[] = [
+    "improve",
+    "expand",
+    "shorten",
+    "fix",
+    "tone",
+    "translate",
+  ];
+  if (rewriteActions.includes(action) && !text) {
+    throw new HttpError(400, "Selected text is required for this action.");
+  }
+  if (action === "custom" && !instruction) {
+    throw new HttpError(400, "An instruction is required.");
+  }
+  if ((action === "tone" || action === "translate") && !instruction) {
+    throw new HttpError(
+      400,
+      action === "tone"
+        ? "A target tone is required."
+        : "A target language is required.",
+    );
+  }
+
+  const taskByAction: Record<DocAssistAction, string> = {
+    improve:
+      "Improve the writing of the passage below — clarity, flow, and word choice — without changing its meaning or language.",
+    expand:
+      "Expand the passage below with more detail and depth, keeping the same intent, tone, and language.",
+    shorten:
+      "Make the passage below more concise while preserving its key information, tone, and language.",
+    fix: "Fix spelling, grammar, and punctuation in the passage below. Change nothing else.",
+    tone: `Rewrite the passage below in a ${instruction} tone, keeping its meaning and language.`,
+    translate: `Translate the passage below into ${instruction}. Return only the translation.`,
+    continue:
+      "Continue writing naturally from where the document leaves off. Match the existing voice, tone, and language. Return only the new continuation text.",
+    custom: instruction,
+  };
+
+  const parts: string[] = [];
+  if (title) {
+    parts.push(`Document title: ${title}`);
+  }
+  parts.push(taskByAction[action]);
+
+  if (action === "continue") {
+    parts.push(
+      `Document so far:\n"""\n${context || text}\n"""`,
+    );
+  } else if (action === "custom") {
+    if (text) {
+      parts.push(`Selected passage:\n"""\n${text}\n"""`);
+    } else if (context) {
+      parts.push(`Document context:\n"""\n${context}\n"""`);
+    }
+  } else {
+    parts.push(`Passage:\n"""\n${text}\n"""`);
+  }
+
+  return [
+    {
+      role: "system",
+      content: DOC_ASSIST_SYSTEM_PROMPT,
+    },
+    {
+      role: "user",
+      content: parts.join("\n\n"),
+    },
+  ];
+};
+
+export const handleDocAssistStreaming = async (
+  request: Request,
+  env: Env,
+  userId: string,
+) => {
+  const input = await readJson<DocAssistInput>(request);
+  const messages = buildDocAssistMessages(input);
+  const provider = resolveTextProvider(env);
+  const client = createProviderClient(env, provider);
+  const stream = await client.chat.completions.create({
+    model: provider.model,
+    stream: true,
+    temperature: 0.4,
+    messages,
+    user: userId,
+    // GLM reasons by default (~40s latency); disable it for snappy inline
+    // edits. Non-standard field, cast to `{}` so it passes through at runtime
+    // while staying invisible to the SDK types; OpenAI-compatible providers
+    // that don't support it simply ignore it.
+    ...({ thinking: { type: "disabled" } } as {}),
+  });
+  const body = createSSEStream(stream);
+
+  return new Response(body, {
+    status: 200,
+    headers: {
+      "Content-Type": "text/event-stream; charset=utf-8",
+      "Cache-Control": "no-cache, no-transform",
+      Connection: "keep-alive",
+    },
+  });
+};
+
 export const handleDiagramToCodeGenerate = async (
   request: Request,
   env: Env,

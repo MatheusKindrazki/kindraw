@@ -2021,6 +2021,90 @@
   color: var(--kd-amber-deep);
 }
 
+/* Menu de I.A na seleção (BubbleMenu) */
+.kindraw-rte__ai {
+  position: relative;
+  display: inline-flex;
+}
+
+.kindraw-rte__ai-trigger {
+  gap: 5px;
+  color: var(--kd-amber-deep);
+}
+
+.kindraw-rte__ai-trigger:hover:not(:disabled) {
+  background: var(--kd-amber-soft);
+}
+
+.kindraw-rte__ai-trigger:disabled {
+  cursor: default;
+  opacity: 0.85;
+}
+
+.kindraw-rte__ai-label {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.kindraw-rte__ai-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  min-width: 188px;
+  padding: 4px;
+  border: 1px solid var(--kd-line);
+  border-radius: 10px;
+  background: var(--kd-surface);
+  box-shadow: var(--kd-shadow-popover);
+}
+
+.kindraw-rte__ai-item {
+  display: flex;
+  align-items: center;
+  padding: 7px 10px;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--kd-ink-soft);
+  font-family: var(--kd-font);
+  font-size: 13px;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+
+.kindraw-rte__ai-item:hover {
+  background: var(--kd-hover);
+}
+
+.kindraw-rte__ai-error {
+  padding: 7px 10px;
+  color: #c0392b;
+  font-family: var(--kd-font);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.kindraw-rte__ai-spinner {
+  display: inline-block;
+  width: 13px;
+  height: 13px;
+  border: 2px solid var(--kd-amber-soft);
+  border-top-color: var(--kd-amber-deep);
+  border-radius: 50%;
+  animation: kindraw-rte-ai-spin 0.7s linear infinite;
+}
+
+@keyframes kindraw-rte-ai-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .kindraw-rte__surface {
   flex: 1;
   min-height: 0;

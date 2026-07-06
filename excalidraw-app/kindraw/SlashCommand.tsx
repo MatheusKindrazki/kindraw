@@ -4,6 +4,7 @@ import Suggestion from "@tiptap/suggestion";
 
 import { t } from "@excalidraw/excalidraw/i18n";
 
+import { streamDocAssist } from "./docAssist";
 import { SlashCommandMenu } from "./SlashCommandMenu";
 
 import type { Editor, Range } from "@tiptap/core";
@@ -103,12 +104,58 @@ const ICONS = {
       <path d="M6.5 7.5h11M6.5 16.5h11" opacity="0.4" />
     </g>,
   ),
+  ai: svg(
+    <g>
+      <path d="M12 4l1.5 4.5L18 10l-4.5 1.5L12 16l-1.5-4.5L6 10l4.5-1.5z" />
+      <path d="M18.5 15.5l.6 1.8 1.8.7-1.8.6-.6 1.9-.7-1.9-1.8-.6 1.8-.7z" opacity="0.7" />
+    </g>,
+  ),
 };
 
 // Constrói a lista de comandos resolvendo as strings via t() no momento da
 // chamada (a cada abertura do menu, em filterCommands), refletindo o idioma
 // corrente sem precisar de hook reativo — o popup é recriado a cada "/".
 export const getSlashCommands = (): SlashCommandItem[] => [
+  {
+    id: "askAI",
+    title: t("kindraw.slashCommand.askAI.title"),
+    description: t("kindraw.slashCommand.askAI.description"),
+    keywords: ["ai", "ia", "assistente", "assistant", "gpt", "escrever", "write", "gerar"],
+    icon: ICONS.ai,
+    command: ({ editor, range }) => {
+      const instruction = window.prompt(t("kindraw.docAI.askPrompt"));
+      if (!instruction || !instruction.trim()) {
+        editor.chain().focus().deleteRange(range).run();
+        return;
+      }
+      // Contexto: documento até aqui (limitado), para "continuar" com coerência.
+      const context = editor.state.doc.textContent.slice(0, 4000);
+      const placeholder = t("kindraw.docAI.generating");
+      editor.chain().focus().deleteRange(range).insertContent(placeholder).run();
+      // Fim do placeholder = cursor atual após a inserção.
+      const start = range.from;
+      const stop = editor.state.selection.from;
+      void streamDocAssist({
+        action: "custom",
+        instruction: instruction.trim(),
+        context,
+      })
+        .then((result) => {
+          editor
+            .chain()
+            .focus()
+            .insertContentAt({ from: start, to: stop }, result || "")
+            .run();
+        })
+        .catch((error: unknown) => {
+          // Remove o placeholder e avisa o erro.
+          editor.chain().focus().insertContentAt({ from: start, to: stop }, "").run();
+          window.alert(
+            error instanceof Error ? error.message : t("kindraw.docAI.error"),
+          );
+        });
+    },
+  },
   {
     id: "heading1",
     title: t("kindraw.slashCommand.heading1.title"),

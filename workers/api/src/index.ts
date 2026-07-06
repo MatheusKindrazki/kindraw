@@ -2,6 +2,7 @@ import { createStore, HttpError } from "./store";
 import { KindrawCollaborationRoom } from "./collab";
 import {
   handleDiagramToCodeGenerate,
+  handleDocAssistStreaming,
   handleTextToDiagramChatStreaming,
 } from "./ai";
 import { handleIconSearch, handleIconSvg } from "./icons";
@@ -1147,6 +1148,11 @@ export const routeRequest = async (request: Request, env: Env) => {
   ) {
     const { auth } = await requireAuth(request, env);
     return handleDiagramToCodeGenerate(request, env, auth.user.id);
+  }
+
+  if (pathname === "/v1/ai/doc/assist" && request.method === "POST") {
+    const { auth } = await requireAuth(request, env);
+    return handleDocAssistStreaming(request, env, auth.user.id);
   }
 
   if (pathname === "/api/tree" && request.method === "GET") {

@@ -1292,7 +1292,26 @@
         "title": "Divider",
         "description": "Horizontal separator line"
       },
+      "askAI": {
+        "title": "Ask AI",
+        "description": "Write or generate with AI"
+      },
       "empty": "No commands"
+    },
+    "docAI": {
+      "menu": "AI",
+      "improve": "Improve writing",
+      "expand": "Expand",
+      "shorten": "Make shorter",
+      "fix": "Fix grammar",
+      "tone": "Change tone…",
+      "translate": "Translate…",
+      "ask": "Ask AI…",
+      "tonePrompt": "Desired tone (e.g. formal, casual, confident):",
+      "translatePrompt": "Target language (e.g. English, Português, Español):",
+      "askPrompt": "What should the AI write?",
+      "generating": "Writing…",
+      "error": "AI request failed. Please try again."
     },
     "invite": {
       "role": {
