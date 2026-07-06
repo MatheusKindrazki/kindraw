@@ -16,6 +16,7 @@ await build({
     "@kindraw/client/generate",
     "@kindraw/client/scene",
     "@kindraw/client/boards",
+    "@kindraw/client/sections",
     "@modelcontextprotocol/sdk",
     "zod",
   ],

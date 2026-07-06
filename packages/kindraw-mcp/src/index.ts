@@ -9,6 +9,7 @@ import {
   KindrawApiError,
   DEFAULT_API_BASE_URL,
 } from "@kindraw/client";
+import { parseHybridMarkdownSections } from "@kindraw/client/sections";
 import { z } from "zod";
 
 // Resolve the token from env, falling back to the CLI's saved config so a user
@@ -1110,6 +1111,135 @@ const main = async () => {
       try {
         const kind = await client.deleteAny(id);
         return text(`Deleted ${kind} ${id}.`);
+      } catch (error) {
+        return { ...text(formatError(error)), isError: true };
+      }
+    },
+  );
+
+  // Resolve an id that may be a HYBRID container OR a bare doc item id to the
+  // doc item id. A hybrid id resolves via getHybrid; a 404 there means the id is
+  // already a plain item id. (getItem 404s on a hybrid container — that's the
+  // whole reason this helper exists.)
+  const resolveDocItemId = async (id: string): Promise<string> => {
+    try {
+      const { hybrid } = await client.getHybrid(id);
+      return hybrid.docItemId;
+    } catch (error) {
+      if (error instanceof KindrawApiError && error.status === 404) {
+        return id;
+      }
+      throw error;
+    }
+  };
+
+  server.registerTool(
+    "kindraw_get_hybrid",
+    {
+      description:
+        "Resolve a hybrid container by id into its parts: title, the backing " +
+        "docItemId and drawingItemId (feed those to read_doc / read_scene / " +
+        "sync_scene), its app URL, and updatedAt. Use this when kindraw_get_item " +
+        "returns 404 for a hybrid id — a hybrid is a container, not a plain item.",
+      inputSchema: { id: z.string().describe("The hybrid id") },
+    },
+    async ({ id }) => {
+      try {
+        const { hybrid } = await client.getHybrid(id);
+        let updatedAt: string | undefined;
+        try {
+          const { items } = await client.listItems();
+          updatedAt = items.find((item) => item.id === hybrid.id)?.updatedAt;
+        } catch {
+          // updatedAt is best-effort — not in the hybrid response itself.
+        }
+        return text(
+          JSON.stringify(
+            {
+              id: hybrid.id,
+              title: hybrid.title,
+              docItemId: hybrid.docItemId,
+              drawingItemId: hybrid.drawingItemId,
+              url: client.hybridUrl(hybrid.id),
+              updatedAt,
+            },
+            null,
+            2,
+          ),
+        );
+      } catch (error) {
+        return { ...text(formatError(error)), isError: true };
+      }
+    },
+  );
+
+  server.registerTool(
+    "kindraw_read_doc",
+    {
+      description:
+        "Read the Markdown of a hybrid's doc side. Accepts EITHER a hybrid id " +
+        "(the doc item is resolved automatically) OR a bare doc item id. Returns " +
+        "the full markdown plus its sections ([{id, title}]) — a section id is " +
+        "what a kindraw://section/<id> link points at.",
+      inputSchema: {
+        id: z.string().describe("A hybrid id or a doc item id"),
+      },
+    },
+    async ({ id }) => {
+      try {
+        const docItemId = await resolveDocItemId(id);
+        const { item, content } = await client.getItem(docItemId);
+        const sections = parseHybridMarkdownSections(content).map((section) => ({
+          id: section.id,
+          title: section.title,
+        }));
+        return text(
+          JSON.stringify(
+            { docItemId, title: item.title, sections, markdown: content },
+            null,
+            2,
+          ),
+        );
+      } catch (error) {
+        return { ...text(formatError(error)), isError: true };
+      }
+    },
+  );
+
+  server.registerTool(
+    "kindraw_update_doc",
+    {
+      description:
+        "Replace the Markdown of a hybrid's doc side IN PLACE (PUT, not a new " +
+        "item). Accepts EITHER a hybrid id (doc item resolved automatically) OR " +
+        "a bare doc item id. Returns the PREVIOUS markdown (cheap undo for the " +
+        "agent) and the new section list.",
+      inputSchema: {
+        id: z.string().describe("A hybrid id or a doc item id"),
+        markdown: z.string().describe("The full new Markdown content"),
+      },
+    },
+    async ({ id, markdown }) => {
+      try {
+        const docItemId = await resolveDocItemId(id);
+        // Capture the previous content BEFORE overwriting — cheap undo.
+        let previousMarkdown = "";
+        try {
+          previousMarkdown = (await client.getItem(docItemId)).content;
+        } catch {
+          // best-effort snapshot
+        }
+        await client.updateHybridDoc(docItemId, markdown);
+        const sections = parseHybridMarkdownSections(markdown).map(
+          (section) => ({ id: section.id, title: section.title }),
+        );
+        return text(
+          JSON.stringify(
+            { docItemId, ok: true, sections, previousMarkdown },
+            null,
+            2,
+          ),
+        );
       } catch (error) {
         return { ...text(formatError(error)), isError: true };
       }
