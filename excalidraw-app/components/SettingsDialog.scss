@@ -145,7 +145,7 @@
       background-color 0.15s ease;
 
     &:hover {
-      border-color: #d9b36a;
+      border-color: var(--kd-amber-line, #d9b36a);
       background-color: color-mix(
         in srgb,
         var(--kd-amber-soft, #f1e6cf) 30%,
@@ -156,7 +156,7 @@
     &:focus,
     &:focus-visible {
       outline: none;
-      border-color: #d9b36a;
+      border-color: var(--kd-amber-line, #d9b36a);
       box-shadow: 0 0 0 3px var(--kd-amber-soft, #f1e6cf);
     }
   }
