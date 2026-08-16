@@ -234,11 +234,25 @@ São **47 cores únicas** hardcoded em 151 ocorrências, contra 38 tokens defini
 
 **Duplicação semântica medida** (mesma função, valores diferentes, sem token):
 
-- **Vermelho — 4 valores para 1 semântica:** `--kd-danger: #b42318` + `#c0392b` (`kindraw.scss:2086`)
-  + `#c94a4a` (`:2728`) + `#e8b4ad` (`:4039`).
-- **Verde — token duplicado:** `--kd-ok: #3e7c4f` / `--kd-ok-bg: #e4efe2` versus
-  `#064e3c` / `#ecfdf5` hardcoded em `index.scss:48-49` e `:64-65`.
+- **Vermelho — 3 valores para 1 semântica:** `--kd-danger: #b42318` + `#c0392b` (`kindraw.scss:2086`)
+  + `#c94a4a` (`:2728`). ⚠️ **Correção:** `#e8b4ad` (`:4039`) foi listado aqui como quarto vermelho
+  órfão e **não é status** — é um dos três pontos do "semáforo" de um chrome de janela falso no
+  mockup da landing (`#e8b4ad` / `--kd-amber-chip` / `#bcd9bf`). Tokenizá-lo como `--kd-danger-bg`
+  seria semanticamente errado **e** visualmente errado (opaco × translúcido). Ficou literal, com
+  comentário no código para ninguém "consertar" de novo.
+- **Verde — ⚠️ a recomendação original estava INVERTIDA.** O par hardcoded em `index.scss:48-49`
+  (`#064e3c` sobre `#ecfdf5`) mede **9.22:1 (AAA)**. Consolidá-lo em `--kd-live` (#2f8f54), como
+  esta auditoria recomendava, o derrubaria para **3.53:1 (AA-large)** — regressão real em texto de
+  menu. Medir antes de consolidar inverteu a decisão: os valores foram **preservados** e apenas
+  tokenizados (`--kd-live-surface` / `--kd-live-text`), que ainda ganham a inversão limpa no tema
+  escuro. Lição: "consolidar duplicata" não é bom por definição — o duplicado pode ser o correto.
 - **Azul — família inteira sem token:** ver §4.
+- **Âmbar de borda — `#d9b36a`, 11 usos, ZERO tokens, e esta auditoria não o viu.** 9
+  `border-color`, 1 `outline`, 1 `box-shadow` de foco. Escapou porque o levantamento original
+  agrupou por família de matiz e ele caiu no balaio "laranja/âmbar" junto dos neutros quentes.
+  ⚠️ Mede **1.84:1** sobre `--kd-bg` — abaixo do piso de **3:1** para indicador de foco
+  (WCAG 2.4.11). Foi tokenizado como `--kd-amber-line` **sem mudar o valor**; escurecê-lo é
+  mudança visual e fica como decisão separada.
 
 ### Contraste WCAG — computado por token, não a olho
 
@@ -257,10 +271,17 @@ de texto contra as três superfícies do sistema:
 
 - `--kd-faint`: **37 usos**, 37 deles `color:` → **reprova AA e AA-large em toda superfície**
 - `--kd-muted`: **33 usos**, 33 deles `color:` → só passa se o texto for ≥18.66px ou ≥14px bold
-- `--kd-amber`: 17 usos, **10 deles `color:`** → reprova como texto
+- `--kd-amber`: 17 usos, dos quais **2 como texto** → reprova como texto
 
-**São 47 usos de cor de texto que reprovam WCAG AA em qualquer fundo do sistema**, mais 33 que
-dependem de o texto ser grande — e nada no código garante isso.
+⚠️ **Correção (execução, 2026-08-16):** a primeira versão desta auditoria dizia **10** usos de
+`--kd-amber` como texto. Errado — o `grep 'color:\s*var(--kd-amber)'` casa `color:` como
+**substring** de `border-color:` e `accent-color:`. Inspecionados um a um, os 10 são: 2 texto
+(`.kindraw-eyebrow`, `.kindraw-landing__value-index`), 3 ícone SVG, 1 container cujo texto é
+sobrescrito por `--kd-ink` (o âmbar só alcança a caneta), e 4 `border-color`/`accent-color`.
+**Contar com regex e reportar sem olhar produz número inflado.** Só os 2 de texto foram trocados;
+os ícones ficam como estão (decorativos, ao lado de rótulo em `--kd-ink-soft`).
+
+**São ~70 usos de cor de texto abaixo de AA**, dominados por `--kd-faint` (37) e `--kd-muted` (33).
 
 Ressalva justa: `--kd-amber` como **preenchimento** sobre `--kd-ink` `#20283a` dá **5.55:1** (AA ✅).
 O símbolo "K" da marca está correto. O problema é exclusivamente âmbar **como cor de texto sobre creme**.

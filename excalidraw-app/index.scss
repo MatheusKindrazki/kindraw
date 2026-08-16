@@ -45,8 +45,8 @@
   .dropdown-menu-container {
     .dropdown-menu-item {
       &.active-collab {
-        background-color: #ecfdf5;
-        color: #064e3c;
+        background-color: var(--kd-live-surface, #ecfdf5);
+        color: var(--kd-live-text, #064e3c);
       }
       &.highlighted {
         color: var(--color-promo);
@@ -61,8 +61,9 @@
   &.theme--dark {
     .dropdown-menu-item {
       &.active-collab {
-        background-color: #064e3c;
-        color: #ecfdf5;
+        /* no escuro o par se inverte — mesmos dois tokens, papéis trocados */
+        background-color: var(--kd-live-text, #064e3c);
+        color: var(--kd-live-surface, #ecfdf5);
       }
     }
   }

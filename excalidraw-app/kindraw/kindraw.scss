@@ -15,28 +15,48 @@
   --kd-line: #eadfcb;
   --kd-line-soft: #f2ead8;
 
-  /* texto */
-  --kd-ink: #20283a;
-  --kd-ink-soft: #4a4434;
-  --kd-muted: #8a7e63;
-  --kd-faint: #a39577;
+  /* texto — piso de acessibilidade: todo token usado como `color:` precisa
+     cruzar 4.5:1 (WCAG AA) contra --kd-bg, --kd-surface E --kd-canvas.
+     Calcule; não confie no olho. */
+  --kd-ink: #20283a; /* 13.67:1 sobre --kd-bg */
+  --kd-ink-soft: #4a4434; /* 8.99:1 */
+  --kd-muted: #7b7058; /* 4.53:1 — era #8a7e63 (3.72:1, só AA-large) */
+  --kd-faint: #7c7054; /* 4.53:1 — era #a39577 (2.74:1, reprovava até AA-large) */
 
   /* acento âmbar */
-  --kd-amber: #c9963f;
+  --kd-amber: #c9963f; /* PREENCHIMENTO. 5.55:1 sobre --kd-ink (o "K" da marca) */
   --kd-amber-deep: #7a5414;
   --kd-amber-soft: #f1e6cf;
   --kd-amber-chip: #f5e7c8;
+  /* âmbar legível como TEXTO: --kd-amber sobre creme é 2.46:1 e reprova.
+     Escurecer --kd-amber apagaria a marca para consertar o texto — são dois
+     papéis, então são dois tokens. */
+  --kd-amber-text: #906a28; /* 4.56:1 sobre --kd-bg */
+  /* borda/contorno âmbar (11 usos: 9 border-color, 1 outline, 1 focus ring).
+     ⚠️ 1.84:1 sobre --kd-bg — abaixo do piso de 3:1 para indicador de foco
+     (WCAG 2.4.11). Tokenizado aqui SEM mudar o valor: escurecê-lo é mudança
+     visual e merece decisão própria. Ver docs/design/. */
+  --kd-amber-line: #d9b36a;
 
   /* semânticas */
   --kd-doc-bg: #dce7f7;
   --kd-doc-fg: #2d5687;
+  /* pill de "link público" — semântica própria, NÃO reusar --kd-doc-* (aquilo é
+     modo documento). Estava hardcoded em AppSidebar.scss como #1d4ed8/#93b4ff. */
+  --kd-public: #2d5687; /* 6.98:1 sobre --kd-bg */
+  --kd-public-dark: #93b4ff; /* variante para .theme--dark */
   --kd-hybrid-bg: #deeddd;
   --kd-hybrid-fg: #2f6b3a;
   --kd-ok: #3e7c4f;
   --kd-ok-bg: #e4efe2;
-  /* verde "ao vivo" (presença/colaboração) — unificado p/ facepile, banner, notes */
+  /* verde "ao vivo" (presença/colaboração) — unificado p/ facepile, banner, notes.
+     --kd-live é INDICADOR (bolinha, anel, borda): 3.76:1, não serve como texto. */
   --kd-live: #2f8f54;
   --kd-live-bg: rgba(47, 143, 84, 0.12);
+  /* par sólido para item de menu "colaboração ativa" — texto sobre tinta.
+     Estava hardcoded em index.scss. Os dois se INVERTEM no tema escuro. */
+  --kd-live-surface: #ecfdf5;
+  --kd-live-text: #064e3c; /* 9.22:1 sobre --kd-live-surface (AAA) */
   --kd-danger: #b42318;
   --kd-danger-bg: rgba(180, 35, 24, 0.16);
 
@@ -453,7 +473,7 @@
   font-weight: 800;
   text-transform: uppercase;
   letter-spacing: 0.12em;
-  color: var(--kd-amber);
+  color: var(--kd-amber-text); /* texto 12px: precisa de 4.5:1 */
 }
 
 /* Modal temático (substitui window.prompt/confirm) */
@@ -517,7 +537,7 @@
 
 .kindraw-modal__input:focus {
   outline: none;
-  border-color: #d9b36a;
+  border-color: var(--kd-amber-line);
   box-shadow: 0 0 0 3px var(--kd-amber-soft);
 }
 
@@ -755,7 +775,7 @@
 }
 
 .kindraw-search:focus-within {
-  border-color: #d9b36a;
+  border-color: var(--kd-amber-line);
 }
 
 .kindraw-search input {
@@ -1299,7 +1319,7 @@
 
 .kindraw-movepop__search:focus {
   outline: none;
-  border-color: #d9b36a;
+  border-color: var(--kd-amber-line);
   box-shadow: 0 0 0 3px var(--kd-amber-soft);
 }
 
@@ -1578,7 +1598,7 @@
 .kindraw-editor-title__input:focus {
   outline: none;
   background: var(--kd-surface);
-  box-shadow: 0 0 0 1px #d9b36a, 0 0 0 4px var(--kd-amber-soft);
+  box-shadow: 0 0 0 1px var(--kd-amber-line), 0 0 0 4px var(--kd-amber-soft);
 }
 
 /* "Sessão ao vivo" ativa */
@@ -2083,7 +2103,7 @@
 
 .kindraw-rte__ai-error {
   padding: 7px 10px;
-  color: #c0392b;
+  color: var(--kd-danger); /* era #c0392b, órfão — 6.10:1 */
   font-family: var(--kd-font);
   font-size: 12px;
   line-height: 1.4;
@@ -2541,7 +2561,7 @@
 }
 
 .kindraw-hybrid-shell__divider:focus-visible {
-  outline: 2px solid #d9b36a;
+  outline: 2px solid var(--kd-amber-line);
   outline-offset: -2px;
 }
 
@@ -2604,7 +2624,7 @@
 }
 
 .kindraw-hybrid-doc__section--active {
-  border-color: #d9b36a;
+  border-color: var(--kd-amber-line);
   box-shadow: 0 0 0 3px var(--kd-amber-soft);
 }
 
@@ -2724,8 +2744,8 @@
 
 /* Ação "Excluir" da seção — só fica vermelha no hover, discreta no resto */
 .kindraw-hybrid-doc__action--danger:hover {
-  background: rgba(201, 74, 74, 0.12);
-  color: #c94a4a;
+  background: var(--kd-danger-bg); /* era rgba(201,74,74,.12), órfão */
+  color: var(--kd-danger); /* era #c94a4a, órfão */
 }
 
 /* Botão de ícone "Inserir" (livrinho) que abre o sidebar de ícones/templates no
@@ -2747,7 +2767,7 @@
 
 .kindraw-insert-trigger:hover {
   background: var(--kd-hover);
-  border-color: #d9b36a;
+  border-color: var(--kd-amber-line);
 }
 
 .kindraw-insert-trigger svg {
@@ -3074,7 +3094,7 @@
 }
 
 .kindraw-hybrid-doc__add:hover {
-  border-color: #d9b36a;
+  border-color: var(--kd-amber-line);
   background: var(--kd-amber-soft);
   color: var(--kd-amber-deep);
 }
@@ -3292,7 +3312,7 @@
 }
 
 .kindraw-sharemodal__field:focus-within {
-  border-color: #d9b36a;
+  border-color: var(--kd-amber-line);
   box-shadow: 0 0 0 3px var(--kd-amber-soft);
 }
 
@@ -3334,7 +3354,7 @@
 
 .kindraw-sharemodal__roleselect:focus {
   outline: none;
-  border-color: #d9b36a;
+  border-color: var(--kd-amber-line);
   box-shadow: 0 0 0 3px var(--kd-amber-soft);
 }
 
@@ -3507,7 +3527,7 @@
 
 /* foco acessível na caixa do link (B2) */
 .kindraw-linkbox:focus-within {
-  border-color: #d9b36a;
+  border-color: var(--kd-amber-line);
   box-shadow: 0 0 0 3px var(--kd-amber-soft);
 }
 
@@ -4035,6 +4055,9 @@
   background: var(--kd-line);
 }
 
+/* Os três pontos do "semáforo" do chrome de janela falso — DECORATIVOS.
+   Não são status: #e8b4ad não é --kd-danger e #bcd9bf não é --kd-ok.
+   Tokenizá-los como semântica seria errado; deixe-os literais. */
 .kindraw-landing__demo-dot:first-child {
   background: #e8b4ad;
 }
@@ -4150,7 +4173,7 @@
   font-weight: 800;
   line-height: 0.9;
   letter-spacing: -0.04em;
-  color: var(--kd-amber);
+  color: var(--kd-amber-text); /* display grande, mas 2.46:1 reprova até o piso de 3:1 */
   opacity: 0.85;
   transform: rotate(-2deg);
   font-variant-numeric: tabular-nums;
