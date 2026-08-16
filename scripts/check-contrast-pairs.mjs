@@ -15,6 +15,9 @@
  *   node scripts/check-contrast-pairs.mjs --json   # o mesmo, para automação
  */
 
+/* eslint-disable no-console -- este script É um relatório de CLI: o stdout é o
+   produto dele, não um vestígio de depuração esquecido. */
+
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join, relative, basename } from "node:path";
 
@@ -43,11 +46,12 @@ const lin = (c) => {
 
 const luminance = (hex) => {
   let h = hex.replace("#", "");
-  if (h.length === 3)
+  if (h.length === 3) {
     h = h
       .split("")
       .map((x) => x + x)
       .join("");
+  }
   const [r, g, b] = [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16));
   return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
 };
@@ -61,12 +65,9 @@ const composite = ([r, g, b, a], bgHex) => {
   const h = bgHex.replace("#", "");
   const [br, bg, bb] = [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16));
   const mix = (f, k) => Math.round(f * a + k * (1 - a));
-  return (
-    "#" +
-    [mix(r, br), mix(g, bg), mix(b, bb)]
-      .map((v) => v.toString(16).padStart(2, "0"))
-      .join("")
-  );
+  return `#${[mix(r, br), mix(g, bg), mix(b, bb)]
+    .map((v) => v.toString(16).padStart(2, "0"))
+    .join("")}`;
 };
 
 function loadTokens() {
@@ -74,32 +75,38 @@ function loadTokens() {
   const start = src.indexOf(":root {");
   const block = src.slice(start, src.indexOf("\n}", start));
   const out = {};
-  for (const m of block.matchAll(/--(kd-[a-z0-9-]+):\s*([^;]+);/g))
+  for (const m of block.matchAll(/--(kd-[a-z0-9-]+):\s*([^;]+);/g)) {
     out[m[1]] = m[2].trim();
+  }
   return out;
 }
 
 /** -> {kind:'hex',value} | {kind:'rgba',value:[r,g,b,a]} | null */
 function resolve(raw, tokens, depth = 0) {
-  if (!raw || depth > 6) return null;
+  if (!raw || depth > 6) {
+    return null;
+  }
   const val = raw.trim();
 
   const v = val.match(/^var\(\s*--([a-z0-9-]+)\s*(?:,\s*([\s\S]+?)\s*)?\)$/);
   if (v) {
     const [, name, fallback] = v;
-    if (tokens[name]) return resolve(tokens[name], tokens, depth + 1);
+    if (tokens[name]) {
+      return resolve(tokens[name], tokens, depth + 1);
+    }
     return fallback ? resolve(fallback, tokens, depth + 1) : null;
   }
 
   const hex = val.match(/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/);
   if (hex) {
     let h = hex[1];
-    if (h.length === 3)
+    if (h.length === 3) {
       h = h
         .split("")
         .map((x) => x + x)
         .join("");
-    return { kind: "hex", value: "#" + h.toLowerCase() };
+    }
+    return { kind: "hex", value: `#${h.toLowerCase()}` };
   }
 
   const rgba = val.match(
@@ -112,9 +119,9 @@ function resolve(raw, tokens, depth = 0) {
       ? { kind: "rgba", value: [r, g, b, a] }
       : {
           kind: "hex",
-          value:
-            "#" +
-            [r, g, b].map((x) => x.toString(16).padStart(2, "0")).join(""),
+          value: `#${[r, g, b]
+            .map((x) => x.toString(16).padStart(2, "0"))
+            .join("")}`,
         };
   }
   return null;
@@ -122,11 +129,15 @@ function resolve(raw, tokens, depth = 0) {
 
 function* scssFiles(dir) {
   for (const entry of readdirSync(dir)) {
-    if (entry === "node_modules" || entry === "build" || entry === "dist")
+    if (entry === "node_modules" || entry === "build" || entry === "dist") {
       continue;
+    }
     const full = join(dir, entry);
-    if (statSync(full).isDirectory()) yield* scssFiles(full);
-    else if (entry.endsWith(".scss")) yield full;
+    if (statSync(full).isDirectory()) {
+      yield* scssFiles(full);
+    } else if (entry.endsWith(".scss")) {
+      yield full;
+    }
   }
 }
 
@@ -146,11 +157,15 @@ function main() {
 
       const cm = body.match(/(?<![-\w])color:\s*([^;]+);/);
       const bm = body.match(/background(?:-color)?:\s*([^;]+);/);
-      if (!cm || !bm) continue;
+      if (!cm || !bm) {
+        continue;
+      }
 
       const fg = resolve(cm[1], tokens);
       const bg = resolve(bm[1], tokens);
-      if (!fg || !bg || fg.kind === "rgba") continue;
+      if (!fg || !bg || fg.kind === "rgba") {
+        continue;
+      }
 
       const fs = body.match(/font-size:\s*([\d.]+)px/);
       const fw = body.match(/font-weight:\s*(\d+)/);
@@ -166,8 +181,9 @@ function main() {
         let worst = null;
         for (const s of SURFACES) {
           const c = composite(bg.value, s);
-          if (worst === null || ratio(fg.value, c) < ratio(fg.value, worst.c))
+          if (worst === null || ratio(fg.value, c) < ratio(fg.value, worst.c)) {
             worst = { c, s };
+          }
         }
         bgHex = worst.c;
         note = `rgba composto sobre ${worst.s}`;
@@ -175,7 +191,9 @@ function main() {
 
       measured++;
       const r = ratio(fg.value, bgHex);
-      if (r >= floor) continue;
+      if (r >= floor) {
+        continue;
+      }
 
       const ex = EXEMPT.find((e) => selector.includes(e.selector));
       const rec = {
@@ -190,8 +208,11 @@ function main() {
         weight,
         note,
       };
-      if (ex) exempted.push({ ...rec, reason: ex.reason });
-      else problems.push(rec);
+      if (ex) {
+        exempted.push({ ...rec, reason: ex.reason });
+      } else {
+        problems.push(rec);
+      }
     }
   }
 
@@ -203,10 +224,11 @@ function main() {
   console.log(`pares texto×fundo resolvidos e medidos: ${measured}`);
   if (exempted.length) {
     console.log(`\nisentos (com motivo declarado): ${exempted.length}`);
-    for (const e of exempted)
+    for (const e of exempted) {
       console.log(
         `  ${basename(e.file)}:${e.line} ${e.selector} — ${e.reason}`,
       );
+    }
   }
   if (!problems.length) {
     console.log("\nGATE DE PARES: VERDE");
