@@ -32,10 +32,12 @@
      Escurecer --kd-amber apagaria a marca para consertar o texto — são dois
      papéis, então são dois tokens. */
   --kd-amber-text: #906a28; /* 4.56:1 sobre --kd-bg */
-  /* borda/contorno âmbar (11 usos: 9 border-color, 1 outline, 1 focus ring).
-     ⚠️ 1.84:1 sobre --kd-bg — abaixo do piso de 3:1 para indicador de foco
-     (WCAG 2.4.11). Tokenizado aqui SEM mudar o valor: escurecê-lo é mudança
-     visual e merece decisão própria. Ver docs/design/. */
+  /* borda/contorno âmbar — 13 usos no repo: 11 em kindraw.scss (9 border-color,
+     1 outline, 1 focus ring) + 2 em components/SettingsDialog.scss (hover e
+     focus do select). ⚠️ 1.84:1 sobre --kd-bg, abaixo do piso de 3:1 para
+     indicador de foco (WCAG 1.4.11 Non-text Contrast / 2.2 SC 2.4.13 Focus
+     Appearance). Tokenizado SEM mudar o valor: escurecê-lo é mudança visual e
+     merece decisão própria — mas agora um único ponto alcança os 13. */
   --kd-amber-line: #d9b36a;
 
   /* semânticas */
@@ -50,7 +52,13 @@
   --kd-ok: #3e7c4f;
   --kd-ok-bg: #e4efe2;
   /* verde "ao vivo" (presença/colaboração) — unificado p/ facepile, banner, notes.
-     --kd-live é INDICADOR (bolinha, anel, borda): 3.76:1, não serve como texto. */
+     --kd-live é INDICADOR (bolinha, anel, borda), não cor de texto.
+     ⚠️ Há UMA violação pré-existente dessa regra: .kindraw-facepile__live usa
+     `color: var(--kd-live)` em 12px/700 sobre --kd-live-bg, o que compõe
+     3.29:1 — reprova o piso de 4.5:1. Não foi corrigido aqui porque muda pixel
+     de um estado que o dono ainda não revisou; está listado em docs/design/ e
+     o `scripts/check-contrast-pairs.mjs` o reporta a cada execução.
+     Para texto sobre a tinta clara, use --kd-live-text (9.22:1). */
   --kd-live: #2f8f54;
   --kd-live-bg: rgba(47, 143, 84, 0.12);
   /* par sólido para item de menu "colaboração ativa" — texto sobre tinta.

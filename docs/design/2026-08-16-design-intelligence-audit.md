@@ -218,6 +218,29 @@ Ressalva justa: `--kd-amber` como **preenchimento** sobre `--kd-ink` `#20283a` d
 
 ⚠️ `--kd-faint` e `--kd-muted` corrigidos ficam quase idênticos (`#7c7054` vs `#7b7058`) — sinal de que **são o mesmo degrau da rampa**, hoje separados por uma diferença que só existe abaixo do limiar de acessibilidade. A correção honesta provavelmente é **fundir os dois** e criar o degrau extra acima, não abaixo. Isso é decisão de design, não de script.
 
+### ⚠️ O piso token-a-token NÃO basta — e foi assim que 6 pares reprovados passaram
+
+Uma revisão adversarial do próprio PR (2026-08-16, 17 agentes, 14 achados brutos → 4 confirmados) derrubou o invariante que esta auditoria tinha declarado. O erro é de **método**: medir cada token de texto contra as três superfícies base (`--kd-bg`, `--kd-surface`, `--kd-canvas`) responde "o token é legível em tese", não "o texto é legível onde ele de fato pousa". Texto quase sempre pousa sobre um **fundo pareado** (`--kd-ok-bg`, `--kd-live-bg`) ou sobre um **fundo hardcoded** — nenhum dos dois entra naquela conta.
+
+Resultado: **todos os tokens verdes isoladamente, e 6 pares reais reprovando.** Quem mede agora é [`scripts/check-contrast-pairs.mjs`](../../scripts/check-contrast-pairs.mjs), que resolve os dois lados de verdade (token, fallback de `var()`, `rgba` composto sobre cada superfície plausível) e mede o par. Medidos 75 pares; reprovam 6:
+
+| ratio | onde | par |
+| --- | --- | --- |
+| 2.16:1 | `kindraw.scss:824` `.kindraw-avatar-fallback` | `#ffffff` sobre `#e8a33d` (12px/700) |
+| 2.16:1 | `kindraw.scss:3605` `.kindraw-sharemodal__avatar--fallback` | idem |
+| 3.29:1 | `kindraw.scss:2783` `.kindraw-facepile__live` | `--kd-live` sobre `--kd-live-bg` composto |
+| 4.08:1 | `kindraw.scss:3628` `.kindraw-sharebadge--viewer` | `--kd-muted` sobre `--kd-line-soft` |
+| 4.19:1 | `kindraw.scss:1050` `.kindraw-folderchip__count` | `--kd-faint` sobre `#f5eddb` (hardcoded) |
+| 4.22:1 | `kindraw.scss:3983` `.kindraw-landing__waitlist-success` | `--kd-ok` sobre `--kd-ok-bg` |
+
+**Os 6 são pré-existentes — nenhum foi criado por este PR**, e dois foram **materialmente melhorados** por ele: `folderchip__count` subiu de **2.53 → 4.19** e `sharebadge--viewer` de **3.34 → 4.08** (efeito colateral da correção de `--kd-faint`/`--kd-muted`). Os outros quatro têm texto e fundo intocados pelo PR.
+
+Não foram corrigidos aqui **de propósito**: todos exigem mudar pixel de estados que o dono ainda não revisou — cor de avatar, badge de papel, verde de sessão ao vivo. É a mesma disciplina aplicada a `--kd-amber-line` e aos pontos de semáforo: **tokenizar e medir é nosso; escolher a cor nova é dele.**
+
+⚠️ **O gate NÃO foi ligado ao CI**, e isso é deliberado: o `Check formatting` já está vermelho no `master` desde 2026-07-06, e acrescentar um segundo check vermelho tornaria o sinal ainda menos legível. Ligar `check-contrast-pairs.mjs` ao CI é o passo seguinte, **depois** que os 6 forem resolvidos.
+
+⚠️ **Uma isenção declarada**, com motivo, dentro do próprio script: `.kindraw-card__check` mede 1.00:1 (branco sobre branco) e é **falso positivo** — é um checkbox vazio cujo `color` pinta o glifo de check, visível só no estado `--on`. Isenção sem motivo escrito é bug varrido para debaixo do tapete; por isso o motivo mora no código, não na cabeça de quem escreveu.
+
 ### Dark mode: não é "planejado" — está pela metade, e isso é provavelmente um bug visível
 
 ⚠️ **Correção a uma conclusão anterior desta auditoria.** A leitura inicial foi "0 `light-dark()` → o dark theme planejado exigirá reescrita". Errado nos dois lados. O que o código diz:
