@@ -334,9 +334,17 @@
   }
 
   .kindraw-top-right-actions__button--public.kindraw-top-right-actions__button--active {
-    background: color-mix(in srgb, var(--kd-public, #2d5687) 10%, var(--color-surface-lowest));
+    background: color-mix(
+      in srgb,
+      var(--kd-public, #2d5687) 10%,
+      var(--color-surface-lowest)
+    );
     color: var(--kd-public, #2d5687);
-    border-color: color-mix(in srgb, var(--kd-public, #2d5687) 28%, var(--color-surface-lowest));
+    border-color: color-mix(
+      in srgb,
+      var(--kd-public, #2d5687) 28%,
+      var(--color-surface-lowest)
+    );
   }
 
   .kindraw-top-right-actions__button--collaboration.kindraw-top-right-actions__button--active {
@@ -513,7 +521,11 @@
     // "Public" pill: deep blue -> lighter blue for contrast on the dark fill.
     .kindraw-top-right-actions__button--public.kindraw-top-right-actions__button--active {
       color: var(--kd-public-dark, #93b4ff);
-      border-color: color-mix(in srgb, var(--kd-public-dark, #93b4ff) 38%, transparent);
+      border-color: color-mix(
+        in srgb,
+        var(--kd-public-dark, #93b4ff) 38%,
+        transparent
+      );
     }
   }
 }

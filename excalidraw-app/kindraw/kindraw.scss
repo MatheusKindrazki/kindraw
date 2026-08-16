@@ -4173,7 +4173,8 @@
   font-weight: 800;
   line-height: 0.9;
   letter-spacing: -0.04em;
-  color: var(--kd-amber-text); /* display grande, mas 2.46:1 reprova até o piso de 3:1 */
+  /* display grande, mas o âmbar de marca reprova até o piso de 3:1 */
+  color: var(--kd-amber-text);
   opacity: 0.85;
   transform: rotate(-2deg);
   font-variant-numeric: tabular-nums;
