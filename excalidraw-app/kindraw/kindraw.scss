@@ -4016,7 +4016,8 @@
 
 /* demo slot — moldura de janela com play, 16:10 */
 .kindraw-landing__demo {
-  animation: kindraw-landing-rise 0.65s cubic-bezier(0.22, 1, 0.36, 1) 0.16s both;
+  animation: kindraw-landing-rise 0.65s cubic-bezier(0.22, 1, 0.36, 1) 0.16s
+    both;
 }
 
 /* revelação orquestrada do restante da página, em escada suave (só

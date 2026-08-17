@@ -9,12 +9,14 @@
 **Tech Stack:** TypeScript (ESM, Node ≥18), esbuild (bundling `@kindraw/client`), vitest (jsdom env, but the scene builder is tested DOM-free), `@excalidraw/element` (`convertToExcalidrawElements`, `setCustomTextMetricsProvider`), **dagre** + **@types/dagre** (new dep), **elkjs** (new dep, opt-in), `@modelcontextprotocol/sdk` (MCP), `zod` (MCP schemas).
 
 **Global Prerequisites:**
+
 - Environment: macOS/Linux, Node ≥18, Yarn (workspaces; this is a Yarn monorepo — do NOT use npm install).
 - Tools: `node --version` (≥18), `yarn --version`, `git`.
 - Access: No API keys needed for unit tests. Manual MCP smoke test needs a real `KINDRAW_TOKEN` (from `kindraw login` or env) and network access to `https://api.kindraw.dev`.
 - State: Work from a clean tree on a feature branch. The repo default branch is `master`.
 
 **Verification before starting:**
+
 ```bash
 # Run ALL these from the repo root and verify output:
 cd /Users/matheuskindrazki/development/crazy-ideas/kindraw
@@ -26,6 +28,7 @@ ls packages/kindraw-client/src/  # Expected: client.ts dom.ts generate.ts reanch
 ```
 
 **Create the feature branch (if on master):**
+
 ```bash
 git checkout -b feat/kindraw-scene-builder
 ```
@@ -72,9 +75,11 @@ Phase 1 is the priority. It is built test-first (TDD). The module layout under `
 ### Task 1: Add dependencies to @kindraw/client
 
 **Files:**
+
 - Modify: `packages/kindraw-client/package.json:27-35`
 
 **Prerequisites:**
+
 - Tools: Yarn workspaces. Run install from repo root.
 - File must exist: `packages/kindraw-client/package.json`.
 
@@ -113,6 +118,7 @@ git commit -m "build(kindraw-client): add dagre, elkjs, @types/dagre deps"
 ```
 
 **If Task Fails:**
+
 1. **`yarn install` errors on lockfile:** Run `git checkout -- yarn.lock` and re-run `yarn install` (regenerates cleanly).
 2. **Network blocked:** Document and STOP — deps are mandatory; cannot proceed offline.
 3. **Can't recover:** `git checkout -- packages/kindraw-client/package.json`, return to human.
@@ -122,10 +128,12 @@ git commit -m "build(kindraw-client): add dagre, elkjs, @types/dagre deps"
 ### Task 2: Write the failing test for the DiagramSpec types & validation
 
 **Files:**
+
 - Create: `packages/kindraw-client/src/scene/spec.ts` (empty placeholder so the import resolves — see Step 3)
 - Create: `packages/kindraw-client/src/scene/spec.test.ts`
 
 **Prerequisites:**
+
 - Tools: vitest (run via `yarn test`). Files must exist: `vitest.config.mts` at repo root.
 - Mirror the style of `packages/kindraw-client/src/reanchor.test.ts`.
 
@@ -210,9 +218,11 @@ export {};
 Run: `cd /Users/matheuskindrazki/development/crazy-ideas/kindraw && yarn vitest run packages/kindraw-client/src/scene/spec.test.ts`
 
 **Expected output:** All cases fail because `validateDiagramSpec` is not exported. Look for:
+
 ```
 Error: ... does not provide an export named 'validateDiagramSpec'
 ```
+
 or test failures referencing `validateDiagramSpec is not a function`.
 
 **If you see "Cannot find module":** You created the test in the wrong directory. Confirm path is `packages/kindraw-client/src/scene/spec.test.ts`.
@@ -225,6 +235,7 @@ git commit -m "test(kindraw-client): failing spec validation tests (RED)"
 ```
 
 **If Task Fails:**
+
 1. **vitest can't find the config:** Always run from repo root, not the package dir.
 2. **Rollback:** `git checkout -- .` and recreate.
 
@@ -233,6 +244,7 @@ git commit -m "test(kindraw-client): failing spec validation tests (RED)"
 ### Task 3: Implement DiagramSpec types + validation (make Task 2 green)
 
 **Files:**
+
 - Modify: `packages/kindraw-client/src/scene/spec.ts`
 
 **Prerequisites:** Task 2 committed (failing tests exist).
@@ -290,7 +302,9 @@ export type DiagramSpec = {
 export type NormalizedSpec = Required<
   Pick<DiagramSpec, "direction" | "engine">
 > & {
-  nodes: Array<Required<Pick<DiagramNode, "id" | "label" | "shape">> & DiagramNode>;
+  nodes: Array<
+    Required<Pick<DiagramNode, "id" | "label" | "shape">> & DiagramNode
+  >;
   edges: DiagramEdge[];
   groups: DiagramGroup[];
 };
@@ -300,12 +314,7 @@ const VALID_SHAPES: ReadonlySet<string> = new Set([
   "diamond",
   "ellipse",
 ]);
-const VALID_DIRECTIONS: ReadonlySet<string> = new Set([
-  "TB",
-  "BT",
-  "LR",
-  "RL",
-]);
+const VALID_DIRECTIONS: ReadonlySet<string> = new Set(["TB", "BT", "LR", "RL"]);
 
 /**
  * Validate and normalize a raw DiagramSpec. Throws a descriptive Error on any
@@ -356,15 +365,16 @@ export const validateDiagramSpec = (raw: unknown): NormalizedSpec => {
     }
   }
 
-  if (
-    spec.direction !== undefined &&
-    !VALID_DIRECTIONS.has(spec.direction)
-  ) {
+  if (spec.direction !== undefined && !VALID_DIRECTIONS.has(spec.direction)) {
     throw new Error(
       `Invalid direction "${spec.direction}". Allowed: TB, BT, LR, RL.`,
     );
   }
-  if (spec.engine !== undefined && spec.engine !== "dagre" && spec.engine !== "elk") {
+  if (
+    spec.engine !== undefined &&
+    spec.engine !== "dagre" &&
+    spec.engine !== "elk"
+  ) {
     throw new Error(`Invalid engine "${spec.engine}". Allowed: dagre, elk.`);
   }
 
@@ -386,6 +396,7 @@ export const validateDiagramSpec = (raw: unknown): NormalizedSpec => {
 Run: `cd /Users/matheuskindrazki/development/crazy-ideas/kindraw && yarn vitest run packages/kindraw-client/src/scene/spec.test.ts`
 
 **Expected output:**
+
 ```
 ✓ packages/kindraw-client/src/scene/spec.test.ts (6 tests)
 Test Files  1 passed (1)
@@ -400,6 +411,7 @@ git commit -m "feat(kindraw-client): DiagramSpec types + validation (GREEN)"
 ```
 
 **If Task Fails:**
+
 1. **A case still fails:** Read the assertion message; the regex in the test (`/duplicate node id/i`, etc.) must match your thrown message substring. Adjust the thrown text, not the test.
 2. **Rollback:** `git checkout -- packages/kindraw-client/src/scene/spec.ts` (keeps the test).
 
@@ -408,6 +420,7 @@ git commit -m "feat(kindraw-client): DiagramSpec types + validation (GREEN)"
 ### Task 4: Write the failing test for the DOM-free text metrics provider
 
 **Files:**
+
 - Create: `packages/kindraw-client/src/scene/textMetrics.ts` (placeholder)
 - Create: `packages/kindraw-client/src/scene/textMetrics.test.ts`
 
@@ -485,6 +498,7 @@ git commit -m "test(kindraw-client): failing text metrics tests (RED)"
 ### Task 5: Implement the DOM-free text metrics provider (make Task 4 green)
 
 **Files:**
+
 - Modify: `packages/kindraw-client/src/scene/textMetrics.ts`
 
 **Prerequisites:** Task 4 committed.
@@ -522,7 +536,10 @@ const getNodeCanvasCtx = () => {
     // so the provider can satisfy the synchronous getLineWidth contract.
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const { createCanvas } = require("canvas") as {
-      createCanvas: (w: number, h: number) => {
+      createCanvas: (
+        w: number,
+        h: number,
+      ) => {
         getContext: (t: "2d") => {
           measureText: (t: string) => { width: number };
           font: string;
@@ -602,6 +619,7 @@ export const measureLabel = (
 Run: `cd /Users/matheuskindrazki/development/crazy-ideas/kindraw && yarn vitest run packages/kindraw-client/src/scene/textMetrics.test.ts`
 
 **Expected output:**
+
 ```
 ✓ packages/kindraw-client/src/scene/textMetrics.test.ts (4 tests)
      Tests  4 passed (4)
@@ -619,6 +637,7 @@ git commit -m "feat(kindraw-client): DOM-free text metrics provider (GREEN)"
 ```
 
 **If Task Fails:**
+
 1. **`require` undefined under TS/ESM:** Use the `createRequire` form noted above.
 2. **Width is 0 in fallback:** Ensure `AVG_CHAR_RATIO * fontSize * length` is used; check `parseFontSize` regex.
 3. **Rollback:** `git checkout -- packages/kindraw-client/src/scene/textMetrics.ts`.
@@ -628,6 +647,7 @@ git commit -m "feat(kindraw-client): DOM-free text metrics provider (GREEN)"
 ### Task 6: Write the failing test for the layout engine (spacing invariants)
 
 **Files:**
+
 - Create: `packages/kindraw-client/src/scene/layout.ts` (placeholder)
 - Create: `packages/kindraw-client/src/scene/layout.test.ts`
 
@@ -745,6 +765,7 @@ git commit -m "test(kindraw-client): failing layout spacing invariants (RED)"
 ### Task 7: Implement the dagre layout engine (make Task 6 green)
 
 **Files:**
+
 - Modify: `packages/kindraw-client/src/scene/layout.ts`
 
 **Prerequisites:** Task 6 committed.
@@ -847,6 +868,7 @@ export const layoutNodes = (spec: NormalizedSpec): PlacedNode[] => {
 Run: `cd /Users/matheuskindrazki/development/crazy-ideas/kindraw && yarn vitest run packages/kindraw-client/src/scene/layout.test.ts`
 
 **Expected output:**
+
 ```
 ✓ packages/kindraw-client/src/scene/layout.test.ts (5 tests)
      Tests  5 passed (5)
@@ -864,6 +886,7 @@ git commit -m "feat(kindraw-client): dagre layout with real spacing (GREEN)"
 ```
 
 **If Task Fails:**
+
 1. **`Cannot find module 'dagre'`:** Re-run `yarn install` (Task 1 not completed).
 2. **`dagre.graphlib` undefined:** Some dagre builds export graphlib differently; use `import dagre from "dagre";` then `dagre.graphlib.Graph`. If TS complains, the `@types/dagre` package provides the namespace. If still failing, `import * as dagre from "dagre";`.
 3. **Rollback:** `git checkout -- packages/kindraw-client/src/scene/layout.ts`.
@@ -873,6 +896,7 @@ git commit -m "feat(kindraw-client): dagre layout with real spacing (GREEN)"
 ### Task 8: Add the opt-in elkjs engine (async) behind the flag
 
 **Files:**
+
 - Modify: `packages/kindraw-client/src/scene/layout.ts`
 - Create: `packages/kindraw-client/src/scene/layout.elk.test.ts`
 
@@ -968,10 +992,10 @@ export const layoutWithElk = async (
     spec.direction === "LR"
       ? "RIGHT"
       : spec.direction === "RL"
-        ? "LEFT"
-        : spec.direction === "BT"
-          ? "UP"
-          : "DOWN";
+      ? "LEFT"
+      : spec.direction === "BT"
+      ? "UP"
+      : "DOWN";
 
   const graph = {
     id: "root",
@@ -1033,6 +1057,7 @@ export const layoutNodesAsync = async (
 Run: `cd /Users/matheuskindrazki/development/crazy-ideas/kindraw && yarn vitest run packages/kindraw-client/src/scene/layout.elk.test.ts`
 
 **Expected output:**
+
 ```
 ✓ packages/kindraw-client/src/scene/layout.elk.test.ts (2 tests)
      Tests  2 passed (2)
@@ -1048,6 +1073,7 @@ git commit -m "feat(kindraw-client): opt-in elkjs orthogonal layout (GREEN)"
 ```
 
 **If Task Fails:**
+
 1. **elk hangs/timeouts:** elkjs in Node may spawn a web worker; if so, force the sync build per the note above. Add a 5s vitest timeout if needed but prefer the bundled import.
 2. **Rollback:** `git checkout -- packages/kindraw-client/src/scene/layout.ts packages/kindraw-client/src/scene/layout.elk.test.ts`.
 
@@ -1056,11 +1082,13 @@ git commit -m "feat(kindraw-client): opt-in elkjs orthogonal layout (GREEN)"
 ### Task 9: Run Code Review (Batch 1: spec + metrics + layout)
 
 1. **Dispatch all 3 reviewers in parallel:**
+
    - REQUIRED SUB-SKILL: Use ring:requesting-code-review
    - Run ring:code-reviewer, ring:business-logic-reviewer, ring:security-reviewer simultaneously against the diff so far (Tasks 1-8).
    - Wait for all to complete.
 
 2. **Handle findings by severity (MANDATORY):**
+
    - **Critical/High/Medium:** Fix immediately (no TODO comments). Re-run all 3 reviewers after fixes. Repeat until zero remain. Focus areas to expect: input validation completeness in `validateDiagramSpec` (untrusted spec from an LLM — make sure no prototype-pollution via `group`/`id` keys, no unbounded node counts), determinism of dagre, and the `require("canvas")` interop.
    - **Low:** Add `TODO(review): [desc] (reported by [reviewer] on 2026-06-16, severity: Low)` at the location.
    - **Cosmetic:** Add `FIXME(nitpick): [desc] (reported by [reviewer] on 2026-06-16, severity: Cosmetic)`.
@@ -1068,11 +1096,13 @@ git commit -m "feat(kindraw-client): opt-in elkjs orthogonal layout (GREEN)"
 3. **Proceed only when** zero Critical/High/Medium remain and Low/Cosmetic are annotated.
 
 **Suggested guard to add if not already present (Medium, likely flagged):** Cap node/edge counts in `validateDiagramSpec` to avoid pathological inputs, e.g.:
+
 ```ts
 if (spec.nodes.length > 500) {
   throw new Error("DiagramSpec is too large (max 500 nodes).");
 }
 ```
+
 Add a matching test in `spec.test.ts` if you add this guard.
 
 ---
@@ -1080,6 +1110,7 @@ Add a matching test in `spec.test.ts` if you add this guard.
 ### Task 10: Write the failing test for the scene builder (end-to-end, DOM-free)
 
 **Files:**
+
 - Create: `packages/kindraw-client/src/scene/build.ts` (placeholder)
 - Create: `packages/kindraw-client/src/scene/build.test.ts`
 
@@ -1096,9 +1127,7 @@ import { buildScene } from "./build";
 
 // Helper to extract a node element by its label text (bound text container).
 const nodeBoxes = (elements: any[]) =>
-  elements.filter((e) =>
-    ["rectangle", "diamond", "ellipse"].includes(e.type),
-  );
+  elements.filter((e) => ["rectangle", "diamond", "ellipse"].includes(e.type));
 
 describe("buildScene", () => {
   it("returns a valid excalidraw envelope with the right element kinds", async () => {
@@ -1216,6 +1245,7 @@ git commit -m "test(kindraw-client): failing scene builder e2e tests (RED)"
 ### Task 11: Implement the scene builder (make Task 10 green)
 
 **Files:**
+
 - Modify: `packages/kindraw-client/src/scene/build.ts`
 
 **Prerequisites:** Task 10 committed.
@@ -1265,7 +1295,10 @@ const STROKE_STYLE = {
   dotted: "dotted",
 } as const;
 
-const toSkeleton = (placed: PlacedNode[], spec: ReturnType<typeof validateDiagramSpec>) => {
+const toSkeleton = (
+  placed: PlacedNode[],
+  spec: ReturnType<typeof validateDiagramSpec>,
+) => {
   const skeleton: Record<string, unknown>[] = [];
 
   for (const node of placed) {
@@ -1317,7 +1350,9 @@ const stabilize = (elements: Array<Record<string, unknown>>) => {
 /**
  * Build a complete Excalidraw scene from a structured DiagramSpec.
  */
-export const buildScene = async (rawSpec: DiagramSpec): Promise<BuildResult> => {
+export const buildScene = async (
+  rawSpec: DiagramSpec,
+): Promise<BuildResult> => {
   ensureProvider();
   const spec = validateDiagramSpec(rawSpec);
 
@@ -1355,6 +1390,7 @@ export const buildScene = async (rawSpec: DiagramSpec): Promise<BuildResult> => 
 Run: `cd /Users/matheuskindrazki/development/crazy-ideas/kindraw && yarn vitest run packages/kindraw-client/src/scene/build.test.ts`
 
 **Expected output:**
+
 ```
 ✓ packages/kindraw-client/src/scene/build.test.ts (4 tests)
      Tests  4 passed (4)
@@ -1374,6 +1410,7 @@ git commit -m "feat(kindraw-client): deterministic scene builder pipeline (GREEN
 ```
 
 **If Task Fails:**
+
 1. **`convertToExcalidrawElements` throws referencing `document`:** The provider wasn't installed before the call. Verify `ensureProvider()` is the first line of `buildScene` and `setCustomTextMetricsProvider` is imported from `@excalidraw/element`.
 2. **Type error on skeleton:** It's intentionally typed `Record<string, unknown>[]` and cast at the call site; keep the `as Parameters<...>[0]` cast.
 3. **Rollback:** `git checkout -- packages/kindraw-client/src/scene/build.ts`.
@@ -1383,6 +1420,7 @@ git commit -m "feat(kindraw-client): deterministic scene builder pipeline (GREEN
 ### Task 12: Add the public `buildScene` export + a `scene` entry module
 
 **Files:**
+
 - Create: `packages/kindraw-client/src/scene/index.ts`
 
 **Prerequisites:** Task 11 committed.
@@ -1432,6 +1470,7 @@ git commit -m "feat(kindraw-client): public scene builder entry"
 ### Task 13: Add `scene` to esbuild build + the package `exports` map
 
 **Files:**
+
 - Modify: `packages/kindraw-client/build.mjs:75` (external list), `:85-91` (entryPoints), `:95-99` (tsc declaration list)
 - Modify: `packages/kindraw-client/package.json:10-19` (exports map)
 
@@ -1440,15 +1479,19 @@ git commit -m "feat(kindraw-client): public scene builder entry"
 **Step 1: Add the `scene` entrypoint and keep dagre/elk handling correct**
 
 In `packages/kindraw-client/build.mjs`, the `external` array currently is:
+
 ```js
   external: ["jsdom", "canvas", "@excalidraw/mermaid-to-excalidraw"],
 ```
+
 Change it to also keep `dagre` and `elkjs` external (they are real npm deps installed by the consumer; no need to bundle, and elkjs's worker build does not bundle cleanly):
+
 ```js
   external: ["jsdom", "canvas", "@excalidraw/mermaid-to-excalidraw", "dagre", "elkjs"],
 ```
 
 In the `entryPoints` object (currently `index` and `generate`), add `scene`:
+
 ```js
   entryPoints: {
     index: path.resolve(__dirname, "src/index.ts"),
@@ -1458,10 +1501,13 @@ In the `entryPoints` object (currently `index` and `generate`), add `scene`:
 ```
 
 In the `tsc` declaration command string, add the scene entry so `.d.ts` is emitted. Change:
+
 ```js
     "--skipLibCheck --types node src/index.ts src/client.ts src/auth.ts src/generate.ts src/dom.ts",
 ```
+
 to:
+
 ```js
     "--skipLibCheck --types node src/index.ts src/client.ts src/auth.ts src/generate.ts src/dom.ts src/scene/index.ts",
 ```
@@ -1469,6 +1515,7 @@ to:
 **Step 2: Add the `./scene` export to `package.json`**
 
 In `packages/kindraw-client/package.json`, change the `exports` block to add the scene subpath:
+
 ```json
   "exports": {
     ".": {
@@ -1491,9 +1538,11 @@ In `packages/kindraw-client/package.json`, change the `exports` block to add the
 Run: `cd /Users/matheuskindrazki/development/crazy-ideas/kindraw/packages/kindraw-client && yarn build`
 
 **Expected output:** esbuild prints bundle info for `index.js`, `generate.js`, `scene.js`. tsc emits declarations. Final line:
+
 ```
 @kindraw/client built → dist/index.js, dist/generate.js (+ .d.ts)
 ```
+
 (The console.log message text is fine as-is; the important part is that `dist/scene.js` and `dist/scene/index.d.ts` now exist. Verify with the next command.)
 
 **Step 4: Verify the scene artifacts exist**
@@ -1503,6 +1552,7 @@ Run: `ls packages/kindraw-client/dist/scene.js packages/kindraw-client/dist/scen
 **Expected output:** Both paths print (no "No such file").
 
 **If `dist/scene/index.d.ts` is missing:** tsc emits declarations preserving the source folder structure, so the `.d.ts` lands at `dist/scene/index.d.ts` while esbuild emits the bundle at `dist/scene.js` (flat, because the entryPoint key is `scene`). The `exports` map above already points `types` → `./dist/scene/index.d.ts` and `default` → `./dist/scene/index.js`. **MISMATCH RISK:** esbuild emits `dist/scene.js` (flat) but the exports map says `./dist/scene/index.js`. Fix by changing the esbuild entryPoint key to a nested path so the bundle also lands at `dist/scene/index.js`:
+
 ```js
   entryPoints: {
     index: path.resolve(__dirname, "src/index.ts"),
@@ -1510,6 +1560,7 @@ Run: `ls packages/kindraw-client/dist/scene.js packages/kindraw-client/dist/scen
     "scene/index": path.resolve(__dirname, "src/scene/index.ts"),
   },
 ```
+
 Re-run `yarn build` and re-verify `ls packages/kindraw-client/dist/scene/index.js packages/kindraw-client/dist/scene/index.d.ts` — both must exist. This nested-key form is the correct one; use it.
 
 **Step 5: Commit**
@@ -1520,6 +1571,7 @@ git commit -m "build(kindraw-client): emit @kindraw/client/scene entrypoint"
 ```
 
 **If Task Fails:**
+
 1. **esbuild can't resolve dagre/elkjs:** They must be in `external` (Step 1). Re-check.
 2. **`dist/scene/index.js` not where exports expects:** Use the nested entryPoint key form from Step 4's fix.
 3. **Rollback:** `git checkout -- packages/kindraw-client/build.mjs packages/kindraw-client/package.json` and `rm -rf packages/kindraw-client/dist`.
@@ -1529,9 +1581,10 @@ git commit -m "build(kindraw-client): emit @kindraw/client/scene entrypoint"
 ### Task 14: Expose `createScene` on `@kindraw/client` (thin convenience, optional)
 
 **Files:**
+
 - Modify: `packages/kindraw-client/src/index.ts`
 
-**Note:** The light `index.ts` must stay free of `@excalidraw/element`/dagre/elk imports (it's the lean CRUD entry). So we do NOT import `buildScene` here directly. Instead, document the subpath. This task only adds a doc comment + re-export of the *types* (type-only, erased at build, no runtime weight).
+**Note:** The light `index.ts` must stay free of `@excalidraw/element`/dagre/elk imports (it's the lean CRUD entry). So we do NOT import `buildScene` here directly. Instead, document the subpath. This task only adds a doc comment + re-export of the _types_ (type-only, erased at build, no runtime weight).
 
 **Prerequisites:** Task 13 committed.
 
@@ -1582,6 +1635,7 @@ git commit -m "feat(kindraw-client): re-export scene spec types from light entry
 ### Task 15: Add the `kindraw_create_scene` MCP tool
 
 **Files:**
+
 - Modify: `packages/kindraw-mcp/src/index.ts` (add a new `registerTool` block after `kindraw_create_diagram`, around line 97)
 
 **Prerequisites:** Task 14 committed. The MCP server already imports `KindrawClient` and `z` (zod).
@@ -1591,91 +1645,93 @@ git commit -m "feat(kindraw-client): re-export scene spec types from light entry
 In `packages/kindraw-mcp/src/index.ts`, immediately after the closing `);` of the `kindraw_create_diagram` registration (currently ends at line 97), insert:
 
 ```ts
-  server.registerTool(
-    "kindraw_create_scene",
-    {
-      description:
-        "Create a high-quality diagram in the user's Kindraw workspace from a " +
-        "STRUCTURED spec of nodes and edges (preferred over Mermaid for rich " +
-        "layouts). The server runs real graph layout (dagre by default) so " +
-        "nodes are well-spaced and arrows connect borders cleanly. Provide " +
-        "nodes with ids + labels, edges referencing those ids, optional shape " +
-        "per node (rectangle/diamond/ellipse), optional colors, direction " +
-        "(TB/LR/...), and engine (dagre or elk for orthogonal routing). " +
-        "Returns the drawing URL.",
-      inputSchema: {
-        title: z.string().optional().describe("Title for the new drawing"),
-        nodes: z
-          .array(
-            z.object({
-              id: z.string().describe("Unique node id, referenced by edges"),
-              label: z.string().describe("Text shown inside the node"),
-              shape: z
-                .enum(["rectangle", "diamond", "ellipse"])
-                .optional()
-                .describe("Node shape (default rectangle)"),
-              group: z
-                .string()
-                .optional()
-                .describe("Optional group id (reserved for grouping)"),
-              strokeColor: z
-                .string()
-                .optional()
-                .describe("Stroke color hex, e.g. #1971c2"),
-              backgroundColor: z
-                .string()
-                .optional()
-                .describe("Fill color hex, e.g. #a5d8ff"),
-            }),
-          )
-          .min(1)
-          .describe("The diagram nodes (at least one)"),
-        edges: z
-          .array(
-            z.object({
-              from: z.string().describe("Source node id"),
-              to: z.string().describe("Target node id"),
-              label: z.string().optional().describe("Optional edge label"),
-              style: z
-                .enum(["solid", "dashed", "dotted"])
-                .optional()
-                .describe("Connector style (default solid)"),
-            }),
-          )
-          .describe("The directed edges between nodes"),
-        direction: z
-          .enum(["TB", "BT", "LR", "RL"])
-          .optional()
-          .describe("Layout direction (default TB, top-to-bottom)"),
-        engine: z
-          .enum(["dagre", "elk"])
-          .optional()
-          .describe(
-            "Layout engine: dagre (default, fast) or elk (orthogonal routing)",
-          ),
-      },
+server.registerTool(
+  "kindraw_create_scene",
+  {
+    description:
+      "Create a high-quality diagram in the user's Kindraw workspace from a " +
+      "STRUCTURED spec of nodes and edges (preferred over Mermaid for rich " +
+      "layouts). The server runs real graph layout (dagre by default) so " +
+      "nodes are well-spaced and arrows connect borders cleanly. Provide " +
+      "nodes with ids + labels, edges referencing those ids, optional shape " +
+      "per node (rectangle/diamond/ellipse), optional colors, direction " +
+      "(TB/LR/...), and engine (dagre or elk for orthogonal routing). " +
+      "Returns the drawing URL.",
+    inputSchema: {
+      title: z.string().optional().describe("Title for the new drawing"),
+      nodes: z
+        .array(
+          z.object({
+            id: z.string().describe("Unique node id, referenced by edges"),
+            label: z.string().describe("Text shown inside the node"),
+            shape: z
+              .enum(["rectangle", "diamond", "ellipse"])
+              .optional()
+              .describe("Node shape (default rectangle)"),
+            group: z
+              .string()
+              .optional()
+              .describe("Optional group id (reserved for grouping)"),
+            strokeColor: z
+              .string()
+              .optional()
+              .describe("Stroke color hex, e.g. #1971c2"),
+            backgroundColor: z
+              .string()
+              .optional()
+              .describe("Fill color hex, e.g. #a5d8ff"),
+          }),
+        )
+        .min(1)
+        .describe("The diagram nodes (at least one)"),
+      edges: z
+        .array(
+          z.object({
+            from: z.string().describe("Source node id"),
+            to: z.string().describe("Target node id"),
+            label: z.string().optional().describe("Optional edge label"),
+            style: z
+              .enum(["solid", "dashed", "dotted"])
+              .optional()
+              .describe("Connector style (default solid)"),
+          }),
+        )
+        .describe("The directed edges between nodes"),
+      direction: z
+        .enum(["TB", "BT", "LR", "RL"])
+        .optional()
+        .describe("Layout direction (default TB, top-to-bottom)"),
+      engine: z
+        .enum(["dagre", "elk"])
+        .optional()
+        .describe(
+          "Layout engine: dagre (default, fast) or elk (orthogonal routing)",
+        ),
     },
-    async ({ title, nodes, edges, direction, engine }) => {
-      try {
-        const { buildScene } = await import("@kindraw/client/scene");
-        const { content, elementCount } = await buildScene({
-          nodes,
-          edges,
-          direction,
-          engine,
-        });
-        const result = await client.createDrawing({
-          title: title || "Untitled diagram",
-          content,
-        });
-        return text(
-          `Created diagram "${title || "Untitled diagram"}" (${elementCount} elements).\n${result.url}`,
-        );
-      } catch (error) {
-        return { ...text(formatError(error)), isError: true };
-      }
-    },
-  );
+  },
+  async ({ title, nodes, edges, direction, engine }) => {
+    try {
+      const { buildScene } = await import("@kindraw/client/scene");
+      const { content, elementCount } = await buildScene({
+        nodes,
+        edges,
+        direction,
+        engine,
+      });
+      const result = await client.createDrawing({
+        title: title || "Untitled diagram",
+        content,
+      });
+      return text(
+        `Created diagram "${
+          title || "Untitled diagram"
+        }" (${elementCount} elements).\n${result.url}`,
+      );
+    } catch (error) {
+      return { ...text(formatError(error)), isError: true };
+    }
+  },
+);
 ```
 
 **Step 2: Typecheck the MCP package**
@@ -1700,6 +1756,7 @@ git commit -m "feat(kindraw-mcp): add kindraw_create_scene structured tool"
 ```
 
 **If Task Fails:**
+
 1. **zod schema rejects valid input at runtime:** Loosen `.min(1)` placement; the array `.min(1)` is on `nodes` only.
 2. **Rollback:** `git checkout -- packages/kindraw-mcp/src/index.ts`.
 
@@ -1708,6 +1765,7 @@ git commit -m "feat(kindraw-mcp): add kindraw_create_scene structured tool"
 ### Task 16: Add the `kindraw generate --spec` CLI command (parity)
 
 **Files:**
+
 - Create: `packages/kindraw-cli/src/commands/scene.ts`
 - Modify: `packages/kindraw-cli/src/index.ts` (HELP text + dispatch)
 
@@ -1734,9 +1792,7 @@ export const scene = async (args: {
   const client: KindrawClient = requireClient();
 
   if (!args.spec) {
-    throw new Error(
-      "Usage: kindraw scene --spec <file|-> [--title <title>]",
-    );
+    throw new Error("Usage: kindraw scene --spec <file|-> [--title <title>]");
   }
 
   const raw =
@@ -1769,17 +1825,20 @@ export const scene = async (args: {
 In `packages/kindraw-cli/src/index.ts`:
 
 (a) Add the import near the other command imports (after the `generate` import, line 4):
+
 ```ts
 import { scene } from "./commands/scene.js";
 ```
 
 (b) Add a HELP line in the `Usage:` block (after the `generate` lines, around line 19):
+
 ```
   kindraw scene    --spec <file|->      Create a drawing from a structured spec
                   [--title <title>]
 ```
 
 (c) Add a `case` in the `switch (command)` (after the `generate` case, line 72-76):
+
 ```ts
     case "scene":
       return scene({
@@ -1808,6 +1867,7 @@ git commit -m "feat(kindraw-cli): add `kindraw scene --spec` command"
 ```
 
 **If Task Fails:**
+
 1. **`str` / `flags` not defined:** They're defined in `index.ts` already (`str` helper line 53, `flags` from `parse`). Use them as the existing `generate` case does.
 2. **Rollback:** `git checkout -- packages/kindraw-cli/src/index.ts && rm packages/kindraw-cli/src/commands/scene.ts`.
 
@@ -1820,6 +1880,7 @@ git commit -m "feat(kindraw-cli): add `kindraw scene --spec` command"
 **Step 1: Run the project typecheck and test suite (per CLAUDE.md)**
 
 Run from repo root:
+
 ```bash
 cd /Users/matheuskindrazki/development/crazy-ideas/kindraw
 yarn test:typecheck
@@ -1827,19 +1888,24 @@ yarn vitest run packages/kindraw-client/src/scene
 ```
 
 **Expected output:**
+
 - `yarn test:typecheck` → exits 0 (TypeScript clean).
 - The scene tests → all suites pass:
+
 ```
 Test Files  5 passed (5)
      Tests  ~19 passed
 ```
+
 (spec.test, textMetrics.test, layout.test, layout.elk.test, build.test)
 
 **Note on `yarn test:update`:** Per CLAUDE.md the snapshot command is `yarn test:update`. Our scene tests use explicit assertions, not snapshots, so they don't need snapshot updates. Still run the existing `reanchor.test.ts` to confirm no regression:
+
 ```bash
 yarn vitest run packages/kindraw-client/src/reanchor.test.ts
 ```
-**Expected:** `Tests  3 passed (3)`.
+
+**Expected:** `Tests 3 passed (3)`.
 
 **Step 2: Lint/format (per CLAUDE.md `yarn fix`)**
 
@@ -1848,22 +1914,26 @@ Run: `cd /Users/matheuskindrazki/development/crazy-ideas/kindraw && yarn fix`
 **Expected output:** Formatting/lint auto-fixes applied (if any). Re-run typecheck if files changed.
 
 **Step 3: Code Review — dispatch all 3 reviewers in parallel**
+
 - REQUIRED SUB-SKILL: Use ring:requesting-code-review
 - Run ring:code-reviewer, ring:business-logic-reviewer, ring:security-reviewer simultaneously over the full Phase 1 diff (Tasks 10-16).
 - Wait for all.
 
 **Step 4: Handle findings by severity (MANDATORY)**
+
 - **Critical/High/Medium:** fix immediately, re-run all 3 reviewers, repeat until zero. Expect scrutiny on: MCP input validation (the spec comes from an LLM — ensure `buildScene`'s `validateDiagramSpec` runs before any layout, which it does), error messages not leaking internals, and the determinism `stabilize` hack (flag if it could corrupt a real scene — it only sets metadata fields Excalidraw recomputes on load).
 - **Low:** `TODO(review): ... (reported by [reviewer] on 2026-06-16, severity: Low)`.
 - **Cosmetic:** `FIXME(nitpick): ... (reported by [reviewer] on 2026-06-16, severity: Cosmetic)`.
 
 **Step 5: Commit any fixes**
+
 ```bash
 git add -A
 git commit -m "fix(kindraw): address Phase 1 review findings"
 ```
 
 **If Task Fails:**
+
 1. **`yarn test:typecheck` fails in unrelated packages:** Confirm the failures are pre-existing (run `git stash && yarn test:typecheck` on clean tree to compare). Only fix what your changes broke.
 2. **Snapshot mismatch elsewhere:** If `yarn test:update` is required by CI, run it and inspect the diff before committing.
 
@@ -1878,6 +1948,7 @@ git commit -m "fix(kindraw): address Phase 1 review findings"
 **Step 1: Smoke-test the builder output locally (no network) first**
 
 Create a temp spec and build it via the CLI without posting — actually the CLI posts; to test build-only, use a tiny node snippet:
+
 ```bash
 cd /Users/matheuskindrazki/development/crazy-ideas/kindraw/packages/kindraw-client
 node --input-type=module -e "
@@ -1902,6 +1973,7 @@ const boxes = scene.elements.filter(e => ['rectangle','ellipse','diamond'].inclu
 console.log('boxes:', boxes.map(b => ({ id: b.id, x: b.x, y: b.y, w: b.width, h: b.height })));
 "
 ```
+
 **Expected output:** Prints `elements: <N>` (≥ 7: 4 shapes + 4 bound text + 3 arrows minus container/text dedup) and a list of boxes whose x/y are spread out (no two boxes share the same x AND y; y increases down the chain for TB). This is the visual-quality proof: real spacing, not `text.length*8`.
 
 **Step 2: Smoke-test the CLI end-to-end (posts a real drawing)**
@@ -1910,26 +1982,30 @@ console.log('boxes:', boxes.map(b => ({ id: b.id, x: b.x, y: b.y, w: b.width, h:
 cd /Users/matheuskindrazki/development/crazy-ideas/kindraw
 echo '{"nodes":[{"id":"a","label":"Frontend"},{"id":"b","label":"Backend"},{"id":"c","label":"Database","shape":"ellipse"}],"edges":[{"from":"a","to":"b","label":"REST"},{"from":"b","to":"c","label":"SQL"}],"direction":"TB"}' | node packages/kindraw-cli/dist/index.js scene --spec - --title "Scene smoke test"
 ```
+
 **Expected output:**
+
 ```
 Created "Scene smoke test" (N elements)
 https://kindraw.dev/draw/<itemId>   (or the configured base URL)
 ```
 
 **Step 3: Open the URL and visually confirm**
+
 - Open the printed URL in a browser.
 - **Expected:** Three nodes laid out top-to-bottom with comfortable spacing, "Database" as an ellipse, two labeled arrows whose heads/tails touch the node borders (not floating, not overlapping). Compare against a Mermaid-generated drawing of the same graph (`kindraw generate --mermaid`) — the scene version should look noticeably cleaner.
 
-**Step 4: (Optional) MCP tool smoke test via an MCP client**
-If you have Claude Code wired to the kindraw MCP server, invoke `kindraw_create_scene` with the same nodes/edges and confirm the returned URL renders identically. Otherwise Step 2 (CLI) exercises the same `buildScene` + `createDrawing` path and is sufficient.
+**Step 4: (Optional) MCP tool smoke test via an MCP client** If you have Claude Code wired to the kindraw MCP server, invoke `kindraw_create_scene` with the same nodes/edges and confirm the returned URL renders identically. Otherwise Step 2 (CLI) exercises the same `buildScene` + `createDrawing` path and is sufficient.
 
 **Step 5: Clean up the smoke-test drawing (optional)**
+
 ```bash
 node packages/kindraw-cli/dist/index.js items list
 node packages/kindraw-cli/dist/index.js items delete <itemId>
 ```
 
 **If Task Fails:**
+
 1. **401 Unauthorized:** Run `kindraw login` or `export KINDRAW_TOKEN=...`.
 2. **400 "content is not valid Excalidraw JSON":** The builder output is malformed — re-run Step 1 and inspect `r.content` for a missing `elements` array.
 3. **Drawing renders cramped/overlapping:** The custom text provider isn't being used at runtime (boxes too big/small). Confirm `dist/scene/index.js` was rebuilt after Task 11 and that `setCustomTextMetricsProvider` runs in `buildScene`.
@@ -1939,11 +2015,13 @@ node packages/kindraw-cli/dist/index.js items delete <itemId>
 ### Task 19: Phase 1 wrap-up — docs + final commit
 
 **Files:**
+
 - Modify: `packages/kindraw-client/README.md`, `packages/kindraw-mcp/README.md`, `packages/kindraw-cli/README.md`
 
 **Step 1: Document the new capability**
 
 Add a short section to each README:
+
 - `kindraw-client/README.md`: document `import { buildScene } from "@kindraw/client/scene"` with the `DiagramSpec` shape and an example.
 - `kindraw-mcp/README.md`: document the `kindraw_create_scene` tool and when to prefer it over `kindraw_create_diagram` (structured > mermaid for layout quality).
 - `kindraw-cli/README.md`: document `kindraw scene --spec <file|->`.
@@ -1953,14 +2031,17 @@ Add a short section to each README:
 **Step 2: Final typecheck + test**
 
 Run:
+
 ```bash
 cd /Users/matheuskindrazki/development/crazy-ideas/kindraw
 yarn test:typecheck
 yarn vitest run packages/kindraw-client/src
 ```
+
 **Expected:** typecheck clean; all kindraw-client tests pass (scene suites + reanchor).
 
 **Step 3: Commit**
+
 ```bash
 git add packages/kindraw-client/README.md packages/kindraw-mcp/README.md packages/kindraw-cli/README.md
 git commit -m "docs(kindraw): document structured scene builder (Phase 1)"
@@ -1975,6 +2056,7 @@ git commit -m "docs(kindraw): document structured scene builder (Phase 1)"
 **Goal:** Let Claude create a markdown `doc` item directly (the data model already exists; only the client/MCP/CLI surface is missing).
 
 **Verified facts driving this phase:**
+
 - The Worker route `POST /v1/api/items` (`workers/api/src/index.ts:1021-1031`) accepts `{ kind: "drawing"|"doc", title, folderId, content }` and returns `{ itemId, url }` (status 201). A `doc`'s `content` is a markdown string. This route is currently NOT exposed in `@kindraw/client`.
 
 **Tasks (each 2-5 min, TDD where logic exists):**
@@ -1998,7 +2080,8 @@ git commit -m "docs(kindraw): document structured scene builder (Phase 1)"
 6. **Smoke test:** `echo '# Hello\n\nWorld' | kindraw doc --markdown - --title "Doc smoke"` → open URL, confirm it renders as a TipTap markdown doc.
 
 **Uncertainties to resolve in Phase 2 (read before implementing):**
-- Confirm the generic `POST /v1/api/items` accepts a session-or-token from the public API (it's under `/v1/api/`, which `requireAuth` guards — verified it requires auth, accepts Bearer token). 
+
+- Confirm the generic `POST /v1/api/items` accepts a session-or-token from the public API (it's under `/v1/api/`, which `requireAuth` guards — verified it requires auth, accepts Bearer token).
 - Confirm the returned `url` for a `doc` opens the markdown editor, not the canvas. Read `drawingUrl` in `workers/api/src/index.ts`.
 
 ---
@@ -2008,6 +2091,7 @@ git commit -m "docs(kindraw): document structured scene builder (Phase 1)"
 **Goal:** Let Claude create a `hybrid` item — a canvas + a live markdown document with pre-built sections, optionally cross-linked from canvas elements via `kindraw://section/{hybridId}/{sectionId}`.
 
 **Verified facts driving this phase:**
+
 - Hybrid creation is `POST /api/hybrid-items` (NOT `/v1`), body `{ title, folderId? }`, returns `{ hybridId, docItemId, drawingItemId }`. It auto-creates a doc (`# {title}\n\n`) and an empty drawing. Content is then filled via per-item content routes.
 - `excalidraw-app/kindraw/hybridSections.ts` is **PURE (Node-importable)** — only depends on `marked`. It exports: `parseHybridMarkdownSections`, `appendHybridSection(markdown, title) → { markdown, sectionId }`, `buildKindrawSectionLink(hybridId, sectionId)`, `replaceHybridMarkdownSection`, etc. This is the helper to reuse for composing pre-populated sections.
 
@@ -2022,6 +2106,7 @@ git commit -m "docs(kindraw): document structured scene builder (Phase 1)"
 7. **Smoke test:** create a hybrid, open the URL, confirm canvas + sectioned doc render and (if links added) clicking a canvas node scrolls to its section.
 
 **Uncertainties to resolve in Phase 3 (highest risk — read first):**
+
 - The `/api/hybrid-items` auth question above (token vs. session). This is the gating unknown; resolve before estimating Phase 3.
 - The exact element `link` field that triggers section navigation in the app — read `excalidraw-app/kindraw/` for where `kindraw://section/...` links are consumed (the link must be set on the Excalidraw element's `link` property; confirm `convertToExcalidrawElements` skeleton supports `link` — `ElementConstructorOpts` includes `link`, so a node skeleton can carry `link`).
 
@@ -2032,6 +2117,7 @@ git commit -m "docs(kindraw): document structured scene builder (Phase 1)"
 **Goal:** Let a scene start from a curated template, and let nodes embed searched icons as image elements.
 
 **Verified facts driving this phase:**
+
 - `excalidraw-app/kindraw/templatesApi.ts`: `getTemplate(id)` returns `{ ...meta, elements: KindrawTemplateSkeleton[] }` where `elements` are Excalidraw element skeletons fed to `convertToExcalidrawElements`. It's browser-coupled only via `getApiBaseUrl()` (uses `window.location.origin` / `import.meta.env`) — needs an injectable base URL for Node.
 - `excalidraw-app/kindraw/iconsApi.ts`: `searchIcons(query)` → `KindrawIcon[]`; `fetchIconSvg(id)` → raw SVG string. The app turns an icon into an image element via: normalize SVG → `SVGStringToFile` → `generateIdFromFile` → `getDataURL` → register file → `convertToExcalidrawElements([{ type:"image", fileId, x,y,w,h, status:"saved" }])`. Several of those helpers are browser/excalidraw-coupled.
 - `curatedLibraries.ts`: metadata pointers to `.excalidrawlib` blobs (browser import UI consumes them) — likely NOT needed server-side for Phase 4; skip unless a clear use emerges.
@@ -2041,10 +2127,11 @@ git commit -m "docs(kindraw): document structured scene builder (Phase 1)"
 1. **Port a Node-friendly templates fetch** into `@kindraw/client` — `fetchTemplate(baseUrl, id)` using plain `fetch` (the client already has a `baseUrl`). Returns the skeleton `elements`. Add a `buildScene` option `startFromTemplate?: { id: string }` that prepends the template skeleton to the generated skeleton (offsetting generated nodes so they don't collide — reuse layout bounds). **VERIFY:** the template API path — is it `/api/templates/{id}` or `/v1/api/templates/{id}`? Read the Worker for a templates route; the app uses `/api/templates`. If only `/api/*` exists, confirm token auth there or add a `/v1` route (flag).
 2. **Port icon embedding into Node** — this is the hardest part because `SVGStringToFile`/`getDataURL`/`generateIdFromFile` are excalidraw-app utilities. Investigate whether they're importable from `@excalidraw/*` packages or must be reimplemented (an SVG data URL + `fileId` hash can be built in Node with `Buffer` + a hash; the image element skeleton is straightforward). Add `buildScene` support for `node.icon?: string` (an icon id): fetch SVG, build a `files` map entry + an `image` skeleton, and place it near the node.
 3. **Extend `buildScene` `files` output** — currently emits `files: {}`. Icons require populating `files` with `{ [fileId]: { mimeType, dataURL, id, created } }`. Add tests asserting the `files` map and image elements.
-4. **Add MCP/CLI surface** — extend `kindraw_create_scene` schema with optional `template` and per-node `icon`. 
+4. **Add MCP/CLI surface** — extend `kindraw_create_scene` schema with optional `template` and per-node `icon`.
 5. **Code review + smoke test** (create a scene from a template with an icon node; confirm it renders).
 
 **Uncertainties to resolve in Phase 4 (read first):**
+
 - Are `SVGStringToFile`, `getDataURL`, `generateIdFromFile`, `normalizeSVG` exported from any `@excalidraw/*` package (e.g. `@excalidraw/excalidraw` or `@excalidraw/utils`), or are they app-only? Grep `packages/` for each. If app-only, reimplement minimally in Node (data URL + content hash). This determines Phase 4 effort.
 - The templates/icons API auth & path (`/api/*` vs `/v1/api/*`) — same pattern as Phase 2/3.
 
@@ -2053,9 +2140,11 @@ git commit -m "docs(kindraw): document structured scene builder (Phase 1)"
 ## Cross-Cutting Notes & Risks
 
 **New dependencies (where they go):**
+
 - `packages/kindraw-client/package.json` → `dagre` (dep), `elkjs` (dep), `@types/dagre` (devDep). Phase 3 adds `marked` (dep) if hybrid sections are vendored. Phase 4 may add nothing new (icons reuse `Buffer`/hash).
 
 **Build config:**
+
 - The structured scene path is a NEW third esbuild entrypoint (`scene/index`) that does NOT import `./dom.js` or mermaid. `dagre` and `elkjs` are kept `external` (installed by the consumer). The mermaid path (`generate.ts` + `dom.ts`) is untouched and stays isolated — both can coexist; a caller pays for jsdom only if they import `@kindraw/client/generate`.
 
 **Determinism:** `convertToExcalidrawElements` injects randomness (`seed`, `versionNonce`, random ids when `regenerateIds: true`). The builder uses stable skeleton ids + `regenerateIds: false` + a `stabilize()` pass that zeroes metadata fields. If a future Excalidraw version changes which fields are randomized, the determinism test (Task 10) will catch it.
