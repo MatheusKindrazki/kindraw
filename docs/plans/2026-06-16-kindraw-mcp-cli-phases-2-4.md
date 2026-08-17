@@ -2,19 +2,21 @@
 
 > **For Agents:** REQUIRED SUB-SKILL: Use ring:executing-plans to implement this plan task-by-task.
 
-**Goal:** Add doc, hybrid (live-markdown-beside-canvas), template, and icon authoring to the Kindraw MCP server and CLI by extending the shared `@kindraw/client`, reusing the existing `buildScene` layout engine, with zero Worker changes — every addition is additive and the parser that produces section-link slugs is the *real* app parser (no regex drift).
+**Goal:** Add doc, hybrid (live-markdown-beside-canvas), template, and icon authoring to the Kindraw MCP server and CLI by extending the shared `@kindraw/client`, reusing the existing `buildScene` layout engine, with zero Worker changes — every addition is additive and the parser that produces section-link slugs is the _real_ app parser (no regex drift).
 
-**Architecture:** Three independently-shippable phases sit on top of the existing thin HTTP client (`packages/kindraw-client/src/client.ts`) and the deterministic scene builder (`packages/kindraw-client/src/scene/`). Phase 2 adds raw markdown docs. Phase 3 adds hybrid items (an Excalidraw canvas next to a live markdown doc, wired together by `kindraw://section/...` element links whose slugs come from re-parsing the *final* markdown with the app's `parseHybridMarkdownSections`). Phase 4 adds 12 server templates and an Iconify icon proxy, rendered into scenes via additive `buildScene` inputs. The client never trusts the server's returned `url` (it always returns `/draw/<id>`); the client builds `/doc/<id>`, `/hybrid/<id>` itself from a resolved app origin.
+**Architecture:** Three independently-shippable phases sit on top of the existing thin HTTP client (`packages/kindraw-client/src/client.ts`) and the deterministic scene builder (`packages/kindraw-client/src/scene/`). Phase 2 adds raw markdown docs. Phase 3 adds hybrid items (an Excalidraw canvas next to a live markdown doc, wired together by `kindraw://section/...` element links whose slugs come from re-parsing the _final_ markdown with the app's `parseHybridMarkdownSections`). Phase 4 adds 12 server templates and an Iconify icon proxy, rendered into scenes via additive `buildScene` inputs. The client never trusts the server's returned `url` (it always returns `/draw/<id>`); the client builds `/doc/<id>`, `/hybrid/<id>` itself from a resolved app origin.
 
 **Tech Stack:** TypeScript (ESM, `moduleResolution: Bundler`), Node ≥18, `@modelcontextprotocol/sdk` (MCP), `zod` (input schemas), `vitest` (tests), `esbuild` (client bundling), `marked@15.0.12` (markdown lexer — already a root dep, to be vendored into the client for slug parity), `@excalidraw/element` `convertToExcalidrawElements` (scene serialization, aliased to source in vitest + esbuild).
 
 **Global Prerequisites:**
+
 - Environment: macOS/Linux, Node ≥18, Yarn (workspaces). This is the Excalidraw monorepo; the three target packages are `packages/kindraw-client`, `packages/kindraw-mcp`, `packages/kindraw-cli`.
 - Tools: `node --version` (≥18), `yarn --version`, `git status` clean.
 - Access: NO live API access is required to implement or test — every client method is unit-tested against a **mocked `globalThis.fetch`**. A real `kdr_` Bearer token (scope `full`) is only needed for the optional manual smoke at the end of each phase.
 - State: Work from a feature branch off `master`. Phase 1 (`buildScene`, `kindraw_create_scene`, `kindraw generate --spec`) is already merged into the working tree.
 
 **Verification before starting:**
+
 ```bash
 # Run ALL these and verify output before writing any code:
 node --version            # Expected: v18.x or higher
@@ -37,7 +39,7 @@ ls node_modules/marked/package.json   # Expected: file exists (marked@15.0.12 is
 These were confirmed by reading the actual files. Cite them in code comments; respect every quirk.
 
 | # | Contract | Evidence (file:line) |
-|---|----------|----------------------|
+| --- | --- | --- | --- |
 | C1 | `request<T>` ALWAYS calls `response.json()` (line 83) → cannot read raw SVG. Need a sibling `requestText`. | `client.ts:50-84` |
 | C2 | `request(method, path, body?)` takes a FULL path (so both `/v1/api/*` and bare `/api/*` work). Sends `Bearer`, adds 401 hint, throws `KindrawApiError`, returns `undefined` on 204. | `client.ts:50-84,86-98` |
 | C3 | `buildItemPath` = `kind==="drawing" ? /draw/:id : /doc/:id`. The server's `createDrawing`/`createDoc` `url` field is built from `drawingUrl()` which ALWAYS returns `/draw/<id>` even for docs → DISCARD the server url, build `/doc/<id>` ourselves. | `router.ts:103-104` |
@@ -45,7 +47,7 @@ These were confirmed by reading the actual files. Cite them in code comments; re
 | C5 | `slugify`: trim → lowercase → NFD → strip combining marks → `[^a-z0-9]+ → '-'` → trim leading/trailing `-` → fallback `"section"`. | `hybridSections.ts:18-25` |
 | C6 | `buildKindrawSectionLink(hybridId, sectionId)` = `kindraw://section/${hybridId}/${sectionId}`. Links are PURELY client-side element.link data inside the serialized drawing JSON; the server stores them opaquely. | `hybridSections.ts:258-259` |
 | C7 | `convertToExcalidrawElements` passthrough: `newElement({...element})` (line 541-545) and `newImageElement({...element})` (line 601-605) spread the input → `link`, `fileId`, `status` flow through untouched. | `transform.ts:541-545,601-605` |
-| C8 | `RESERVED_ID_PREFIX_RE = /^(text|arrow)-/` forbids user ids starting with `text-`/`arrow-` but NOT `tpl-`/`icon-` → those prefixes are collision-free for generated template/icon elements. | `spec.ts:89` |
+| C8 | `RESERVED_ID_PREFIX_RE = /^(text | arrow)-/`forbids user ids starting with`text-`/`arrow-`but NOT`tpl-`/`icon-` → those prefixes are collision-free for generated template/icon elements. | `spec.ts:89` |
 | C9 | `buildScene` pipeline: `ensureProvider()` → `ensureWindowShim()` → `validateDiagramSpec` → layout → `toSkeleton` → `convertToExcalidrawElements({regenerateIds:false})` → `reanchorArrows` → `stabilize` (seed/versionNonce/version/updated = 1) → envelope `{type,version:2,source:"@kindraw/client",elements,appState,files:{}}`. `reanchorArrows` ASSUMES bound arrows → must be SKIPPED for template skeletons (their arrows are explicit x/y+points, unbound). | `build.ts:174-207`, design note |
 | C10 | `toSkeleton` already spreads conditional props (`...(node.strokeColor ? {...} : {})`) — the pattern to copy for `node.link`. | `build.ts:74-113` |
 | C11 | CLI `readSource(location)`, `MAX_SPEC_BYTES` (5 MiB), `MAX_TITLE_LEN` (500) live in `commands/generate.ts` and must be reused (export them). The CLI flag parser only does `--key value` / `--key=value` / `--flag` — no repeated flags, no `nodeId=icon:#hex` single-token parsing. | `commands/generate.ts:14,18,23-51`, `index.ts:30-52` |
@@ -65,12 +67,12 @@ These were confirmed by reading the actual files. Cite them in code comments; re
 ## RESIDUAL UNCERTAINTY (flag before/while implementing)
 
 | Topic | Uncertainty | What to read / do |
-|-------|-------------|-------------------|
+| --- | --- | --- | --- |
 | `marked.lexer` shape | The vendored `slugify`+`parseHybridMarkdownSections` must produce IDENTICAL ids to the app. | The parity test (Task 3.2) is the guard. If it fails, diff against `excalidraw-app/kindraw/hybridSections.ts` line-by-line — do NOT "fix" the slugify to make a test pass; match the source exactly. |
 | Template element shape | `GET /api/templates/:id` `.elements` are described as `convertToExcalidrawElements` INPUT skeletons with explicit unbound arrows. The exact field set per template is server-owned and not in this repo. | At Task 4.x, fetch ONE real template (manual smoke or a recorded fixture) and assert `buildFromSkeletons` round-trips it. If the live shape differs from "loose skeleton", capture a fixture JSON and adapt. Treat this as the one place a live call may be needed before finalizing Phase 4. |
 | Icon SVG → dataURL base64 | Node has no `btoa`; use `Buffer.from(svg, "utf8").toString("base64")`. SVG may contain non-ASCII. | Verified Node-safe: `Buffer` handles UTF-8. Test asserts the dataURL decodes back to the original SVG. |
 | `hybrid-items` partial failure | If step 0 succeeds but a content PUT fails, there is NO verified delete-hybrid contract → do NOT try to clean up. | Return the ids + which step failed so the agent retries idempotently (PUTs are idempotent). Documented in Task 3.7. |
-| `folderId` validation | Server accepts `folderId?:string|null`; we pass it through. No client-side folder existence check (not our contract). | Pass `folderId ?? null`. |
+| `folderId` validation | Server accepts `folderId?:string | null`; we pass it through. No client-side folder existence check (not our contract). | Pass `folderId ?? null`. |
 
 ---
 
@@ -79,6 +81,7 @@ These were confirmed by reading the actual files. Cite them in code comments; re
 **Shippable outcome:** `client.createDoc(...)`, `client.docUrl(id)` + appOrigin resolution, `kindraw_create_doc` MCP tool, `kindraw doc create` CLI command. Pure markdown — no `buildScene`.
 
 **Files touched in Phase 2:**
+
 - `packages/kindraw-client/src/client.ts` (modify)
 - `packages/kindraw-client/src/client.test.ts` (CREATE — first client test file)
 - `packages/kindraw-client/src/index.ts` (modify — export new types)
@@ -92,9 +95,11 @@ These were confirmed by reading the actual files. Cite them in code comments; re
 ### Task 2.1: Create the client test harness (mocked fetch) — RED for `requestText`
 
 **Files:**
+
 - Create: `packages/kindraw-client/src/client.test.ts`
 
 **Prerequisites:**
+
 - Tools: vitest (run via `yarn vitest run`). Node ≥18.
 - Files must exist: `packages/kindraw-client/src/client.ts`.
 - No env vars needed.
@@ -178,12 +183,15 @@ describe("KindrawClient.requestText (raw text mode)", () => {
     ]);
     // @ts-expect-error — requestText is private; we invoke it via a public
     // method in later tasks. Here we prove the mechanism by casting.
-    const svg = await (client() as any).requestText("GET", "/api/icons/svg?id=a:b");
+    const svg = await (client() as any).requestText(
+      "GET",
+      "/api/icons/svg?id=a:b",
+    );
     expect(svg).toBe("<svg>hi</svg>");
     expect(calls[0].url).toBe("https://api.kindraw.dev/api/icons/svg?id=a:b");
-    expect((calls[0].init.headers as Record<string, string>).Authorization).toBe(
-      "Bearer kdr_test",
-    );
+    expect(
+      (calls[0].init.headers as Record<string, string>).Authorization,
+    ).toBe("Bearer kdr_test");
   });
 
   it("throws KindrawApiError with 401 hint on auth failure", async () => {
@@ -205,6 +213,7 @@ describe("KindrawClient.requestText (raw text mode)", () => {
 Run: `yarn vitest run packages/kindraw-client/src/client.test.ts`
 
 **Expected output:**
+
 ```
 FAIL  packages/kindraw-client/src/client.test.ts
   × requestText (raw text mode) ... TypeError: ...requestText is not a function
@@ -217,6 +226,7 @@ FAIL  packages/kindraw-client/src/client.test.ts
 Do NOT commit. Proceed to 2.2.
 
 **If Task Fails:**
+
 1. Test file won't load: `ls packages/kindraw-client/src/client.ts` (exists?). Rollback: `git checkout -- packages/kindraw-client/src/client.test.ts`.
 2. Can't recover: document the vitest error and stop.
 
@@ -225,6 +235,7 @@ Do NOT commit. Proceed to 2.2.
 ### Task 2.2: Implement `requestText` (GREEN)
 
 **Files:**
+
 - Modify: `packages/kindraw-client/src/client.ts` (add private method after `request<T>`, which ends at line 84)
 
 **Step 1: Add `requestText` immediately after the `request<T>` method**
@@ -268,6 +279,7 @@ Insert this method right after the closing brace of `request<T>` (after line 84,
 Run: `yarn vitest run packages/kindraw-client/src/client.test.ts`
 
 **Expected output:**
+
 ```
 PASS  packages/kindraw-client/src/client.test.ts
   ✓ requestText (raw text mode) > returns response.text() and sends the Bearer header
@@ -296,6 +308,7 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 ```
 
 **If Task Fails:**
+
 1. Type error on `KindrawApiError`: it's already imported/defined in this file (line 23). No new import needed.
 2. Test still red: confirm the method is INSIDE the `KindrawClient` class (between `request<T>` and `whoami`).
 3. Rollback: `git checkout -- packages/kindraw-client/src/client.ts`.
@@ -305,6 +318,7 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 ### Task 2.3: appOrigin resolution + URL helpers — RED
 
 **Files:**
+
 - Modify: `packages/kindraw-client/src/client.test.ts` (append describe block)
 
 **Step 1: Append URL-helper tests**
@@ -357,6 +371,7 @@ describe("app-origin resolution + URL helpers", () => {
 Run: `yarn vitest run packages/kindraw-client/src/client.test.ts`
 
 **Expected output:**
+
 ```
 FAIL ... app-origin resolution + URL helpers
   × ... TypeError: c.docUrl is not a function
@@ -369,6 +384,7 @@ FAIL ... app-origin resolution + URL helpers
 ### Task 2.4: Implement appOrigin + URL helpers (GREEN)
 
 **Files:**
+
 - Modify: `packages/kindraw-client/src/client.ts`
 
 **Step 1: Extend `KindrawClientOptions`** (currently lines 33-36):
@@ -394,6 +410,7 @@ export type KindrawClientOptions = {
 **Step 2: Add a private field + resolver + public helpers.** Add the field next to the existing private fields (lines 39-40) and initialize in the constructor:
 
 Change the fields block:
+
 ```ts
   private readonly baseUrl: string;
   private readonly token: string;
@@ -401,8 +418,12 @@ Change the fields block:
 ```
 
 In the constructor (after `this.baseUrl = ...` at line 47), add:
+
 ```ts
-    this.appOrigin = KindrawClient.resolveAppOrigin(this.baseUrl, options.appOrigin);
+this.appOrigin = KindrawClient.resolveAppOrigin(
+  this.baseUrl,
+  options.appOrigin,
+);
 ```
 
 Then add this static resolver + the three helpers as methods (place them after the constructor, before `request<T>`):
@@ -465,6 +486,7 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 ```
 
 **If Task Fails:**
+
 1. `resolveAppOrigin` referenced before defined: it's `static`, so order inside the class doesn't matter for runtime; if TS complains, ensure it's a class member, not a top-level function.
 2. Rollback: `git checkout -- packages/kindraw-client/src/client.ts packages/kindraw-client/src/client.test.ts`.
 
@@ -473,6 +495,7 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 ### Task 2.5: `createDoc` client method — RED then GREEN
 
 **Files:**
+
 - Modify: `packages/kindraw-client/src/client.test.ts`
 - Modify: `packages/kindraw-client/src/client.ts`
 
@@ -529,11 +552,13 @@ Run: `yarn vitest run packages/kindraw-client/src/client.test.ts`
 **Step 3: Implement `createDoc`.** Add to `client.ts` after `createDrawing` (ends line 111). Also add a return type near `CreateDrawingResult` (line 21):
 
 Add the type (after line 21):
+
 ```ts
 export type CreateDocResult = { itemId: string; url: string };
 ```
 
 Add the method:
+
 ```ts
   // Create a raw-markdown doc. Returns a CLIENT-BUILT /doc/<id> url — the
   // server's url field is /draw/<id> even for docs (verified C3) so we discard
@@ -579,11 +604,13 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 ### Task 2.6: `kindraw_create_doc` MCP tool
 
 **Files:**
+
 - Modify: `packages/kindraw-mcp/src/index.ts`
 
 **Step 1: Pass appOrigin into the client.** In `resolveCredentials()` (lines 16-42), also resolve `appOrigin`. Change the return type and body:
 
 Replace the function signature/return shape so it also returns `appOrigin`:
+
 ```ts
 const resolveCredentials = (): {
   token: string;
@@ -622,48 +649,49 @@ const resolveCredentials = (): {
 ```
 
 **Step 2: Pass appOrigin to the client** (line 56-57):
+
 ```ts
-  const { token, baseUrl, appOrigin } = resolveCredentials();
-  const client = new KindrawClient({ token, baseUrl, appOrigin });
+const { token, baseUrl, appOrigin } = resolveCredentials();
+const client = new KindrawClient({ token, baseUrl, appOrigin });
 ```
 
 **Step 3: Register the tool.** Insert after the `kindraw_create_scene` registration (after its closing `);` at line 221), before `kindraw_create_drawing`:
 
 ```ts
-  server.registerTool(
-    "kindraw_create_doc",
-    {
-      description:
-        "Create a markdown document in the user's Kindraw workspace. Provide " +
-        "the FULL markdown (GFM: headings, lists, tables, code). Returns the " +
-        "doc URL (/doc/<id>). Use this for prose/notes; use kindraw_create_scene " +
-        "for canvas diagrams, or kindraw_create_hybrid for a doc beside a canvas.",
-      inputSchema: {
-        title: z.string().max(500).describe("Title for the new doc"),
-        markdown: z
-          .string()
-          .max(500_000)
-          .describe("The full document body as GitHub-Flavored Markdown"),
-        folderId: z
-          .string()
-          .max(200)
-          .nullish()
-          .describe("Optional folder id to place the doc in"),
-      },
+server.registerTool(
+  "kindraw_create_doc",
+  {
+    description:
+      "Create a markdown document in the user's Kindraw workspace. Provide " +
+      "the FULL markdown (GFM: headings, lists, tables, code). Returns the " +
+      "doc URL (/doc/<id>). Use this for prose/notes; use kindraw_create_scene " +
+      "for canvas diagrams, or kindraw_create_hybrid for a doc beside a canvas.",
+    inputSchema: {
+      title: z.string().max(500).describe("Title for the new doc"),
+      markdown: z
+        .string()
+        .max(500_000)
+        .describe("The full document body as GitHub-Flavored Markdown"),
+      folderId: z
+        .string()
+        .max(200)
+        .nullish()
+        .describe("Optional folder id to place the doc in"),
     },
-    async ({ title, markdown, folderId }) => {
-      try {
-        const result = await client.createDoc({
-          title,
-          content: markdown,
-          folderId,
-        });
-        return text(`Created doc "${title}".\n${result.url}`);
-      } catch (error) {
-        return { ...text(formatError(error)), isError: true };
-      }
-    },
-  );
+  },
+  async ({ title, markdown, folderId }) => {
+    try {
+      const result = await client.createDoc({
+        title,
+        content: markdown,
+        folderId,
+      });
+      return text(`Created doc "${title}".\n${result.url}`);
+    } catch (error) {
+      return { ...text(formatError(error)), isError: true };
+    }
+  },
+);
 ```
 
 **Step 2 verification — Step 4: Typecheck**
@@ -682,6 +710,7 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 ```
 
 **If Task Fails:**
+
 1. `z.nullish()` not recognized: it exists in zod v3; confirm `import { z } from "zod"` (line 12).
 2. `appOrigin` type mismatch on `KindrawClient`: ensure Task 2.4 shipped `appOrigin?: string` in `KindrawClientOptions`.
 3. Rollback: `git checkout -- packages/kindraw-mcp/src/index.ts`.
@@ -691,11 +720,13 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 ### Task 2.7: Export `readSource` + size/title caps from the CLI
 
 **Files:**
+
 - Modify: `packages/kindraw-cli/src/commands/generate.ts`
 
 The hybrid/doc CLI commands must reuse `readSource`, `MAX_SPEC_BYTES`, `MAX_TITLE_LEN` (verified C11). They are currently module-private.
 
 **Step 1: Add `export` to the three declarations** in `generate.ts`:
+
 - Line 14: `const MAX_SPEC_BYTES` → `export const MAX_SPEC_BYTES`
 - Line 18: `const MAX_TITLE_LEN` → `export const MAX_TITLE_LEN`
 - Line 23: `const readSource` → `export const readSource`
@@ -720,6 +751,7 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 ### Task 2.8: `kindraw doc create` CLI command
 
 **Files:**
+
 - Create: `packages/kindraw-cli/src/commands/doc.ts`
 - Modify: `packages/kindraw-cli/src/index.ts`
 
@@ -729,7 +761,8 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 import { requireClient } from "../client.js";
 import { MAX_TITLE_LEN, readSource } from "./generate.js";
 
-const USAGE = "Usage: kindraw doc create --md <file|-> --title <T> [--folder <id>]";
+const USAGE =
+  "Usage: kindraw doc create --md <file|-> --title <T> [--folder <id>]";
 
 // `kindraw doc create --md <file|-> --title T [--folder ID]`
 // Reads raw markdown (bounded by MAX_SPEC_BYTES via readSource) and creates a
@@ -763,11 +796,13 @@ export const docCreate = async (args: {
 ```
 
 **Step 2: Wire it in `packages/kindraw-cli/src/index.ts`.** Add the import near the other command imports (after line 4):
+
 ```ts
 import { docCreate } from "./commands/doc.js";
 ```
 
 Add a `case "doc":` block in the `switch` (after the `items` case ends at line 90):
+
 ```ts
     case "doc": {
       if (sub === "create") {
@@ -782,6 +817,7 @@ Add a `case "doc":` block in the `switch` (after the `items` case ends at line 9
 ```
 
 **Step 3: Update the HELP string** (lines 12-28) — add under the `generate` lines:
+
 ```
   kindraw doc create --md <file|->     Create a markdown doc
                     --title <title>
@@ -814,6 +850,7 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 ```
 
 **If Task Fails:**
+
 1. Import error on `./commands/doc.js`: ESM needs the `.js` extension on the import even though the file is `.ts` (this matches `generate.js` imports — verified in `index.ts`).
 2. Rollback: `git checkout -- packages/kindraw-cli/src/index.ts && git rm -f packages/kindraw-cli/src/commands/doc.ts`.
 
@@ -826,20 +863,24 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 **Step 1: Whole-suite typecheck + tests**
 
 Run:
+
 ```bash
 yarn test:typecheck
 yarn vitest run packages/kindraw-client
 ```
+
 **Expected:** typecheck exits 0; client tests all pass.
 
 **Step 2: CLI smoke (real)**
 
 Run:
+
 ```bash
 printf '# Hello\n\nFrom the CLI.\n' | \
   KINDRAW_TOKEN=$KINDRAW_TOKEN node packages/kindraw-cli/dist/index.js \
   doc create --md - --title "CLI doc smoke"
 ```
+
 **Expected output:** two lines — `Created doc "CLI doc smoke"` and a URL of the form `https://kindraw.dev/doc/<id>` (NOT `/draw/`). Open it; confirm the markdown renders.
 
 **Step 3: MCP smoke (optional)** — start the MCP server (`node packages/kindraw-mcp/dist/index.js`) under an MCP client and call `kindraw_create_doc {title, markdown}`. Confirm the returned URL is `/doc/<id>`.
@@ -851,11 +892,13 @@ printf '# Hello\n\nFrom the CLI.\n' | \
 ### Task 2.10: Phase 2 Code Review checkpoint
 
 1. **Dispatch all 3 reviewers in parallel:**
+
    - REQUIRED SUB-SKILL: Use ring:requesting-code-review
    - Run ring:code-reviewer, ring:business-logic-reviewer, ring:security-reviewer simultaneously over the Phase 2 diff (`git diff master...HEAD`).
    - Wait for all to complete.
 
 2. **Handle findings by severity:**
+
    - **Critical/High/Medium:** fix immediately, re-run all 3 reviewers, repeat until zero remain. (Do NOT add TODO comments for these.)
    - **Low:** add `TODO(review): [issue] (reported by [reviewer] on 2026-06-16, severity: Low)` at the location.
    - **Cosmetic/Nitpick:** add `FIXME(nitpick): [issue] (reported by [reviewer] on 2026-06-16, severity: Cosmetic)`.
@@ -871,6 +914,7 @@ printf '# Hello\n\nFrom the CLI.\n' | \
 **Shippable outcome:** a shared slug module (parity-tested against the app), hybrid client methods, `node.link` support in `buildScene`, the `kindraw_create_hybrid` MCP tool orchestrating the 4-step seed/populate flow, and `kindraw hybrid create` CLI.
 
 **Files touched in Phase 3:**
+
 - `packages/kindraw-client/src/hybridSections.ts` (CREATE — vendored/shared parser)
 - `packages/kindraw-client/src/hybridSections.test.ts` (CREATE — parity test)
 - `packages/kindraw-client/package.json` (modify — add `marked`)
@@ -891,13 +935,16 @@ printf '# Hello\n\nFrom the CLI.\n' | \
 ### Task 3.1: Add `marked` dep + vendor the slug parser
 
 **Files:**
+
 - Modify: `packages/kindraw-client/package.json`
 - Create: `packages/kindraw-client/src/hybridSections.ts`
 
 **Step 1: Add `marked` to the client deps.** In `packages/kindraw-client/package.json`, add to `"dependencies"` (keep alphabetical-ish; it's hoisted at root already — verified C13):
+
 ```json
     "marked": "15.0.12",
 ```
+
 (Insert after the `jsdom` line.)
 
 **Step 2: Create `packages/kindraw-client/src/hybridSections.ts`** — a VENDORED copy of the app's parser, trimmed to what the client needs (parse + slug + link builder). Copy `slugify`, `buildSectionId`, `joinMarkdown`, `parseTokens`, `parseHybridMarkdownSections`, and `buildKindrawSectionLink` VERBATIM from `excalidraw-app/kindraw/hybridSections.ts` (lines 1-139 and 258-259). Header comment must point at the source + parity test:
@@ -981,6 +1028,7 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 ```
 
 **If Task Fails:**
+
 1. `marked` import unresolved in typecheck: confirm `ls node_modules/marked` (hoisted). It's a runtime dep now.
 2. Rollback: `git checkout -- packages/kindraw-client/package.json && git rm -f packages/kindraw-client/src/hybridSections.ts`.
 
@@ -989,6 +1037,7 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 ### Task 3.2: Slug parity test (the #1-risk guard) — RED→GREEN
 
 **Files:**
+
 - Create: `packages/kindraw-client/src/hybridSections.test.ts`
 
 **Step 1: Write the parity test.** It asserts the client's parser produces the SAME section ids as the app for the exact fixtures the app tests (accented, duplicate, nested):
@@ -1063,6 +1112,7 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 ### Task 3.3: `node.link` in the spec + builder — RED
 
 **Files:**
+
 - Modify: `packages/kindraw-client/src/scene/build.test.ts`
 
 **Step 1: Append a link test** to `build.test.ts`:
@@ -1119,10 +1169,12 @@ Run: `yarn vitest run packages/kindraw-client/src/scene/build.test.ts`
 ### Task 3.4: Implement `node.link` (GREEN)
 
 **Files:**
+
 - Modify: `packages/kindraw-client/src/scene/spec.ts`
 - Modify: `packages/kindraw-client/src/scene/build.ts`
 
 **Step 1: Extend `DiagramNode`** in `spec.ts` (after line 19, inside the type):
+
 ```ts
   /**
    * Optional clickable link on the node element. Either a "kindraw://section/..."
@@ -1134,6 +1186,7 @@ Run: `yarn vitest run packages/kindraw-client/src/scene/build.test.ts`
 ```
 
 **Step 2: Add a link validator + validation.** Near `isValidColor` (after line 115), add:
+
 ```ts
 // Element links are either an in-app section deep-link or a normal web URL.
 // Reject anything else (e.g. javascript:) so we never serialize a hostile href.
@@ -1151,21 +1204,24 @@ const isValidNodeLink = (value: string): boolean => {
 ```
 
 In the node-validation loop (after the `backgroundColor` block, around line 251), add:
+
 ```ts
-    if (node.link !== undefined) {
-      if (typeof node.link !== "string" || !isValidNodeLink(node.link)) {
-        throw new Error(
-          `Node "${node.id}" has invalid link "${node.link}" ` +
-            `(must be kindraw://section/... or an http(s) URL).`,
-        );
-      }
-    }
+if (node.link !== undefined) {
+  if (typeof node.link !== "string" || !isValidNodeLink(node.link)) {
+    throw new Error(
+      `Node "${node.id}" has invalid link "${node.link}" ` +
+        `(must be kindraw://section/... or an http(s) URL).`,
+    );
+  }
+}
 ```
 
 **Step 3: Pass `link` through `toSkeleton`** in `build.ts`. In the node-push block (lines 81-94), add a conditional spread mirroring the color pattern (verified C10):
+
 ```ts
       ...(node.link ? { link: node.link } : {}),
 ```
+
 Place it right after the `backgroundColor` conditional spread (line 92).
 
 > **Note:** `NormalizedSpec` types `nodes` as `Required<Pick<DiagramNode,"id"|"label"|"shape">> & DiagramNode`, so `node.link` is already in scope (it's an optional member of `DiagramNode`). No `NormalizedSpec` change needed.
@@ -1190,6 +1246,7 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 ```
 
 **If Task Fails:**
+
 1. Determinism test breaks: ensure the link spread is conditional (`...(node.link ? ... : {})`) so link-less nodes serialize identically to before.
 2. Rollback all three files.
 
@@ -1198,6 +1255,7 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 ### Task 3.5: Hybrid client methods — RED
 
 **Files:**
+
 - Modify: `packages/kindraw-client/src/client.test.ts`
 
 **Step 1: Append hybrid tests:**
@@ -1267,10 +1325,12 @@ Run: `yarn vitest run packages/kindraw-client/src/client.test.ts`
 ### Task 3.6: Implement hybrid client methods (GREEN)
 
 **Files:**
+
 - Modify: `packages/kindraw-client/src/client.ts`
 - Modify: `packages/kindraw-client/src/index.ts`
 
 **Step 1: Add a result type** near the others (after `CreateDocResult`):
+
 ```ts
 export type CreateHybridResult = {
   hybridId: string;
@@ -1280,6 +1340,7 @@ export type CreateHybridResult = {
 ```
 
 **Step 2: Add the methods** after `createDoc`:
+
 ```ts
   // Seed a hybrid item (doc beside a canvas). Bearer-only REST, no WS room —
   // headless-safe. Server auto-seeds doc "# {title}\n\n" + an empty drawing.
@@ -1340,6 +1401,7 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 The 4-step orchestration is shared logic; put it in the client so both the MCP tool and the CLI call ONE function. It returns a structured report (links wired, unmatched headings, partial-failure step).
 
 **Files:**
+
 - Create: `packages/kindraw-client/src/hybrid.ts`
 - Create: `packages/kindraw-client/src/hybrid.test.ts`
 
@@ -1393,7 +1455,10 @@ describe("composeHybrid", () => {
   it("seeds, populates doc + drawing, wires links, returns /hybrid url", async () => {
     mockFetch([
       // step 0: POST /api/hybrid-items
-      { status: 201, json: { hybridId: "h1", docItemId: "d1", drawingItemId: "g1" } },
+      {
+        status: 201,
+        json: { hybridId: "h1", docItemId: "d1", drawingItemId: "g1" },
+      },
       // step 2: PUT doc content -> 204
       { status: 204 },
       // step 3: PUT drawing content -> 204
@@ -1431,7 +1496,10 @@ describe("composeHybrid", () => {
 
   it("reports headings that matched no section instead of failing", async () => {
     mockFetch([
-      { status: 201, json: { hybridId: "h2", docItemId: "d2", drawingItemId: "g2" } },
+      {
+        status: 201,
+        json: { hybridId: "h2", docItemId: "d2", drawingItemId: "g2" },
+      },
       { status: 204 },
       { status: 204 },
     ]);
@@ -1449,7 +1517,10 @@ describe("composeHybrid", () => {
 
   it("surfaces a partial failure with ids + failed step (no cleanup)", async () => {
     mockFetch([
-      { status: 201, json: { hybridId: "h3", docItemId: "d3", drawingItemId: "g3" } },
+      {
+        status: 201,
+        json: { hybridId: "h3", docItemId: "d3", drawingItemId: "g3" },
+      },
       { status: 500, json: { error: "boom" } }, // doc PUT fails
     ]);
     await expect(
@@ -1477,6 +1548,7 @@ Run: `yarn vitest run packages/kindraw-client/src/hybrid.test.ts`
 ### Task 3.8: Implement `composeHybrid` (GREEN)
 
 **Files:**
+
 - Create: `packages/kindraw-client/src/hybrid.ts`
 - Modify: `packages/kindraw-client/src/index.ts` (export it)
 
@@ -1640,6 +1712,7 @@ export const composeHybrid = async (
 ```
 
 **Step 2: Export from `index.ts`:**
+
 ```ts
 export { composeHybrid, HybridPartialError } from "./hybrid.js";
 export type {
@@ -1653,21 +1726,25 @@ export type {
 > **NOTE — bundling:** `hybrid.ts` imports `./scene/build.js`, which pulls in the heavy `@excalidraw/element` transform. To avoid bloating the light `index.js` entry, the MCP/CLI should `import` `composeHybrid` via a dynamic `import("@kindraw/client/hybrid")` OR a dedicated subpath. **Decision:** add a `"./hybrid"` export to `package.json` + a `scene/hybrid` esbuild entry, OR keep it simple by having the MCP/CLI `await import("@kindraw/client/scene")` for buildScene and call the hybrid methods directly. **Implementer: prefer adding a `./hybrid` subpath export** (mirrors `./scene`) so `index.js` stays light. If you keep `composeHybrid` in the root export, the buildScene transform gets bundled into `index.js` — acceptable but heavier. Flag this in the Phase 3 review.
 
 **Step 3: Add the `./hybrid` subpath** (recommended). In `packages/kindraw-client/package.json` `exports`, add after `./scene`:
+
 ```json
     "./hybrid": {
       "types": "./dist/hybrid.d.ts",
       "default": "./dist/hybrid.js"
     }
 ```
+
 And in `build.mjs` `entryPoints`, add: `hybrid: path.resolve(__dirname, "src/hybrid.ts"),` and append `src/hybrid.ts` to the `tsc --emitDeclarationOnly` file list. Then REMOVE the `composeHybrid`/types exports from `index.ts` (Step 2) to keep the light entry free of the transform — export them only via the subpath.
 
 **Step 4: Run → expect PASS.** `yarn vitest run packages/kindraw-client/src/hybrid.test.ts`
 
 **Step 5: Full client suite + typecheck.**
+
 ```bash
 yarn vitest run packages/kindraw-client
 yarn workspace @kindraw/client typecheck
 ```
+
 **Expected:** all client tests pass; typecheck exits 0.
 
 **Step 6: Commit**
@@ -1680,6 +1757,7 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 ```
 
 **If Task Fails:**
+
 1. `edges as never` cast is a smell — instead type `HybridDiagram.edges` to match `DiagramEdge[]` by importing `DiagramEdge` and using it; the `never` is a stopgap. Prefer `import type { DiagramEdge } from "./scene/spec.js"` and `edges: DiagramEdge[]`.
 2. Determinism: `composeHybrid` calls `buildScene` once — output is deterministic given the same nodes/links.
 3. Rollback all touched files.
@@ -1689,115 +1767,114 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 ### Task 3.9: `kindraw_create_hybrid` MCP tool
 
 **Files:**
+
 - Modify: `packages/kindraw-mcp/src/index.ts`
 
 **Step 1: Register the tool** after `kindraw_create_doc`:
 
 ```ts
-  server.registerTool(
-    "kindraw_create_hybrid",
-    {
-      description:
-        "Create a hybrid item: a live markdown doc BESIDE an Excalidraw canvas, " +
-        "wired together with clickable section links. Provide the full markdown " +
-        "AND a diagram in ONE call. Each diagram node may carry linkToHeading " +
-        "(exact heading text) to deep-link that node to its doc section. Returns " +
-        "the /hybrid/<id> URL plus a report of how many links were wired and any " +
-        "linkToHeading that matched NO heading (fix the heading text and retry).",
-      inputSchema: {
-        title: z.string().max(500).describe("Title for the hybrid item"),
-        markdown: z
-          .string()
-          .max(500_000)
-          .describe("Full doc body (GFM). Headings become linkable sections."),
-        folderId: z.string().max(200).nullish().describe("Optional folder id"),
-        diagram: z
-          .object({
-            nodes: z
-              .array(
-                z.object({
-                  id: z.string().max(200),
-                  label: z.string().max(2000),
-                  shape: z
-                    .enum(["rectangle", "diamond", "ellipse"])
-                    .optional(),
-                  group: z.string().max(200).optional(),
-                  strokeColor: z.string().max(64).optional(),
-                  backgroundColor: z.string().max(64).optional(),
-                  linkToHeading: z
-                    .string()
-                    .max(500)
-                    .optional()
-                    .describe("Exact heading text to deep-link this node"),
-                }),
-              )
-              .min(1)
-              .max(500),
-            edges: z
-              .array(
-                z.object({
-                  from: z.string().max(200),
-                  to: z.string().max(200),
-                  label: z.string().max(2000).optional(),
-                  style: z.enum(["solid", "dashed", "dotted"]).optional(),
-                }),
-              )
-              .max(2000),
-            groups: z
-              .array(
-                z.object({
-                  id: z.string().max(200),
-                  label: z.string().max(2000).optional(),
-                }),
-              )
-              .max(200)
-              .optional(),
-            direction: z.enum(["TB", "BT", "LR", "RL"]).optional(),
-            engine: z.enum(["dagre", "elk"]).optional(),
-          })
-          .describe("The canvas graph beside the doc"),
-      },
+server.registerTool(
+  "kindraw_create_hybrid",
+  {
+    description:
+      "Create a hybrid item: a live markdown doc BESIDE an Excalidraw canvas, " +
+      "wired together with clickable section links. Provide the full markdown " +
+      "AND a diagram in ONE call. Each diagram node may carry linkToHeading " +
+      "(exact heading text) to deep-link that node to its doc section. Returns " +
+      "the /hybrid/<id> URL plus a report of how many links were wired and any " +
+      "linkToHeading that matched NO heading (fix the heading text and retry).",
+    inputSchema: {
+      title: z.string().max(500).describe("Title for the hybrid item"),
+      markdown: z
+        .string()
+        .max(500_000)
+        .describe("Full doc body (GFM). Headings become linkable sections."),
+      folderId: z.string().max(200).nullish().describe("Optional folder id"),
+      diagram: z
+        .object({
+          nodes: z
+            .array(
+              z.object({
+                id: z.string().max(200),
+                label: z.string().max(2000),
+                shape: z.enum(["rectangle", "diamond", "ellipse"]).optional(),
+                group: z.string().max(200).optional(),
+                strokeColor: z.string().max(64).optional(),
+                backgroundColor: z.string().max(64).optional(),
+                linkToHeading: z
+                  .string()
+                  .max(500)
+                  .optional()
+                  .describe("Exact heading text to deep-link this node"),
+              }),
+            )
+            .min(1)
+            .max(500),
+          edges: z
+            .array(
+              z.object({
+                from: z.string().max(200),
+                to: z.string().max(200),
+                label: z.string().max(2000).optional(),
+                style: z.enum(["solid", "dashed", "dotted"]).optional(),
+              }),
+            )
+            .max(2000),
+          groups: z
+            .array(
+              z.object({
+                id: z.string().max(200),
+                label: z.string().max(2000).optional(),
+              }),
+            )
+            .max(200)
+            .optional(),
+          direction: z.enum(["TB", "BT", "LR", "RL"]).optional(),
+          engine: z.enum(["dagre", "elk"]).optional(),
+        })
+        .describe("The canvas graph beside the doc"),
     },
-    async ({ title, markdown, folderId, diagram }) => {
+  },
+  async ({ title, markdown, folderId, diagram }) => {
+    try {
+      const { composeHybrid, HybridPartialError } = await import(
+        "@kindraw/client/hybrid"
+      );
       try {
-        const { composeHybrid, HybridPartialError } = await import(
-          "@kindraw/client/hybrid"
+        const res = await composeHybrid(client, {
+          title,
+          markdown,
+          folderId,
+          diagram: diagram as Parameters<typeof composeHybrid>[1]["diagram"],
+        });
+        const warn = res.unmatchedHeadings.length
+          ? `\nWARNING: ${res.unmatchedHeadings.length} linkToHeading value(s) ` +
+            `matched no heading: ${res.unmatchedHeadings.join(", ")}. ` +
+            `Fix the heading text and retry.`
+          : "";
+        return text(
+          `Created hybrid "${title}" (${res.elementCount} canvas elements, ` +
+            `${res.linksWired} section link(s) wired).\n${res.url}${warn}`,
         );
-        try {
-          const res = await composeHybrid(client, {
-            title,
-            markdown,
-            folderId,
-            diagram: diagram as Parameters<typeof composeHybrid>[1]["diagram"],
-          });
-          const warn = res.unmatchedHeadings.length
-            ? `\nWARNING: ${res.unmatchedHeadings.length} linkToHeading value(s) ` +
-              `matched no heading: ${res.unmatchedHeadings.join(", ")}. ` +
-              `Fix the heading text and retry.`
-            : "";
-          return text(
-            `Created hybrid "${title}" (${res.elementCount} canvas elements, ` +
-              `${res.linksWired} section link(s) wired).\n${res.url}${warn}`,
-          );
-        } catch (err) {
-          if (err instanceof HybridPartialError) {
-            return {
-              ...text(
-                `Hybrid partially created (step "${err.failedStep}" failed): ${err.message}\n` +
-                  `hybridId=${err.hybridId} docItemId=${err.docItemId} ` +
-                  `drawingItemId=${err.drawingItemId}. PUTs are idempotent — retry the ` +
-                  `failed content write rather than re-creating.`,
-              ),
-              isError: true,
-            };
-          }
-          throw err;
+      } catch (err) {
+        if (err instanceof HybridPartialError) {
+          return {
+            ...text(
+              `Hybrid partially created (step "${err.failedStep}" failed): ${err.message}\n` +
+                `hybridId=${err.hybridId} docItemId=${err.docItemId} ` +
+                `drawingItemId=${err.drawingItemId}. PUTs are idempotent — retry the ` +
+                `failed content write rather than re-creating.`,
+            ),
+            isError: true,
+          };
         }
-      } catch (error) {
-        return { ...text(formatError(error)), isError: true };
+        throw err;
       }
-    },
-  );
+    } catch (error) {
+      return { ...text(formatError(error)), isError: true };
+    }
+  },
+);
 ```
 
 **Step 2: Typecheck.** `yarn workspace @kindraw/mcp typecheck` → exits 0.
@@ -1812,6 +1889,7 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 ```
 
 **If Task Fails:**
+
 1. `@kindraw/client/hybrid` not resolvable: confirm Task 3.8 added the `./hybrid` subpath to `package.json` exports AND the dist was built (`yarn workspace @kindraw/client build`). For TYPECHECK only, the subpath types resolve via `dist/hybrid.d.ts` — if dist isn't built, typecheck against source by temporarily importing from `@kindraw/client` root. Prefer building the client first.
 2. Rollback: `git checkout -- packages/kindraw-mcp/src/index.ts`.
 
@@ -1820,6 +1898,7 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 ### Task 3.10: `kindraw hybrid create` CLI command
 
 **Files:**
+
 - Create: `packages/kindraw-cli/src/commands/hybrid.ts`
 - Modify: `packages/kindraw-cli/src/index.ts`
 
@@ -1851,7 +1930,10 @@ export const hybridCreate = async (args: {
 
   const markdown = args.md ? readSource(args.md) : `# ${title}\n\n`;
 
-  let diagram: { nodes: unknown[]; edges: unknown[] } = { nodes: [], edges: [] };
+  let diagram: { nodes: unknown[]; edges: unknown[] } = {
+    nodes: [],
+    edges: [],
+  };
   if (args.spec) {
     try {
       diagram = JSON.parse(readSource(args.spec));
@@ -1885,10 +1967,13 @@ export const hybridCreate = async (args: {
 ```
 
 **Step 2: Wire in `index.ts`.** Add import:
+
 ```ts
 import { hybridCreate } from "./commands/hybrid.js";
 ```
+
 Add a `case "hybrid":`:
+
 ```ts
     case "hybrid": {
       if (sub === "create") {
@@ -1902,7 +1987,9 @@ Add a `case "hybrid":`:
       throw new Error(`Unknown hybrid command: ${sub ?? "(none)"}`);
     }
 ```
+
 Add to HELP:
+
 ```
   kindraw hybrid create --title <T>    Create a doc + canvas hybrid
                        [--md <file|->] [--spec <file|->] [--folder <id>]
@@ -1924,32 +2011,43 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 ### Task 3.11: Phase 3 manual smoke + Code Review
 
 **Step 1: Build the client (dist needed for the subpath import in MCP/CLI):**
+
 ```bash
 yarn workspace @kindraw/client build
 ```
+
 **Expected:** `@kindraw/client built → dist/...` including `dist/hybrid.js`.
 
 **Step 2: Tests + typecheck:**
+
 ```bash
 yarn test:typecheck
 yarn vitest run packages/kindraw-client
 yarn vitest run excalidraw-app/kindraw/hybridSections.test.ts
 ```
+
 **Expected:** all green (app parser baseline still passes — we never touched it).
 
 **Step 3: CLI smoke (real token).** Create `/tmp/hy.json`:
+
 ```json
-{ "nodes": [
+{
+  "nodes": [
     { "id": "ui", "label": "UI", "linkToHeading": "Overview" },
-    { "id": "db", "label": "DB", "linkToHeading": "Database" } ],
-  "edges": [ { "from": "ui", "to": "db" } ] }
+    { "id": "db", "label": "DB", "linkToHeading": "Database" }
+  ],
+  "edges": [{ "from": "ui", "to": "db" }]
+}
 ```
+
 Run:
+
 ```bash
 printf '# Overview\n\nThe app.\n\n# Database\n\nPostgres.\n' > /tmp/hy.md
 KINDRAW_TOKEN=$KINDRAW_TOKEN node packages/kindraw-cli/dist/index.js \
   hybrid create --title "Hybrid smoke" --md /tmp/hy.md --spec /tmp/hy.json
 ```
+
 **Expected:** `Created hybrid "Hybrid smoke" (N elements, 2 links)` + a `/hybrid/<id>` URL. Open it; click the `UI` node → it should jump to the **Overview** section; `DB` → **Database**.
 
 **If a node doesn't link:** the heading text in `--spec linkToHeading` must EXACTLY match the markdown heading text. Check the WARNING line.
@@ -1965,6 +2063,7 @@ KINDRAW_TOKEN=$KINDRAW_TOKEN node packages/kindraw-cli/dist/index.js \
 **Shippable outcome:** template fetch/instantiate via a `reanchor-free` serializer, icon search + SVG-image embedding into scenes, and the MCP tools `kindraw_list_templates`, `kindraw_apply_template`, `kindraw_search_icons` (+ CLI parity). No raw `getIconSvg` MCP tool (SVG strings waste tokens).
 
 **Files touched in Phase 4:**
+
 - `packages/kindraw-client/src/client.ts` (modify — templates + icons)
 - `packages/kindraw-client/src/client.test.ts` (modify)
 - `packages/kindraw-client/src/scene/build.ts` (modify — additive `templateElements`/`files`)
@@ -1984,6 +2083,7 @@ KINDRAW_TOKEN=$KINDRAW_TOKEN node packages/kindraw-cli/dist/index.js \
 ### Task 4.1: Template + icon client methods — RED
 
 **Files:**
+
 - Modify: `packages/kindraw-client/src/client.test.ts`
 
 **Step 1: Append tests:**
@@ -1992,7 +2092,10 @@ KINDRAW_TOKEN=$KINDRAW_TOKEN node packages/kindraw-cli/dist/index.js \
 describe("templates + icons", () => {
   it("listTemplates GETs /api/templates", async () => {
     mockFetch([
-      { status: 200, json: { templates: [{ id: "t1", title: "Flow", category: "diagram" }] } },
+      {
+        status: 200,
+        json: { templates: [{ id: "t1", title: "Flow", category: "diagram" }] },
+      },
     ]);
     const c = new KindrawClient({ token: "kdr_test" });
     const res = await c.listTemplates();
@@ -2001,14 +2104,21 @@ describe("templates + icons", () => {
   });
 
   it("getTemplate GETs /api/templates/:id", async () => {
-    mockFetch([{ status: 200, json: { id: "t1", title: "Flow", elements: [] } }]);
+    mockFetch([
+      { status: 200, json: { id: "t1", title: "Flow", elements: [] } },
+    ]);
     const c = new KindrawClient({ token: "kdr_test" });
     await c.getTemplate("t1");
     expect(calls[0].url).toBe("https://api.kindraw.dev/api/templates/t1");
   });
 
   it("searchIcons GETs /api/icons/search with q + limit", async () => {
-    mockFetch([{ status: 200, json: { icons: [{ id: "mdi:home", set: "mdi", name: "home" }] } }]);
+    mockFetch([
+      {
+        status: 200,
+        json: { icons: [{ id: "mdi:home", set: "mdi", name: "home" }] },
+      },
+    ]);
     const c = new KindrawClient({ token: "kdr_test" });
     const res = await c.searchIcons("home", 10);
     expect(res.icons[0].id).toBe("mdi:home");
@@ -2037,7 +2147,9 @@ describe("templates + icons", () => {
   it("getIconSvg rejects a malformed id WITHOUT calling fetch", async () => {
     mockFetch([{ status: 200, text: "<svg/>" }]);
     const c = new KindrawClient({ token: "kdr_test" });
-    await expect(c.getIconSvg("not a valid id")).rejects.toThrow(/invalid icon id/i);
+    await expect(c.getIconSvg("not a valid id")).rejects.toThrow(
+      /invalid icon id/i,
+    );
     expect(calls.length).toBe(0);
   });
 });
@@ -2050,10 +2162,12 @@ describe("templates + icons", () => {
 ### Task 4.2: Implement template + icon methods (GREEN)
 
 **Files:**
+
 - Modify: `packages/kindraw-client/src/client.ts`
 - Modify: `packages/kindraw-client/src/index.ts`
 
 **Step 1: Add types** near the others:
+
 ```ts
 export type KindrawTemplateMeta = {
   id: string;
@@ -2068,6 +2182,7 @@ export type KindrawIconHit = { id: string; set: string; name: string };
 ```
 
 **Step 2: Add a validation regex + methods** after the hybrid methods:
+
 ```ts
   listTemplates(): Promise<{ templates: KindrawTemplateMeta[] }> {
     return this.request("GET", "/api/templates");
@@ -2118,6 +2233,7 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 ### Task 4.3: `buildFromSkeletons` (reanchor-free template serializer) — RED
 
 **Files:**
+
 - Create: `packages/kindraw-client/src/scene/buildFromSkeletons.test.ts`
 
 **Step 1: Write the failing test:**
@@ -2133,15 +2249,39 @@ describe("buildFromSkeletons", () => {
     // {start:{id},end:{id}} binding). reanchorArrows would displace it — this
     // serializer must leave its points intact.
     const { content, elementCount } = await buildFromSkeletons([
-      { type: "rectangle", id: "r1", x: 0, y: 0, width: 100, height: 60, label: { text: "Box" } },
-      { type: "arrow", id: "ar1", x: 120, y: 30, width: 80, height: 0, points: [[0, 0], [80, 0]] },
+      {
+        type: "rectangle",
+        id: "r1",
+        x: 0,
+        y: 0,
+        width: 100,
+        height: 60,
+        label: { text: "Box" },
+      },
+      {
+        type: "arrow",
+        id: "ar1",
+        x: 120,
+        y: 30,
+        width: 80,
+        height: 0,
+        points: [
+          [0, 0],
+          [80, 0],
+        ],
+      },
     ]);
     const parsed = JSON.parse(content);
     expect(parsed.type).toBe("excalidraw");
     expect(parsed.source).toBe("@kindraw/client");
-    const arrow = parsed.elements.find((e: { type: string }) => e.type === "arrow");
+    const arrow = parsed.elements.find(
+      (e: { type: string }) => e.type === "arrow",
+    );
     // Points preserved (2-point explicit segment), not rebound.
-    expect(arrow.points).toEqual([[0, 0], [80, 0]]);
+    expect(arrow.points).toEqual([
+      [0, 0],
+      [80, 0],
+    ]);
     expect(arrow.startBinding ?? null).toBeNull();
     expect(elementCount).toBeGreaterThanOrEqual(2);
   });
@@ -2155,7 +2295,9 @@ describe("buildFromSkeletons", () => {
   });
 
   it("is deterministic", async () => {
-    const skel = [{ type: "rectangle", id: "r1", x: 0, y: 0, width: 10, height: 10 }];
+    const skel = [
+      { type: "rectangle", id: "r1", x: 0, y: 0, width: 10, height: 10 },
+    ];
     const a = await buildFromSkeletons(skel);
     const b = await buildFromSkeletons(skel);
     expect(a.content).toBe(b.content);
@@ -2172,12 +2314,14 @@ Run: `yarn vitest run packages/kindraw-client/src/scene/buildFromSkeletons.test.
 ### Task 4.4: Implement `buildFromSkeletons` (GREEN)
 
 **Files:**
+
 - Create: `packages/kindraw-client/src/scene/buildFromSkeletons.ts`
 - Modify: `packages/kindraw-client/src/scene/index.ts` (export)
 
 **Step 1: Refactor the shared envelope/stabilize/shim out of `build.ts`** so both serializers reuse it. To keep this task small, `buildFromSkeletons.ts` will re-import the needed helpers. Since `ensureProvider`, `ensureWindowShim`, and `stabilize` are module-private in `build.ts`, EXPORT them from `build.ts` first:
 
 In `build.ts`, change:
+
 - `const ensureProvider` → `export const ensureProvider`
 - `const ensureWindowShim` → `export const ensureWindowShim`
 - `const stabilize` → `export const stabilize` (and export the `ExEl` type: `export type ExEl = ...`)
@@ -2247,6 +2391,7 @@ export const buildFromSkeletons = async (
 ```
 
 **Step 3: Export from `scene/index.ts`:**
+
 ```ts
 export { buildFromSkeletons } from "./buildFromSkeletons.js";
 export type { BuildFromSkeletonsResult } from "./buildFromSkeletons.js";
@@ -2255,9 +2400,11 @@ export type { BuildFromSkeletonsResult } from "./buildFromSkeletons.js";
 **Step 4: Run → expect PASS.** `yarn vitest run packages/kindraw-client/src/scene/buildFromSkeletons.test.ts`
 
 **Step 5: Re-run the WHOLE scene suite** (we exported helpers from build.ts — confirm nothing broke):
+
 ```bash
 yarn vitest run packages/kindraw-client/src/scene
 ```
+
 **Expected:** all scene tests pass (build.test.ts unchanged in behavior).
 
 **Step 6: Typecheck.** `yarn workspace @kindraw/client typecheck` → exits 0.
@@ -2272,6 +2419,7 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 ```
 
 **If Task Fails:**
+
 1. `ExEl` type export error: ensure `build.ts` exports both the type and the value helpers.
 2. Determinism: `stabilize` zeroes seed/version — same input → same output. If non-deterministic, check `convertToExcalidrawElements` isn't generating random ids for unbound arrows (it shouldn't under `regenerateIds:false`; if it does for bound text, `stabilize`'s `canonicalizeBoundTextIds` handles it).
 
@@ -2280,6 +2428,7 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 ### Task 4.5: Icon → image-skeleton composer — RED
 
 **Files:**
+
 - Create: `packages/kindraw-client/src/icons.test.ts`
 
 The composer is fetch-free: it takes a `getIconSvg`-shaped callback (so `scene/` never imports the HTTP client) and produces `{ imageSkeletons, files }` to merge into a scene. fileId is a deterministic hash of `iconId+color` (NOT randomId).
@@ -2320,21 +2469,26 @@ describe("composeIconImages", () => {
     expect(entry.dataURL.startsWith("data:image/svg+xml;base64,")).toBe(true);
     // base64 decodes back to the original svg.
     const b64 = entry.dataURL.replace("data:image/svg+xml;base64,", "");
-    expect(Buffer.from(b64, "base64").toString("utf8")).toBe('<svg id="mdi:home"/>');
+    expect(Buffer.from(b64, "base64").toString("utf8")).toBe(
+      '<svg id="mdi:home"/>',
+    );
   });
 
   it("is deterministic: same icon+color -> same fileId", async () => {
-    const a = await composeIconImages([{ iconId: "mdi:home", color: "#fff" }], fakeFetch);
-    const b = await composeIconImages([{ iconId: "mdi:home", color: "#fff" }], fakeFetch);
+    const a = await composeIconImages(
+      [{ iconId: "mdi:home", color: "#fff" }],
+      fakeFetch,
+    );
+    const b = await composeIconImages(
+      [{ iconId: "mdi:home", color: "#fff" }],
+      fakeFetch,
+    );
     expect(a.imageSkeletons[0].fileId).toBe(b.imageSkeletons[0].fileId);
   });
 
   it("skips a 404 icon with a warning instead of aborting", async () => {
     const { imageSkeletons, warnings } = await composeIconImages(
-      [
-        { iconId: "mdi:home" },
-        { iconId: "bad:icon" },
-      ],
+      [{ iconId: "mdi:home" }, { iconId: "bad:icon" }],
       fakeFetch,
     );
     expect(imageSkeletons).toHaveLength(1);
@@ -2350,6 +2504,7 @@ describe("composeIconImages", () => {
 ### Task 4.6: Implement `composeIconImages` (GREEN)
 
 **Files:**
+
 - Create: `packages/kindraw-client/src/icons.ts`
 - Modify: `packages/kindraw-client/src/index.ts` (export)
 
@@ -2423,7 +2578,10 @@ export const composeIconImages = async (
     const pos =
       p.nodeId && opts?.positions?.[p.nodeId]
         ? opts.positions[p.nodeId]
-        : { x: (gridIndex % 8) * GRID_STEP, y: Math.floor(gridIndex / 8) * GRID_STEP };
+        : {
+            x: (gridIndex % 8) * GRID_STEP,
+            y: Math.floor(gridIndex / 8) * GRID_STEP,
+          };
     if (!(p.nodeId && opts?.positions?.[p.nodeId])) {
       gridIndex += 1;
     }
@@ -2445,12 +2603,10 @@ export const composeIconImages = async (
 ```
 
 **Step 2: Export from `index.ts`:**
+
 ```ts
 export { composeIconImages } from "./icons.js";
-export type {
-  IconPlacement,
-  ComposeIconImagesResult,
-} from "./icons.js";
+export type { IconPlacement, ComposeIconImagesResult } from "./icons.js";
 ```
 
 **Step 3: Run → expect PASS.** `yarn vitest run packages/kindraw-client/src/icons.test.ts`
@@ -2471,6 +2627,7 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 ### Task 4.7: Additive `templateElements` + `files` inputs in `buildScene` — RED→GREEN
 
 **Files:**
+
 - Modify: `packages/kindraw-client/src/scene/build.test.ts`
 - Modify: `packages/kindraw-client/src/scene/build.ts`
 
@@ -2483,11 +2640,35 @@ describe("buildScene additive inputs (templateElements + files + iconImages)", (
       { nodes: [{ id: "a", label: "A" }], edges: [] },
       {
         templateElements: [
-          { id: "tpl-bg", type: "rectangle", x: 0, y: 0, width: 200, height: 200, isDeleted: false },
+          {
+            id: "tpl-bg",
+            type: "rectangle",
+            x: 0,
+            y: 0,
+            width: 200,
+            height: 200,
+            isDeleted: false,
+          },
         ],
-        files: { "icon-deadbeef": { id: "icon-deadbeef", mimeType: "image/svg+xml", dataURL: "data:image/svg+xml;base64,PHN2Zy8+", created: 1 } },
+        files: {
+          "icon-deadbeef": {
+            id: "icon-deadbeef",
+            mimeType: "image/svg+xml",
+            dataURL: "data:image/svg+xml;base64,PHN2Zy8+",
+            created: 1,
+          },
+        },
         iconImages: [
-          { type: "image", id: "icon-0", fileId: "icon-deadbeef", status: "saved", x: 5, y: 5, width: 28, height: 28 },
+          {
+            type: "image",
+            id: "icon-0",
+            fileId: "icon-deadbeef",
+            status: "saved",
+            x: 5,
+            y: 5,
+            width: 28,
+            height: 28,
+          },
         ],
       },
     );
@@ -2496,13 +2677,18 @@ describe("buildScene additive inputs (templateElements + files + iconImages)", (
     const ids = parsed.elements.map((e: { id: string }) => e.id);
     expect(ids).toContain("tpl-bg");
     // image element present.
-    expect(parsed.elements.some((e: { type: string }) => e.type === "image")).toBe(true);
+    expect(
+      parsed.elements.some((e: { type: string }) => e.type === "image"),
+    ).toBe(true);
     // files merged (not {}).
     expect(parsed.files["icon-deadbeef"]).toBeDefined();
   });
 
   it("still serializes files:{} when no extra inputs are given (back-compat)", async () => {
-    const { content } = await buildScene({ nodes: [{ id: "a", label: "A" }], edges: [] });
+    const { content } = await buildScene({
+      nodes: [{ id: "a", label: "A" }],
+      edges: [],
+    });
     expect(JSON.parse(content).files).toEqual({});
   });
 });
@@ -2533,43 +2719,42 @@ export const buildScene = async (
 Inside, after `reanchorArrows(...)` and `stabilize(visible ...)`, assemble the final element array. Replace the envelope-construction block (lines 194-204) with:
 
 ```ts
-  const visible = elements.filter((el) => !el.isDeleted);
-  stabilize(visible as unknown as ExEl[]);
+const visible = elements.filter((el) => !el.isDeleted);
+stabilize(visible as unknown as ExEl[]);
 
-  // Convert icon image skeletons separately (no layout, no reanchor) and
-  // stabilize them too, so the whole scene stays deterministic.
-  let iconEls: ExEl[] = [];
-  if (extras?.iconImages?.length) {
-    const converted = convertToExcalidrawElements(
-      extras.iconImages as never,
-      { regenerateIds: false },
-    );
-    iconEls = (converted as unknown as ExEl[]).filter(
-      (el) => !(el as { isDeleted?: boolean }).isDeleted,
-    );
-    stabilize(iconEls);
-  }
-
-  const templateEls = (extras?.templateElements ?? []).filter(
+// Convert icon image skeletons separately (no layout, no reanchor) and
+// stabilize them too, so the whole scene stays deterministic.
+let iconEls: ExEl[] = [];
+if (extras?.iconImages?.length) {
+  const converted = convertToExcalidrawElements(extras.iconImages as never, {
+    regenerateIds: false,
+  });
+  iconEls = (converted as unknown as ExEl[]).filter(
     (el) => !(el as { isDeleted?: boolean }).isDeleted,
   );
+  stabilize(iconEls);
+}
 
-  const allElements = [
-    ...templateEls,
-    ...(visible as unknown as ExEl[]),
-    ...iconEls,
-  ];
+const templateEls = (extras?.templateElements ?? []).filter(
+  (el) => !(el as { isDeleted?: boolean }).isDeleted,
+);
 
-  const content = JSON.stringify({
-    type: "excalidraw",
-    version: 2,
-    source: "@kindraw/client",
-    elements: allElements,
-    appState: { viewBackgroundColor: "#ffffff", gridSize: null },
-    files: { ...(extras?.files ?? {}) },
-  });
+const allElements = [
+  ...templateEls,
+  ...(visible as unknown as ExEl[]),
+  ...iconEls,
+];
 
-  return { content, elementCount: allElements.length };
+const content = JSON.stringify({
+  type: "excalidraw",
+  version: 2,
+  source: "@kindraw/client",
+  elements: allElements,
+  appState: { viewBackgroundColor: "#ffffff", gridSize: null },
+  files: { ...(extras?.files ?? {}) },
+});
+
+return { content, elementCount: allElements.length };
 ```
 
 > **NOTE:** `ExEl` must be imported/exported in `build.ts` — it was exported in Task 4.4. The `convertToExcalidrawElements` import is already present. Keep `files:{}` behavior when `extras` is undefined (`{...(undefined ?? {})}` = `{}`).
@@ -2590,6 +2775,7 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 ```
 
 **If Task Fails:**
+
 1. Back-compat `files:{}` test breaks: ensure `files: { ...(extras?.files ?? {}) }` (spread of empty object = `{}`, and `toEqual({})` passes).
 2. Determinism regression: icon/template elements are stabilized; if the determinism test breaks, confirm `stabilize` runs on `iconEls`.
 
@@ -2598,47 +2784,48 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 ### Task 4.8: MCP `kindraw_list_templates`
 
 **Files:**
+
 - Modify: `packages/kindraw-mcp/src/index.ts`
 
 **Step 1: Register** after `kindraw_create_hybrid`:
 
 ```ts
-  server.registerTool(
-    "kindraw_list_templates",
-    {
-      description:
-        "List the built-in Kindraw templates (id, title, category). Template ids " +
-        "are opaque — list them first, then pass an id to kindraw_apply_template.",
-      inputSchema: {
-        category: z
-          .string()
-          .max(100)
-          .optional()
-          .describe("Optional client-side category filter"),
-      },
+server.registerTool(
+  "kindraw_list_templates",
+  {
+    description:
+      "List the built-in Kindraw templates (id, title, category). Template ids " +
+      "are opaque — list them first, then pass an id to kindraw_apply_template.",
+    inputSchema: {
+      category: z
+        .string()
+        .max(100)
+        .optional()
+        .describe("Optional client-side category filter"),
     },
-    async ({ category }) => {
-      try {
-        const { templates } = await client.listTemplates();
-        const filtered = category
-          ? templates.filter((t) => t.category === category)
-          : templates;
-        if (!filtered.length) {
-          return text("No templates found.");
-        }
-        return text(
-          filtered
-            .map(
-              (t) =>
-                `- ${t.id} — ${t.title}${t.category ? ` [${t.category}]` : ""}`,
-            )
-            .join("\n"),
-        );
-      } catch (error) {
-        return { ...text(formatError(error)), isError: true };
+  },
+  async ({ category }) => {
+    try {
+      const { templates } = await client.listTemplates();
+      const filtered = category
+        ? templates.filter((t) => t.category === category)
+        : templates;
+      if (!filtered.length) {
+        return text("No templates found.");
       }
-    },
-  );
+      return text(
+        filtered
+          .map(
+            (t) =>
+              `- ${t.id} — ${t.title}${t.category ? ` [${t.category}]` : ""}`,
+          )
+          .join("\n"),
+      );
+    } catch (error) {
+      return { ...text(formatError(error)), isError: true };
+    }
+  },
+);
 ```
 
 **Step 2: Typecheck.** `yarn workspace @kindraw/mcp typecheck` → exits 0.
@@ -2657,6 +2844,7 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 ### Task 4.9: MCP `kindraw_apply_template`
 
 **Files:**
+
 - Modify: `packages/kindraw-mcp/src/index.ts`
 
 This instantiates a template into a NEW drawing, or (if `hybridDrawingItemId` is set) PUTs it into an existing hybrid canvas. Optional `extraNodes`/`extraEdges` are laid out via `buildScene` and merged past the template bbox.
@@ -2664,89 +2852,99 @@ This instantiates a template into a NEW drawing, or (if `hybridDrawingItemId` is
 **Step 1: Register** after `kindraw_list_templates`:
 
 ```ts
-  server.registerTool(
-    "kindraw_apply_template",
-    {
-      description:
-        "Instantiate a built-in template by id into a NEW drawing, or — if " +
-        "hybridDrawingItemId is set — write it into an existing hybrid canvas. " +
-        "Optionally add extraNodes/extraEdges (laid out and merged past the " +
-        "template). List ids first with kindraw_list_templates.",
-      inputSchema: {
-        templateId: z.string().max(200).describe("Template id to instantiate"),
-        title: z
-          .string()
-          .max(500)
-          .optional()
-          .describe("Title for the new drawing (ignored when writing to a hybrid)"),
-        hybridDrawingItemId: z
-          .string()
-          .max(200)
-          .optional()
-          .describe("If set, PUT into this existing hybrid canvas instead of a new drawing"),
-        extraNodes: z
-          .array(
-            z.object({
-              id: z.string().max(200),
-              label: z.string().max(2000),
-              shape: z.enum(["rectangle", "diamond", "ellipse"]).optional(),
-            }),
-          )
-          .max(500)
-          .optional()
-          .describe("Extra nodes to add beside the template"),
-        extraEdges: z
-          .array(
-            z.object({ from: z.string().max(200), to: z.string().max(200) }),
-          )
-          .max(2000)
-          .optional(),
-      },
+server.registerTool(
+  "kindraw_apply_template",
+  {
+    description:
+      "Instantiate a built-in template by id into a NEW drawing, or — if " +
+      "hybridDrawingItemId is set — write it into an existing hybrid canvas. " +
+      "Optionally add extraNodes/extraEdges (laid out and merged past the " +
+      "template). List ids first with kindraw_list_templates.",
+    inputSchema: {
+      templateId: z.string().max(200).describe("Template id to instantiate"),
+      title: z
+        .string()
+        .max(500)
+        .optional()
+        .describe(
+          "Title for the new drawing (ignored when writing to a hybrid)",
+        ),
+      hybridDrawingItemId: z
+        .string()
+        .max(200)
+        .optional()
+        .describe(
+          "If set, PUT into this existing hybrid canvas instead of a new drawing",
+        ),
+      extraNodes: z
+        .array(
+          z.object({
+            id: z.string().max(200),
+            label: z.string().max(2000),
+            shape: z.enum(["rectangle", "diamond", "ellipse"]).optional(),
+          }),
+        )
+        .max(500)
+        .optional()
+        .describe("Extra nodes to add beside the template"),
+      extraEdges: z
+        .array(z.object({ from: z.string().max(200), to: z.string().max(200) }))
+        .max(2000)
+        .optional(),
     },
-    async ({ templateId, title, hybridDrawingItemId, extraNodes, extraEdges }) => {
-      try {
-        const tpl = await client.getTemplate(templateId);
-        const { buildFromSkeletons } = await import("@kindraw/client/scene");
-        const { elements: templateElements } = await buildFromSkeletons(
-          tpl.elements,
-        );
+  },
+  async ({
+    templateId,
+    title,
+    hybridDrawingItemId,
+    extraNodes,
+    extraEdges,
+  }) => {
+    try {
+      const tpl = await client.getTemplate(templateId);
+      const { buildFromSkeletons } = await import("@kindraw/client/scene");
+      const { elements: templateElements } = await buildFromSkeletons(
+        tpl.elements,
+      );
 
-        let content: string;
-        let elementCount: number;
-        if (extraNodes?.length) {
-          const { buildScene } = await import("@kindraw/client/scene");
-          ({ content, elementCount } = await buildScene(
-            { nodes: extraNodes, edges: extraEdges ?? [] },
-            { templateElements },
-          ));
-        } else {
-          // No extras: serialize the template alone.
-          const built = await buildFromSkeletons(tpl.elements);
-          content = built.content;
-          elementCount = built.elementCount;
-        }
-
-        if (hybridDrawingItemId) {
-          JSON.parse(content); // defensive (PUT does not validate)
-          await client.updateHybridDrawing(hybridDrawingItemId, content);
-          return text(
-            `Applied template "${tpl.title}" to hybrid canvas ${hybridDrawingItemId} ` +
-              `(${elementCount} elements).`,
-          );
-        }
-
-        const result = await client.createDrawing({
-          title: title || tpl.title,
-          content,
-        });
-        return text(
-          `Created drawing "${title || tpl.title}" from template (${elementCount} elements).\n${result.url}`,
-        );
-      } catch (error) {
-        return { ...text(formatError(error)), isError: true };
+      let content: string;
+      let elementCount: number;
+      if (extraNodes?.length) {
+        const { buildScene } = await import("@kindraw/client/scene");
+        ({ content, elementCount } = await buildScene(
+          { nodes: extraNodes, edges: extraEdges ?? [] },
+          { templateElements },
+        ));
+      } else {
+        // No extras: serialize the template alone.
+        const built = await buildFromSkeletons(tpl.elements);
+        content = built.content;
+        elementCount = built.elementCount;
       }
-    },
-  );
+
+      if (hybridDrawingItemId) {
+        JSON.parse(content); // defensive (PUT does not validate)
+        await client.updateHybridDrawing(hybridDrawingItemId, content);
+        return text(
+          `Applied template "${tpl.title}" to hybrid canvas ${hybridDrawingItemId} ` +
+            `(${elementCount} elements).`,
+        );
+      }
+
+      const result = await client.createDrawing({
+        title: title || tpl.title,
+        content,
+      });
+      return text(
+        `Created drawing "${
+          title || tpl.title
+        }" from template (${elementCount} elements).\n${result.url}`,
+      );
+    } catch (error) {
+      return { ...text(formatError(error)), isError: true };
+    }
+  },
+);
 ```
 
 > **NOTE on bbox offset:** the winning design asks extras to be offset past the template bbox. For phase 4 v1, the simplest correct behavior is `templateElements` first, extras laid out from origin — they MAY overlap. **Decision:** ship the merge without auto-offset in v1 and add a `FIXME(nitpick):` noting "offset extras past template bbox" — overlap is a cosmetic layout issue, not a data bug. If the reviewer rates it Medium+, compute the template bbox (max x+width / y+height over `templateElements`) and add it to each extra node's resulting x/y before serialize.
@@ -2763,6 +2961,7 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 ```
 
 **If Task Fails:**
+
 1. `buildFromSkeletons` not on `@kindraw/client/scene`: confirm Task 4.4 exported it from `scene/index.ts` AND the client dist is rebuilt (`yarn workspace @kindraw/client build`).
 2. Rollback: `git checkout -- packages/kindraw-mcp/src/index.ts`.
 
@@ -2771,43 +2970,46 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 ### Task 4.10: MCP `kindraw_search_icons`
 
 **Files:**
+
 - Modify: `packages/kindraw-mcp/src/index.ts`
 
 **Step 1: Register** after `kindraw_apply_template`:
 
 ```ts
-  server.registerTool(
-    "kindraw_search_icons",
-    {
-      description:
-        "Search the Iconify icon set (returns id + set/name). Pick ids from here, " +
-        "then pass them as icons[] to a scene/hybrid/template call — the SVG is " +
-        "embedded for you. (No raw-SVG tool: SVG strings waste tokens.)",
-      inputSchema: {
-        query: z.string().min(1).max(200).describe("Search term, e.g. 'database'"),
-        limit: z
-          .number()
-          .int()
-          .min(1)
-          .max(96)
-          .optional()
-          .describe("Max results (default 48)"),
-      },
+server.registerTool(
+  "kindraw_search_icons",
+  {
+    description:
+      "Search the Iconify icon set (returns id + set/name). Pick ids from here, " +
+      "then pass them as icons[] to a scene/hybrid/template call — the SVG is " +
+      "embedded for you. (No raw-SVG tool: SVG strings waste tokens.)",
+    inputSchema: {
+      query: z
+        .string()
+        .min(1)
+        .max(200)
+        .describe("Search term, e.g. 'database'"),
+      limit: z
+        .number()
+        .int()
+        .min(1)
+        .max(96)
+        .optional()
+        .describe("Max results (default 48)"),
     },
-    async ({ query, limit }) => {
-      try {
-        const { icons } = await client.searchIcons(query, limit ?? 48);
-        if (!icons.length) {
-          return text(`No icons found for "${query}".`);
-        }
-        return text(
-          icons.map((i) => `${i.id} — ${i.set}/${i.name}`).join("\n"),
-        );
-      } catch (error) {
-        return { ...text(formatError(error)), isError: true };
+  },
+  async ({ query, limit }) => {
+    try {
+      const { icons } = await client.searchIcons(query, limit ?? 48);
+      if (!icons.length) {
+        return text(`No icons found for "${query}".`);
       }
-    },
-  );
+      return text(icons.map((i) => `${i.id} — ${i.set}/${i.name}`).join("\n"));
+    } catch (error) {
+      return { ...text(formatError(error)), isError: true };
+    }
+  },
+);
 ```
 
 **Step 2: Typecheck.** `yarn workspace @kindraw/mcp typecheck` → exits 0.
@@ -2826,6 +3028,7 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 ### Task 4.11: CLI `templates` + `icons` commands
 
 **Files:**
+
 - Create: `packages/kindraw-cli/src/commands/templates.ts`
 - Create: `packages/kindraw-cli/src/commands/icons.ts`
 - Modify: `packages/kindraw-cli/src/index.ts`
@@ -2870,11 +3073,15 @@ export const templatesApply = async (args: {
   json?: boolean;
 }): Promise<void> => {
   if (!args.id) {
-    throw new Error("Usage: kindraw templates apply <id> [--title T] [--spec extra.json] [--hybrid-drawing <id>]");
+    throw new Error(
+      "Usage: kindraw templates apply <id> [--title T] [--spec extra.json] [--hybrid-drawing <id>]",
+    );
   }
   const client = requireClient();
   const tpl = await client.getTemplate(args.id);
-  const { buildFromSkeletons, buildScene } = await import("@kindraw/client/scene");
+  const { buildFromSkeletons, buildScene } = await import(
+    "@kindraw/client/scene"
+  );
   const { elements: templateElements } = await buildFromSkeletons(tpl.elements);
 
   let content: string;
@@ -2887,7 +3094,10 @@ export const templatesApply = async (args: {
       throw new Error("--spec must be valid JSON ({nodes,edges}).");
     }
     ({ content, elementCount } = await buildScene(
-      { nodes: (extra.nodes ?? []) as never, edges: (extra.edges ?? []) as never },
+      {
+        nodes: (extra.nodes ?? []) as never,
+        edges: (extra.edges ?? []) as never,
+      },
       { templateElements },
     ));
   } else {
@@ -2897,15 +3107,22 @@ export const templatesApply = async (args: {
   if (args.hybridDrawing) {
     JSON.parse(content);
     await client.updateHybridDrawing(args.hybridDrawing, content);
-    console.log(`Applied "${tpl.title}" to hybrid canvas ${args.hybridDrawing} (${elementCount} elements).`);
+    console.log(
+      `Applied "${tpl.title}" to hybrid canvas ${args.hybridDrawing} (${elementCount} elements).`,
+    );
     return;
   }
-  const result = await client.createDrawing({ title: args.title || tpl.title, content });
+  const result = await client.createDrawing({
+    title: args.title || tpl.title,
+    content,
+  });
   if (args.json) {
     console.log(JSON.stringify({ url: result.url, elementCount }));
     return;
   }
-  console.log(`Created "${args.title || tpl.title}" (${elementCount} elements)`);
+  console.log(
+    `Created "${args.title || tpl.title}" (${elementCount} elements)`,
+  );
   console.log(result.url);
 
   void fs; // (fs imported only if a future --out is added; keep lints happy or remove)
@@ -2949,7 +3166,9 @@ export const iconsSvg = async (args: {
   out?: string;
 }): Promise<void> => {
   if (!args.id) {
-    throw new Error("Usage: kindraw icons svg <id> [--color #hex] [--out file]");
+    throw new Error(
+      "Usage: kindraw icons svg <id> [--color #hex] [--out file]",
+    );
   }
   const client = requireClient();
   const svg = await client.getIconSvg(args.id, args.color);
@@ -2963,11 +3182,14 @@ export const iconsSvg = async (args: {
 ```
 
 **Step 3: Wire in `index.ts`.** Add imports:
+
 ```ts
 import { templatesList, templatesApply } from "./commands/templates.js";
 import { iconsSearch, iconsSvg } from "./commands/icons.js";
 ```
+
 Add cases:
+
 ```ts
     case "templates": {
       if (sub === "list") {
@@ -3005,7 +3227,9 @@ Add cases:
       throw new Error(`Unknown icons command: ${sub ?? "(none)"}`);
     }
 ```
+
 Add to HELP:
+
 ```
   kindraw templates list [--category C] [--json]   List built-in templates
   kindraw templates apply <id> [--title T]         Instantiate a template
@@ -3026,6 +3250,7 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 ```
 
 **If Task Fails:**
+
 1. `flags["hybrid-drawing"]` — the parser stores `--hybrid-drawing X` under key `hybrid-drawing` (verified `index.ts` parser keeps the hyphen). Correct.
 2. `arg` is `positionals[2]` — for `templates apply <id>`, `<id>` is the 3rd positional, matching `const [command, sub, arg] = positionals`. Correct.
 
@@ -3034,25 +3259,31 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 ### Task 4.12: Phase 4 manual smoke + live-template fixture check
 
 **Step 1: Rebuild client + full suite + typecheck:**
+
 ```bash
 yarn workspace @kindraw/client build
 yarn test:typecheck
 yarn vitest run packages/kindraw-client
 ```
+
 **Expected:** all green.
 
 **Step 2: Resolve the residual template-shape uncertainty (live).** With a real token:
+
 ```bash
 KINDRAW_TOKEN=$KINDRAW_TOKEN node packages/kindraw-cli/dist/index.js templates list
 KINDRAW_TOKEN=$KINDRAW_TOKEN node packages/kindraw-cli/dist/index.js templates apply <first-id> --title "Tpl smoke"
 ```
+
 **Expected:** a `/draw/<id>` URL; open it — the template renders with arrows in their original positions (NOT collapsed/displaced). If arrows are displaced, `buildFromSkeletons` accidentally reanchored — re-check Task 4.4 (no `reanchorArrows` call). If the template shape differs from the loose-skeleton assumption, capture the JSON (`templates apply` will error) and add a recorded fixture test before finalizing.
 
 **Step 3: Icon smoke:**
+
 ```bash
 KINDRAW_TOKEN=$KINDRAW_TOKEN node packages/kindraw-cli/dist/index.js icons search database --limit 5
 KINDRAW_TOKEN=$KINDRAW_TOKEN node packages/kindraw-cli/dist/index.js icons svg mdi:database --out /tmp/db.svg
 ```
+
 **Expected:** 5 icon ids; `/tmp/db.svg` contains valid `<svg>...`.
 
 **Step 4: MCP smoke** — call `kindraw_search_icons {query:"database"}`, then `kindraw_list_templates`, then `kindraw_apply_template {templateId}`. Confirm URLs return.
@@ -3070,6 +3301,7 @@ Same protocol as Task 2.10. Dispatch ring:code-reviewer, ring:business-logic-rev
 ## FINAL VERIFICATION (all phases)
 
 Run the full gate before declaring done:
+
 ```bash
 yarn test:typecheck
 yarn vitest run packages/kindraw-client
@@ -3078,9 +3310,11 @@ yarn fix                                                         # auto-fix lint
 yarn test:code                                                  # eslint, zero warnings
 yarn test:other                                                # prettier --list-different (no diffs)
 ```
+
 **Expected:** typecheck 0; all client tests pass; app slug baseline still green; lint clean; prettier clean.
 
 **Zero-Context recap of what shipped:**
+
 - Phase 2: `requestText`, `createDoc`, app-origin + `/doc /draw /hybrid` URL helpers, `kindraw_create_doc`, `kindraw doc create`.
 - Phase 3: vendored+parity-tested slug parser, `node.link` in buildScene, hybrid client methods, `composeHybrid` orchestrator, `kindraw_create_hybrid`, `kindraw hybrid create`.
 - Phase 4: template/icon client methods, `buildFromSkeletons` (reanchor-free), `composeIconImages` (deterministic fileId), additive `buildScene` inputs, `kindraw_list_templates` / `kindraw_apply_template` / `kindraw_search_icons`, `kindraw templates|icons` CLI.

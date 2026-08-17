@@ -10,13 +10,7 @@
   "homepage": "https://kindraw.dev",
   "repository": "https://github.com/MatheusKindrazki/kindraw",
   "license": "MIT",
-  "keywords": [
-    "drawing",
-    "diagram",
-    "mermaid",
-    "excalidraw",
-    "kindraw"
-  ],
+  "keywords": ["drawing", "diagram", "mermaid", "excalidraw", "kindraw"],
   "userConfig": {
     "api_token": {
       "type": "string",

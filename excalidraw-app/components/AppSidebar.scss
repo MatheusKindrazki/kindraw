@@ -130,7 +130,11 @@
     min-height: 2.75rem;
     border-radius: 0.95rem;
     border: 1px solid var(--kindraw-sidebar-border);
-    background: color-mix(in srgb, var(--color-surface-high) 90%, var(--color-surface-lowest));
+    background: color-mix(
+      in srgb,
+      var(--color-surface-high) 90%,
+      var(--color-surface-lowest)
+    );
     transition: opacity 160ms ease, transform 160ms ease, background 160ms ease;
   }
 
@@ -257,7 +261,11 @@
   }
 
   .kindraw-main-menu-shell__canvas-input::selection {
-    background: color-mix(in srgb, var(--color-primary) 18%, var(--color-surface-lowest));
+    background: color-mix(
+      in srgb,
+      var(--color-primary) 18%,
+      var(--color-surface-lowest)
+    );
   }
 
   .kindraw-top-right-actions {
@@ -279,7 +287,11 @@
     gap: 0.45rem;
     border: 1px solid var(--kindraw-sidebar-border);
     border-radius: 999px;
-    background: color-mix(in srgb, var(--color-surface-high) 92%, var(--color-surface-lowest));
+    background: color-mix(
+      in srgb,
+      var(--color-surface-high) 92%,
+      var(--color-surface-lowest)
+    );
     padding: 0.48rem 0.78rem;
     cursor: pointer;
     font: inherit;
@@ -312,7 +324,11 @@
     height: 2.72rem;
     padding: 0;
     gap: 0;
-    background: color-mix(in srgb, var(--color-surface-low) 84%, var(--color-surface-lowest));
+    background: color-mix(
+      in srgb,
+      var(--color-surface-low) 84%,
+      var(--color-surface-lowest)
+    );
   }
 
   .kindraw-top-right-actions__button--icon svg {
@@ -330,7 +346,11 @@
   .kindraw-top-right-actions__button--active {
     background: var(--kindraw-sidebar-accent-soft);
     color: var(--color-primary-darker);
-    border-color: color-mix(in srgb, var(--color-primary) 40%, var(--color-surface-lowest));
+    border-color: color-mix(
+      in srgb,
+      var(--color-primary) 40%,
+      var(--color-surface-lowest)
+    );
   }
 
   .kindraw-top-right-actions__button--public.kindraw-top-right-actions__button--active {
@@ -350,7 +370,11 @@
   .kindraw-top-right-actions__button--collaboration.kindraw-top-right-actions__button--active {
     background: var(--kindraw-sidebar-accent-soft);
     color: var(--color-primary-darker);
-    border-color: color-mix(in srgb, var(--color-primary) 40%, var(--color-surface-lowest));
+    border-color: color-mix(
+      in srgb,
+      var(--color-primary) 40%,
+      var(--color-surface-lowest)
+    );
   }
 
   .kindraw-top-right-actions__avatar-button {
@@ -362,7 +386,11 @@
     padding: 0;
     border: 1px solid var(--kindraw-sidebar-border);
     border-radius: 999px;
-    background: color-mix(in srgb, var(--color-surface-high) 92%, var(--color-surface-lowest));
+    background: color-mix(
+      in srgb,
+      var(--color-surface-high) 92%,
+      var(--color-surface-lowest)
+    );
     cursor: pointer;
     transition: background 160ms ease, border-color 160ms ease,
       transform 160ms ease;
@@ -431,7 +459,11 @@
     display: inline-flex;
     align-items: center;
     gap: 0.5rem;
-    color: color-mix(in srgb, var(--text-primary-color) 48%, var(--color-surface-lowest));
+    color: color-mix(
+      in srgb,
+      var(--text-primary-color) 48%,
+      var(--color-surface-lowest)
+    );
     font-size: 0.74rem;
     font-weight: 700;
     letter-spacing: 0.1em;

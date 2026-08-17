@@ -1,7 +1,6 @@
 # @kindraw/cli
 
-Command-line tool for [Kindraw](https://kindraw.dev): connect with GitHub and
-create drawings from your terminal — including straight from Mermaid.
+Command-line tool for [Kindraw](https://kindraw.dev): connect with GitHub and create drawings from your terminal — including straight from Mermaid.
 
 ## Usage
 
@@ -31,8 +30,7 @@ kindraw login
 
 ## Auth
 
-`kindraw login` stores a token at `~/.config/kindraw/config.json` (mode 0600).
-For CI, set `KINDRAW_TOKEN` (generate one at kindraw.dev → API tokens).
+`kindraw login` stores a token at `~/.config/kindraw/config.json` (mode 0600). For CI, set `KINDRAW_TOKEN` (generate one at kindraw.dev → API tokens).
 
 ## Env
 

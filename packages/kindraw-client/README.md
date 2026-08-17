@@ -1,7 +1,6 @@
 # @kindraw/client
 
-Node client for the [Kindraw](https://kindraw.dev) public API, plus optional
-Mermaid→Excalidraw generation. Shared by `@kindraw/cli` and `@kindraw/mcp`.
+Node client for the [Kindraw](https://kindraw.dev) public API, plus optional Mermaid→Excalidraw generation. Shared by `@kindraw/cli` and `@kindraw/mcp`.
 
 ## Install
 
@@ -23,8 +22,7 @@ const { url } = await client.createDrawing({ title: "My drawing", content });
 
 ## Mermaid → Excalidraw (opt-in)
 
-The generation pipeline (mermaid + jsdom + canvas) lives in a separate subpath
-so plain CRUD stays lightweight:
+The generation pipeline (mermaid + jsdom + canvas) lives in a separate subpath so plain CRUD stays lightweight:
 
 ```ts
 import { generateExcalidrawFromMermaid } from "@kindraw/client/generate";
