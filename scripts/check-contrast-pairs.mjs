@@ -13,6 +13,11 @@
  *
  *   node scripts/check-contrast-pairs.mjs          # relatório; sai 1 se reprovar
  *   node scripts/check-contrast-pairs.mjs --json   # o mesmo, para automação
+ *   node scripts/check-contrast-pairs.mjs --all    # TODO par medido, não só os que reprovam
+ *
+ * Use `--all` (ou o campo `all` do --json) para auditar o total de pares
+ * medidos. Se esse total CAIR entre duas execuções, algum par saiu do radar —
+ * e um par fora do radar não aparece como falha, aparece como nada.
  */
 
 /* eslint-disable no-console -- este script É um relatório de CLI: o stdout é o
@@ -70,8 +75,23 @@ const composite = ([r, g, b, a], bgHex) => {
     .join("")}`;
 };
 
+/**
+ * Apaga comentários CSS preservando offsets e quebras de linha — troca cada
+ * caractere por espaço em vez de remover, para que número de linha continue
+ * correto no relatório.
+ *
+ * ⚠️ Isto NÃO é higiene: sem ele, um comentário que mencione `--kd-x:` ou
+ * `color:` é lido como declaração. Aconteceu de verdade — um comentário com a
+ * string "--kd-ok-bg:" fez o parser registrar lixo como valor do token e perder
+ * o `--kd-ok-text` que vinha depois, e os 3 seletores que dependiam dos dois
+ * DESAPARECERAM do relatório em silêncio. Par não medido parece par aprovado.
+ */
+function stripComments(src) {
+  return src.replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, " "));
+}
+
 function loadTokens() {
-  const src = readFileSync(join(ROOT, TOKENS_FILE), "utf8");
+  const src = stripComments(readFileSync(join(ROOT, TOKENS_FILE), "utf8"));
   const start = src.indexOf(":root {");
   const block = src.slice(start, src.indexOf("\n}", start));
   const out = {};
@@ -146,10 +166,11 @@ function main() {
   const tokens = loadTokens();
   const problems = [];
   const exempted = [];
+  const all = [];
   let measured = 0;
 
   for (const file of scssFiles(join(ROOT, "excalidraw-app"))) {
-    const src = readFileSync(file, "utf8");
+    const src = stripComments(readFileSync(file, "utf8"));
     for (const m of src.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
       const selector = m[1].trim().split("\n").pop().trim();
       const body = m[2];
@@ -191,6 +212,15 @@ function main() {
 
       measured++;
       const r = ratio(fg.value, bgHex);
+      all.push({
+        file: relative(ROOT, file),
+        line,
+        selector,
+        fg: fg.value,
+        bg: bgHex,
+        ratio: Number(r.toFixed(2)),
+        floor,
+      });
       if (r >= floor) {
         continue;
       }
@@ -217,8 +247,21 @@ function main() {
   }
 
   if (json) {
-    console.log(JSON.stringify({ measured, problems, exempted }, null, 2));
+    console.log(JSON.stringify({ measured, problems, exempted, all }, null, 2));
     return problems.length ? 1 : 0;
+  }
+
+  // --all existe para auditar o PONTO CEGO: um par que deixa de ser medido
+  // desaparece silenciosamente do relatório, e silêncio parece aprovação.
+  if (process.argv.includes("--all")) {
+    for (const p of all.sort((a, b) => a.ratio - b.ratio)) {
+      console.log(
+        `  ${String(p.ratio).padStart(6)}:1 (piso ${p.floor})  ${
+          p.selector
+        }  [${p.fg} / ${p.bg}]`,
+      );
+    }
+    console.log("");
   }
 
   console.log(`pares texto×fundo resolvidos e medidos: ${measured}`);

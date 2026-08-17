@@ -39,6 +39,11 @@
      Appearance). Tokenizado SEM mudar o valor: escurecê-lo é mudança visual e
      merece decisão própria — mas agora um único ponto alcança os 13. */
   --kd-amber-line: #d9b36a;
+  /* âmbar CLARO, para pousar sobre fundo escuro (texto sobre --kd-ink, fill de
+     avatar). 6.83:1 contra --kd-ink nos dois sentidos. Estava hardcoded como
+     #e8a33d em 3 lugares. É o mesmo papel que index.scss já reconhece no
+     `--color-primary-contrast-offset` do tema escuro. */
+  --kd-amber-bright: #e8a33d;
 
   /* semânticas */
   --kd-doc-bg: #dce7f7;
@@ -49,8 +54,11 @@
   --kd-public-dark: #93b4ff; /* variante para .theme--dark */
   --kd-hybrid-bg: #deeddd;
   --kd-hybrid-fg: #2f6b3a;
-  --kd-ok: #3e7c4f;
+  --kd-ok: #3e7c4f; /* INDICADOR (bolinha, borda): 4.22:1 sobre --kd-ok-bg, não serve como texto */
   --kd-ok-bg: #e4efe2;
+  /* verde legível como TEXTO sobre --kd-ok-bg: 7.02:1 (AAA). Simétrico ao par
+     --kd-live/--kd-live-text — mesma distinção preenchimento × texto. */
+  --kd-ok-text: #2c5738;
   /* verde "ao vivo" (presença/colaboração) — unificado p/ facepile, banner, notes.
      --kd-live é INDICADOR (bolinha, anel, borda), não cor de texto.
      ⚠️ Há UMA violação pré-existente dessa regra: .kindraw-facepile__live usa
@@ -462,7 +470,7 @@
   height: 28px;
   border-radius: 8px;
   background: var(--kd-ink);
-  color: #e8a33d;
+  color: var(--kd-amber-bright);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -835,8 +843,10 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: #e8a33d;
-  color: #fff;
+  background: var(--kd-amber-bright);
+  /* --kd-ink, não #fff: branco sobre este âmbar dá 2.16:1. Mesmo padrão de
+     .kindraw-card__check--on (fill âmbar + tinta escura) = 6.83:1. */
+  color: var(--kd-ink);
   font-size: 12px;
   font-weight: 700;
 }
@@ -1061,7 +1071,8 @@
   font-style: normal;
   font-size: 11.5px;
   color: var(--kd-faint);
-  background: #f5eddb;
+  /* era #f5eddb hardcoded (4.19:1); --kd-surface-warm dá 4.80:1 mantendo faint */
+  background: var(--kd-surface-warm);
   border-radius: var(--kd-r-pill);
   padding: 2px 8px;
 }
@@ -2796,7 +2807,7 @@
   gap: 5px;
   font-size: 12px;
   font-weight: 700;
-  color: var(--kd-live);
+  color: var(--kd-live-text); /* --kd-live daria 3.29:1 aqui */
   padding: 2px 8px;
   border-radius: 999px;
   background: var(--kd-live-bg);
@@ -3616,8 +3627,10 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: #e8a33d;
-  color: #fff;
+  background: var(--kd-amber-bright);
+  /* --kd-ink, não #fff: branco sobre este âmbar dá 2.16:1. Mesmo padrão de
+     .kindraw-card__check--on (fill âmbar + tinta escura) = 6.83:1. */
+  color: var(--kd-ink);
   font-size: 12px;
   font-weight: 700;
 }
@@ -3636,7 +3649,9 @@
 }
 
 .kindraw-sharebadge--viewer {
-  background: var(--kd-line-soft);
+  /* tinta clareada (era --kd-line-soft, 4.08:1) para o texto seguir muted e
+     ainda cumprir AA: 4.80:1. Preserva a hierarquia de-emphasizada. */
+  background: var(--kd-surface-warm);
   color: var(--kd-muted);
 }
 
@@ -3998,7 +4013,7 @@
   padding: 11px 15px;
   border-radius: var(--kd-r-btn);
   background: var(--kd-ok-bg);
-  color: var(--kd-ok);
+  color: var(--kd-ok-text); /* --kd-ok daria 4.22:1 */
   font-size: 14px;
   font-weight: 600;
 }
